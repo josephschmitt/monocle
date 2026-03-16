@@ -1,0 +1,1 @@
+// Comment badge component

@@ -1,0 +1,30 @@
+{
+  "name": "monocle",
+  "version": "0.1.0",
+  "description": "A terminal-based code review tool for the agentic coding era",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "monocle": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "commander": "^13.0.0",
+    "minimatch": "^10.0.0",
+    "rezi": "*",
+    "simple-git": "^3.27.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,1 @@
+// Typed query functions
