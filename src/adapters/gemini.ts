@@ -1,0 +1,1 @@
+// Gemini CLI ↔ Monocle translation
