@@ -1,0 +1,49 @@
+package tui
+
+import "charm.land/bubbles/v2/key"
+
+// KeyMap defines all keybindings.
+type KeyMap struct {
+	Up        key.Binding
+	Down      key.Binding
+	HalfUp   key.Binding
+	HalfDown key.Binding
+	Top       key.Binding
+	Bottom    key.Binding
+	PrevFile  key.Binding
+	NextFile  key.Binding
+	Select    key.Binding
+	Comment   key.Binding
+	Visual    key.Binding
+	VisualLine key.Binding
+	Reviewed  key.Binding
+	ToggleDiff key.Binding
+	TreeMode  key.Binding
+	Collapse  key.Binding
+	FocusSwap key.Binding
+	Quit      key.Binding
+}
+
+// DefaultKeyMap returns the default keybindings.
+func DefaultKeyMap() KeyMap {
+	return KeyMap{
+		Up:        key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
+		Down:      key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
+		HalfUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("C-u", "half page up")),
+		HalfDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("C-d", "half page down")),
+		Top:       key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
+		Bottom:    key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
+		PrevFile:  key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev file")),
+		NextFile:  key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next file")),
+		Select:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		Comment:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
+		Visual:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "visual")),
+		VisualLine: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "visual line")),
+		Reviewed:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "mark reviewed")),
+		ToggleDiff: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "toggle diff style")),
+		TreeMode:  key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "tree mode")),
+		Collapse:  key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "collapse")),
+		FocusSwap: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
+		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	}
+}

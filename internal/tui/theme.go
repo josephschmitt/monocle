@@ -1,0 +1,62 @@
+package tui
+
+import "charm.land/lipgloss/v2"
+
+// Theme holds all styles for the TUI.
+type Theme struct {
+	// Layout
+	SidebarBorder  lipgloss.Style
+	MainPane       lipgloss.Style
+
+	// Diff colors
+	Added          lipgloss.Style
+	Removed        lipgloss.Style
+	Context        lipgloss.Style
+	HunkHeader     lipgloss.Style
+	LineNumber     lipgloss.Style
+
+	// Comment styles
+	CommentBorder  lipgloss.Style
+	CommentIssue   lipgloss.Style
+	CommentSuggest lipgloss.Style
+	CommentNote    lipgloss.Style
+	CommentPraise  lipgloss.Style
+
+	// Status
+	StatusBar      lipgloss.Style
+	StatusIdle     lipgloss.Style
+	StatusWorking  lipgloss.Style
+	StatusStopped  lipgloss.Style
+
+	// Modal
+	ModalOverlay   lipgloss.Style
+	ModalBorder    lipgloss.Style
+}
+
+// DefaultTheme returns a theme using 16-color ANSI for maximum compatibility.
+func DefaultTheme() Theme {
+	return Theme{
+		SidebarBorder:  lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
+		MainPane:       lipgloss.NewStyle(),
+
+		Added:          lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+		Removed:        lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+		Context:        lipgloss.NewStyle(),
+		HunkHeader:     lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
+		LineNumber:     lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+
+		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
+		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+
+		StatusBar:      lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7")),
+		StatusIdle:     lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		StatusWorking:  lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+		StatusStopped:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+
+		ModalOverlay:   lipgloss.NewStyle().Background(lipgloss.Color("0")),
+		ModalBorder:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
+	}
+}
