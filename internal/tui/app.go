@@ -568,6 +568,8 @@ func (m appModel) View() tea.View {
 		Render(m.diffView.View())
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
+	bodyWidth := lipgloss.Width(body)
+	m.statusBar.width = bodyWidth
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

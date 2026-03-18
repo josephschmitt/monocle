@@ -56,7 +56,7 @@ func (m statusBarModel) View() string {
 		statusStr = "IDLE"
 		statusStyle = m.theme.StatusIdle
 	}
-	status := statusStyle.Bold(true).Render(fmt.Sprintf(" [%s]", statusStr))
+	status := statusStyle.Bold(true).Render(fmt.Sprintf("[%s]", statusStr))
 
 	// Info sections
 	parts := []string{status}
