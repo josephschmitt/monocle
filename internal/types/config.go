@@ -20,4 +20,5 @@ type ReviewFormatConfig struct {
 type HooksConfig struct {
 	SocketPath string `json:"socket_path"`
 	TimeoutMs  int    `json:"timeout_ms"`
+	Scope      string `json:"scope"` // "repo" (default) or "cwd"
 }

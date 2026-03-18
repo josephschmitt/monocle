@@ -48,6 +48,7 @@ type AgentInstaller interface {
 // InstallOptions configures hook installation.
 type InstallOptions struct {
 	HookBinaryPath string
+	Scope          string // "repo" (default) or "cwd"
 }
 
 // InstallResult reports what happened for a single agent.

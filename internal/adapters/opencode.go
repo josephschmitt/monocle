@@ -136,6 +136,7 @@ func (a *OpenCodeAdapter) Install(configPath string, opts InstallOptions) error 
 	if hookCmd == "" {
 		hookCmd = "monocle"
 	}
+	scopeFlag := scopeFlagStr(opts.Scope)
 
 	config, err := ReadJSONFile(configPath)
 	if err != nil {
@@ -164,11 +165,11 @@ func (a *OpenCodeAdapter) Install(configPath string, opts InstallOptions) error 
 	}
 
 	hookMap["file_edited"] = map[string]any{
-		"command": hookCmd + " hook file-edited --agent opencode",
+		"command": hookCmd + " hook" + scopeFlag + " file-edited --agent opencode",
 		"async":   true,
 	}
 	hookMap["session_completed"] = map[string]any{
-		"command": hookCmd + " hook session-completed --agent opencode",
+		"command": hookCmd + " hook" + scopeFlag + " session-completed --agent opencode",
 	}
 
 	SetNestedKey(config, "experimental.hook", hookMap)

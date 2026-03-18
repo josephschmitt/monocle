@@ -19,7 +19,7 @@ func DetectAgents() []AgentInstaller {
 // InstallAgents runs install for a list of agent names.
 // If agents is empty or contains "auto", it auto-detects installed agents.
 // Returns a result per agent.
-func InstallAgents(agents []string, global bool) []InstallResult {
+func InstallAgents(agents []string, global bool, scope string) []InstallResult {
 	installers := resolveInstallers(agents, global)
 	hookBin := resolveHookBinary()
 
@@ -47,7 +47,7 @@ func InstallAgents(agents []string, global bool) []InstallResult {
 			continue
 		}
 
-		if err := inst.Install(configPath, InstallOptions{HookBinaryPath: hookBin}); err != nil {
+		if err := inst.Install(configPath, InstallOptions{HookBinaryPath: hookBin, Scope: scope}); err != nil {
 			result.Err = fmt.Errorf("install %s: %w", inst.Name(), err)
 		} else {
 			result.Installed = true

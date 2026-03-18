@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"os"
 
@@ -30,7 +31,13 @@ func (h *HookServer) SetEngine(e *Engine) {
 
 // Start begins listening on the given Unix domain socket path.
 func (h *HookServer) Start(socketPath string) error {
-	// Remove a stale socket file if present.
+	// Probe socket: if something is listening, another monocle instance is live.
+	conn, err := net.Dial("unix", socketPath)
+	if err == nil {
+		conn.Close()
+		return fmt.Errorf("monocle is already running for this project (socket %s in use)", socketPath)
+	}
+	// Stale socket from a crashed process — safe to remove.
 	_ = os.Remove(socketPath)
 
 	l, err := net.Listen("unix", socketPath)

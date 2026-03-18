@@ -27,6 +27,7 @@ type CLI struct {
 
 type StartCmd struct {
 	Agent string `help:"Agent type" default:"claude"`
+	Scope string `help:"Socket scope: repo (default) or cwd (for monorepos)" enum:"repo,cwd" default:"repo"`
 }
 
 type ResumeCmd struct {
@@ -40,6 +41,7 @@ type SessionsCmd struct {
 type InstallCmd struct {
 	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to install (auto, claude, codex, gemini, opencode)"`
 	Global bool     `help:"Install to global/user config instead of project" default:"false"`
+	Scope  string   `help:"Socket scope: repo (default) or cwd (for monorepos)" enum:"repo,cwd" default:"repo"`
 }
 
 type UninstallCmd struct {
@@ -50,6 +52,7 @@ type UninstallCmd struct {
 type HookCmd struct {
 	Event string `arg:"" help:"Hook event name"`
 	Agent string `help:"Agent name" default:"claude"`
+	Scope string `help:"Socket scope: repo or cwd" default:"repo" enum:"repo,cwd"`
 }
 
 type ReviewCmd struct {
@@ -71,11 +74,11 @@ func main() {
 }
 
 func (cmd *StartCmd) Run() error {
-	return runTUI(cmd.Agent, "")
+	return runTUI(cmd.Agent, "", cmd.Scope)
 }
 
 func (cmd *ResumeCmd) Run() error {
-	return runTUI("", cmd.SessionID)
+	return runTUI("", cmd.SessionID, "")
 }
 
 func (cmd *SessionsCmd) Run() error {
@@ -110,7 +113,12 @@ func (cmd *SessionsCmd) Run() error {
 }
 
 func (cmd *InstallCmd) Run() error {
-	results := adapters.InstallAgents(cmd.Agents, cmd.Global)
+	cfg, err := core.LoadConfig()
+	if err != nil {
+		cfg = core.DefaultConfig()
+	}
+	scope := resolveScope(cmd.Scope, cfg.Hooks.Scope)
+	results := adapters.InstallAgents(cmd.Agents, cmd.Global, scope)
 
 	if len(results) == 0 {
 		fmt.Println("No agents detected. Specify an agent explicitly: monocle install claude")
@@ -165,10 +173,18 @@ func (cmd *HookCmd) Run() error {
 		return nil
 	}
 
-	// Get the socket path from the environment.
+	// Get the socket path from the environment or compute deterministically.
 	socketPath := os.Getenv("MONOCLE_SOCKET")
 	if socketPath == "" {
-		return nil
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil
+		}
+		dir := cwd
+		if cmd.Scope != "cwd" {
+			dir = adapters.FindRepoRoot(cwd)
+		}
+		socketPath = adapters.DefaultSocketPath(dir)
 	}
 
 	// Connect to the engine.
@@ -206,7 +222,7 @@ func (cmd *ReviewCmd) Run() error {
 	return nil
 }
 
-func runTUI(agent, sessionID string) error {
+func runTUI(agent, sessionID, cmdScope string) error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
@@ -224,10 +240,15 @@ func runTUI(agent, sessionID string) error {
 	}
 	defer database.Close()
 
-	// Get repo root
+	// Get repo root, resolving scope
 	repoRoot, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get cwd: %w", err)
+	}
+
+	scope := resolveScope(cmdScope, cfg.Hooks.Scope)
+	if scope != "cwd" {
+		repoRoot = adapters.FindRepoRoot(repoRoot)
 	}
 
 	// Create engine
@@ -254,13 +275,13 @@ func runTUI(agent, sessionID string) error {
 	// Start hook server
 	socketPath := cfg.Hooks.SocketPath
 	if socketPath == "" {
-		socketPath = fmt.Sprintf("/tmp/monocle-%d.sock", os.Getpid())
+		socketPath = adapters.DefaultSocketPath(repoRoot)
 	}
 	if err := engine.StartHookServer(socketPath); err != nil {
 		return fmt.Errorf("start hook server: %w", err)
 	}
 
-	// Set env var for hook shim
+	// Set env var for hook shim (child process inheritance)
 	os.Setenv("MONOCLE_SOCKET", socketPath) //nolint:errcheck
 
 	// Create TUI model
@@ -280,4 +301,15 @@ func runTUI(agent, sessionID string) error {
 	// Cleanup
 	engine.Shutdown()
 	return nil
+}
+
+// resolveScope returns the effective scope: CLI flag > config > "repo" default.
+func resolveScope(flagScope, cfgScope string) string {
+	if flagScope == "cwd" {
+		return "cwd"
+	}
+	if cfgScope == "cwd" {
+		return "cwd"
+	}
+	return "repo"
 }

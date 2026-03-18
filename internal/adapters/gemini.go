@@ -143,6 +143,7 @@ func (a *GeminiAdapter) Install(configPath string, opts InstallOptions) error {
 	if hookCmd == "" {
 		hookCmd = "monocle"
 	}
+	scopeFlag := scopeFlagStr(opts.Scope)
 
 	config, err := ReadJSONFile(configPath)
 	if err != nil {
@@ -156,7 +157,7 @@ func (a *GeminiAdapter) Install(configPath string, opts InstallOptions) error {
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": hookCmd + " hook after-tool --agent gemini",
+				"command": hookCmd + " hook" + scopeFlag + " after-tool --agent gemini",
 				"async":   true,
 			},
 		},
@@ -167,7 +168,7 @@ func (a *GeminiAdapter) Install(configPath string, opts InstallOptions) error {
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": hookCmd + " hook after-agent --agent gemini",
+				"command": hookCmd + " hook" + scopeFlag + " after-agent --agent gemini",
 			},
 		},
 	})
@@ -194,6 +195,15 @@ func (a *GeminiAdapter) Uninstall(configPath string) error {
 	}
 
 	return WriteJSONFile(configPath, config)
+}
+
+// scopeFlagStr returns the --scope flag fragment to insert into hook commands.
+// Returns "" for the default "repo" scope, " --scope cwd" for cwd scope.
+func scopeFlagStr(scope string) string {
+	if scope == "cwd" {
+		return " --scope cwd"
+	}
+	return ""
 }
 
 // isMonocleCommand checks if a command string is a monocle hook command.

@@ -96,6 +96,7 @@ func (a *CodexAdapter) Install(configPath string, opts InstallOptions) error {
 	if hookCmd == "" {
 		hookCmd = "monocle"
 	}
+	scopeFlag := scopeFlagStr(opts.Scope)
 
 	config, err := readTOMLFile(configPath)
 	if err != nil {
@@ -114,7 +115,7 @@ func (a *CodexAdapter) Install(configPath string, opts InstallOptions) error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf(`sh -c 'echo "$1" | %s hook agent-turn-complete --agent codex' --`, hookCmd)
+	cmd := fmt.Sprintf(`sh -c 'echo "$1" | %s hook%s agent-turn-complete --agent codex' --`, hookCmd, scopeFlag)
 	notify["agent-turn-complete"] = cmd
 
 	return writeTOMLFile(configPath, config)

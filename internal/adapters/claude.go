@@ -185,6 +185,7 @@ func (a *ClaudeAdapter) Install(configPath string, opts InstallOptions) error {
 	if hookCmd == "" {
 		hookCmd = "monocle"
 	}
+	scopeFlag := scopeFlagStr(opts.Scope)
 
 	config, err := ReadJSONFile(configPath)
 	if err != nil {
@@ -198,7 +199,7 @@ func (a *ClaudeAdapter) Install(configPath string, opts InstallOptions) error {
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": hookCmd + " hook post-tool-use --agent claude",
+				"command": hookCmd + " hook" + scopeFlag + " post-tool-use --agent claude",
 				"async":   true,
 			},
 		},
@@ -209,7 +210,7 @@ func (a *ClaudeAdapter) Install(configPath string, opts InstallOptions) error {
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": hookCmd + " hook stop --agent claude",
+				"command": hookCmd + " hook" + scopeFlag + " stop --agent claude",
 			},
 		},
 	})

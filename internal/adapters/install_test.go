@@ -3,6 +3,7 @@ package adapters
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -267,6 +268,119 @@ func TestClaudeInstall_CustomHookBinary(t *testing.T) {
 	cmd := hook["command"].(string)
 
 	if cmd != "/usr/local/bin/monocle hook post-tool-use --agent claude" {
+		t.Fatalf("unexpected command: %s", cmd)
+	}
+}
+
+func TestClaudeInstall_ScopeDefault(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "settings.json")
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Install(configPath, InstallOptions{}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	config, _ := ReadJSONFile(configPath)
+	hooks := config["hooks"].(map[string]any)
+	ptu := hooks["PostToolUse"].([]any)
+	entry := ptu[0].(map[string]any)
+	innerHooks := entry["hooks"].([]any)
+	hook := innerHooks[0].(map[string]any)
+	cmd := hook["command"].(string)
+
+	// Default scope should NOT include --scope cwd
+	if strings.Contains(cmd, "--scope") {
+		t.Fatalf("default scope should not include --scope flag, got: %s", cmd)
+	}
+}
+
+func TestClaudeInstall_ScopeCwd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "settings.json")
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Install(configPath, InstallOptions{Scope: "cwd"}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	config, _ := ReadJSONFile(configPath)
+	hooks := config["hooks"].(map[string]any)
+
+	// Check PostToolUse command
+	ptu := hooks["PostToolUse"].([]any)
+	entry := ptu[0].(map[string]any)
+	innerHooks := entry["hooks"].([]any)
+	hook := innerHooks[0].(map[string]any)
+	cmd := hook["command"].(string)
+	if cmd != "monocle hook --scope cwd post-tool-use --agent claude" {
+		t.Fatalf("unexpected PostToolUse command: %s", cmd)
+	}
+
+	// Check Stop command
+	stop := hooks["Stop"].([]any)
+	stopEntry := stop[0].(map[string]any)
+	stopHooks := stopEntry["hooks"].([]any)
+	stopHook := stopHooks[0].(map[string]any)
+	stopCmd := stopHook["command"].(string)
+	if stopCmd != "monocle hook --scope cwd stop --agent claude" {
+		t.Fatalf("unexpected Stop command: %s", stopCmd)
+	}
+}
+
+func TestGeminiInstall_ScopeCwd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "settings.json")
+
+	adapter := &GeminiAdapter{}
+	if err := adapter.Install(configPath, InstallOptions{Scope: "cwd"}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	config, _ := ReadJSONFile(configPath)
+	hooks := config["hooks"].(map[string]any)
+	at := hooks["AfterTool"].([]any)
+	entry := at[0].(map[string]any)
+	innerHooks := entry["hooks"].([]any)
+	hook := innerHooks[0].(map[string]any)
+	cmd := hook["command"].(string)
+	if cmd != "monocle hook --scope cwd after-tool --agent gemini" {
+		t.Fatalf("unexpected command: %s", cmd)
+	}
+}
+
+func TestCodexInstall_ScopeCwd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	adapter := &CodexAdapter{}
+	if err := adapter.Install(configPath, InstallOptions{Scope: "cwd"}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	config, _ := readTOMLFile(configPath)
+	notify := config["notify"].(map[string]any)
+	cmd := notify["agent-turn-complete"].(string)
+	if !strings.Contains(cmd, "hook --scope cwd agent-turn-complete") {
+		t.Fatalf("expected --scope cwd in command, got: %s", cmd)
+	}
+}
+
+func TestOpenCodeInstall_ScopeCwd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+
+	adapter := &OpenCodeAdapter{}
+	if err := adapter.Install(configPath, InstallOptions{Scope: "cwd"}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	config, _ := ReadJSONFile(configPath)
+	hookCfg, _ := GetNestedKey(config, "experimental.hook")
+	hookMap := hookCfg.(map[string]any)
+	fe := hookMap["file_edited"].(map[string]any)
+	cmd := fe["command"].(string)
+	if cmd != "monocle hook --scope cwd file-edited --agent opencode" {
 		t.Fatalf("unexpected command: %s", cmd)
 	}
 }
