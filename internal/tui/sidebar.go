@@ -172,7 +172,8 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 			plainReview = "✓"
 		}
 		plain := fmt.Sprintf(" %s %s%s %s %s", statusChar, recentChar, iconLookup(f.Path).glyph, name, plainReview)
-		return lipgloss.NewStyle().Reverse(true).Width(m.width).Render(plain)
+		padded := fmt.Sprintf("%-*s", m.width, plain)
+		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
 	line := fmt.Sprintf(" %s %s%s %s %s", styledStatus, recentChar, icon, name, reviewChar)
