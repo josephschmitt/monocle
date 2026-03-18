@@ -81,11 +81,18 @@ func (m statusBarModel) View() string {
 		parts = append(parts, fbStyle.Render(m.feedbackStatus))
 	}
 
-	// Key hints (right-aligned)
-	hints := "c:comment  :submit  :approve  q:quit"
+	// Key hints (right-aligned, collapse to ?:help when narrow)
+	fullHints := "c:comment  :submit  :approve  q:quit"
+	shortHints := "?:help"
 	left := strings.Join(parts, "  ")
 
-	gap := m.width - lipgloss.Width(left) - len(hints) - 2
+	leftW := lipgloss.Width(left)
+	hints := fullHints
+	if leftW+len(fullHints)+2 > m.width {
+		hints = shortHints
+	}
+
+	gap := m.width - leftW - len(hints) - 2
 	if gap < 1 {
 		gap = 1
 	}

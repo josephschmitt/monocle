@@ -26,6 +26,7 @@ const (
 	overlayNone overlayKind = iota
 	overlayComment
 	overlayReview
+	overlayHelp
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -63,6 +64,7 @@ type appModel struct {
 	statusBar     statusBarModel
 	commentEditor commentEditorModel
 	reviewSummary reviewSummaryModel
+	help          helpModel
 
 	focus   focusTarget
 	overlay overlayKind
@@ -89,6 +91,7 @@ func NewApp(engine core.EngineAPI) appModel {
 		statusBar:     newStatusBarModel(theme),
 		commentEditor: newCommentEditorModel(theme),
 		reviewSummary: newReviewSummaryModel(theme),
+		help:          newHelpModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		theme:         theme,
@@ -147,6 +150,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commentEditor.height = m.height
 		m.reviewSummary.width = m.width
 		m.reviewSummary.height = m.height
+		m.help.width = m.width
+		m.help.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -226,6 +231,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		return m, nil
 
+	case closeHelpMsg:
+		m.overlay = overlayNone
+		return m, nil
+
 	// Review summary overlay open
 	case openReviewMsg:
 		m.reviewSummary.summary = msg.summary
@@ -269,6 +278,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.reviewSummary, cmd = m.reviewSummary.Update(msg)
 		return m, cmd
 	}
+	if m.overlay == overlayHelp {
+		var cmd tea.Cmd
+		m.help, cmd = m.help.Update(msg)
+		return m, cmd
+	}
 
 	// Command mode input.
 	if m.commandMode {
@@ -287,6 +301,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "q":
 		return m, tea.Quit
+
+	case "?":
+		m.help.active = true
+		m.overlay = overlayHelp
+		return m, nil
 
 	case "tab":
 		if m.focus == focusSidebar {
@@ -588,6 +607,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayReview {
 		overlayContent := m.reviewSummary.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayHelp {
+		overlayContent := m.help.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}
