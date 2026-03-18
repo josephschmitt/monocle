@@ -125,12 +125,20 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		const sidebarContentW = 30
 		const borderW = 2 // left + right border
 		const borderH = 2 // top + bottom border
 		const titleHeight = 1
 		const statusBarHeight = 1
 		const chrome = titleHeight + statusBarHeight + borderH
+
+		// Sidebar gets 1/3 of width (lazygit-style), clamped to [30, 50]
+		sidebarContentW := m.width / 3
+		if sidebarContentW < 30 {
+			sidebarContentW = 30
+		}
+		if sidebarContentW > 50 {
+			sidebarContentW = 50
+		}
 
 		sidebarOuter := sidebarContentW + borderW
 		mainOuter := m.width - sidebarOuter
