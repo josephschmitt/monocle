@@ -54,3 +54,4 @@ func configPath() string {
 	}
 	return filepath.Join(cfgDir, "monocle", "config.json")
 }
+

@@ -42,8 +42,8 @@ var nameIcons = map[string]iconInfo{
 	".gitignore":         {"\ue702", "#f54d27"},
 	".gitconfig":         {"\ue702", "#f54d27"},
 	".gitmodules":        {"\ue702", "#f54d27"},
-	"go.mod":             {"\ue626", "#00acd7"},
-	"go.sum":             {"\ue626", "#00acd7"},
+	"go.mod":             {"\ue627", "#00acd7"},
+	"go.sum":             {"\ue627", "#00acd7"},
 	"package.json":       {"\ue71e", "#e8274b"},
 	"tsconfig.json":      {"\ue628", "#519aba"},
 	"license":            {"\uf718", "#d0bf41"},
@@ -57,7 +57,7 @@ var nameIcons = map[string]iconInfo{
 
 var extIcons = map[string]iconInfo{
 	// Go
-	".go": {"\ue626", "#00acd7"},
+	".go": {"\ue627", "#00acd7"},
 
 	// Web
 	".js":   {"\ue74e", "#cbcb41"},
