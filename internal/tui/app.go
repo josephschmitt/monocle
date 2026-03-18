@@ -71,9 +71,11 @@ type appModel struct {
 // NewApp creates the root appModel.
 func NewApp(engine core.EngineAPI) appModel {
 	theme := DefaultTheme()
+	sidebar := newSidebarModel()
+	sidebar.focused = true
 	return appModel{
 		engine:        engine,
-		sidebar:       newSidebarModel(),
+		sidebar:       sidebar,
 		diffView:      newDiffViewModel(),
 		statusBar:     newStatusBarModel(theme),
 		commentEditor: newCommentEditorModel(theme),
@@ -141,6 +143,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.agentStatus = m.engine.GetAgentStatus()
 		m.statusBar.feedbackStatus = m.engine.GetFeedbackStatus()
+		// Auto-select the first file
+		if len(msg.files) > 0 {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
+		}
 		return m, nil
 
 	// Engine events
