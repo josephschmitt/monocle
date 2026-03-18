@@ -1,17 +1,22 @@
 # Monocle
 
-A terminal-based code review companion for AI coding agents.
+A terminal-based code review tool purpose-built for the agentic coding era.
 
-Monocle runs alongside Claude Code, Codex, Gemini CLI, or any AI coding agent. The agent writes code, you review diffs and leave structured feedback — like a GitHub PR review, but in your terminal — and Monocle delivers that feedback directly back into the agent's context. No more rubber-stamping, no more copy-pasting.
+As AI agents take over the act of writing code, the developer's role shifts from author to **reviewer and director**. But today's tools don't serve that role well. You either rubber-stamp everything the agent produces or interrupt it on every file change. There's no equivalent of "leave a thoughtful PR review and let the author address it."
+
+Monocle fills that gap. It runs alongside Claude Code, Codex CLI, Gemini CLI, or any AI coding agent and provides a structured, bidirectional code review workflow — like GitHub PR reviews, but between you and your agent, right in the terminal.
+
+The agent writes code. You review diffs, leave structured feedback (issues, suggestions, notes). Monocle delivers that feedback directly back into the agent's context. The agent addresses your comments and re-presents its changes. No copy-pasting, no window switching, no breaking flow.
 
 ## Why Monocle?
 
-AI coding agents are powerful, but the review loop is broken. You either:
-- **Rubber-stamp** agent output without reading it
-- **Copy-paste** feedback from a separate terminal into the agent's prompt
-- **Lose context** switching between your editor, git diff, and the agent
+Without Monocle, the agentic review loop is broken:
+- **Rubber-stamping** — You approve without reading because there's no good way to review
+- **Copy-pasting** — You manually paste feedback from a diff viewer into the agent's prompt
+- **Context switching** — You bounce between editor, terminal, git diff, and agent window
+- **No iteration** — There's no way to say "fix these issues and show me again"
 
-Monocle fixes this by providing a structured review workflow that integrates directly with your agent via hooks. When the agent stops, you see the diffs, leave comments (issues, suggestions, notes), and submit a formatted review — all without leaving the terminal.
+Monocle integrates with agents via their native hook systems to create a real review loop. When the agent stops, you see the diffs, leave line-level comments, and submit a formatted review — the agent receives it, addresses the issues, and re-presents its changes for another round.
 
 ## Features
 
