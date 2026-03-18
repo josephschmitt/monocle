@@ -122,7 +122,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		const sidebarContentW = 30
+		const sidebarContentW = 40
 		const borderW = 2 // left + right border
 		const borderH = 2 // top + bottom border
 		const titleHeight = 1
