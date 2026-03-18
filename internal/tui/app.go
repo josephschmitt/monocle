@@ -349,9 +349,6 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "S":
 		return m, m.executeCommand("submit")
 
-	case "A":
-		return m, m.executeCommand("approve")
-
 	case "D":
 		return m, m.executeCommand("dismiss-outdated")
 
@@ -427,6 +424,15 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			if err != nil || summary == nil {
 				return cancelSubmitMsg{}
 			}
+			hasComments := summary.IssueCt+summary.SuggestionCt+summary.NoteCt+summary.PraiseCt > 0
+			if !hasComments {
+				// No comments — approve and release the agent
+				_, err := engine.Approve()
+				if err != nil {
+					return agentStatusMsg{status: "approve_error"}
+				}
+				return agentStatusMsg{status: "approved"}
+			}
 			session := engine.GetSession()
 			agentStopped := session != nil && session.AgentStatus == types.AgentStatusStopped
 			return openReviewMsg{summary: summary, agentStopped: agentStopped}
@@ -439,15 +445,6 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 				return agentStatusMsg{status: "submit_error"}
 			}
 			return agentStatusMsg{status: "submitted"}
-		}
-
-	case "approve":
-		return func() tea.Msg {
-			_, err := engine.Approve()
-			if err != nil {
-				return agentStatusMsg{status: "approve_error"}
-			}
-			return agentStatusMsg{status: "approved"}
 		}
 
 	case "dismiss-outdated":
