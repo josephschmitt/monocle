@@ -30,7 +30,7 @@ type claudeToolInfo struct {
 
 // claudeStopOutput is Claude Code's expected stdout for stop hooks.
 type claudeStopOutput struct {
-	Decision string `json:"decision"`          // "block" to send feedback, "" to release
+	Decision string `json:"decision,omitempty"` // "block" to send feedback, omit to release
 	Reason   string `json:"reason,omitempty"`   // system message when blocking
 }
 

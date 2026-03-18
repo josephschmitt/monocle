@@ -200,7 +200,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileChangedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.statusBar.fileCount = len(m.sidebar.files)
-		m.statusBar.commentCount = len(m.engine.GetSession().Comments)
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.baseRef = session.BaseRef
+			m.statusBar.commentCount = len(session.Comments)
+		}
 		return m, nil
 
 	case agentStatusMsg:

@@ -41,9 +41,15 @@ func (d *DB) GetSession(id string) (*types.ReviewSession, error) {
 func (d *DB) UpdateSession(s *types.ReviewSession) error {
 	patterns, _ := json.Marshal(s.IgnorePatterns)
 	_, err := d.Exec(
-		`UPDATE sessions SET agent_status = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
-		string(s.AgentStatus), s.ReviewRound, string(patterns), time.Now(), s.ID,
+		`UPDATE sessions SET agent_status = ?, base_ref = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
+		string(s.AgentStatus), s.BaseRef, s.ReviewRound, string(patterns), time.Now(), s.ID,
 	)
+	return err
+}
+
+// DeleteChangedFiles removes all changed file records for a session.
+func (d *DB) DeleteChangedFiles(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM changed_files WHERE session_id = ?`, sessionID)
 	return err
 }
 

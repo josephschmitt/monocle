@@ -575,16 +575,20 @@ func (e *Engine) handleStop(msg *protocol.StopMsg) *protocol.StopResponse {
 		e.current.AgentStatus = types.AgentStatusIdle
 		_ = e.database.UpdateSession(e.current)
 
-		// If review was delivered, advance the round
-		if resp.Continue && resp.SystemMessage != "" {
-			_ = e.sessions.AdvanceRound(e.current)
-		}
+		// Advance the round (reset baseRef to HEAD) on both submit and approve.
+		// This resets the diff baseline so the next round only shows new changes.
+		_ = e.sessions.AdvanceRound(e.current)
 	}
 	e.mu.Unlock()
 
 	e.emit(EventAgentStatusChanged, EventPayload{
 		Kind:   EventAgentStatusChanged,
 		Status: string(types.AgentStatusIdle),
+	})
+
+	// Emit file changed event so the TUI refreshes with the new (empty) file list
+	e.emit(EventFileChanged, EventPayload{
+		Kind: EventFileChanged,
 	})
 
 	return resp
