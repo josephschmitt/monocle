@@ -127,9 +127,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		const borderH = 2 // top + bottom border
 		const titleHeight = 1
 		const statusBarHeight = 1
+		const iconSlack = 2 // icon glyphs render wider than lipgloss measures
 		const chrome = titleHeight + statusBarHeight + borderH
 
-		sidebarOuter := sidebarContentW + borderW
+		sidebarOuter := sidebarContentW + borderW + iconSlack
 		mainOuter := m.width - sidebarOuter
 		if mainOuter < 0 {
 			mainOuter = 0
