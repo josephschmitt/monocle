@@ -1,0 +1,140 @@
+package adapters
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/anthropics/monocle/internal/protocol"
+)
+
+// ClaudeAdapter handles Claude Code's hook format.
+type ClaudeAdapter struct{}
+
+// claudeHookInput represents Claude Code's hook stdin JSON.
+type claudeHookInput struct {
+	SessionID string          `json:"session_id,omitempty"`
+	Tool      *claudeToolInfo `json:"tool,omitempty"`
+	StopReason string         `json:"stop_reason,omitempty"`
+	RequestID  string         `json:"request_id,omitempty"`
+	Prompt     string         `json:"prompt,omitempty"`
+}
+
+type claudeToolInfo struct {
+	Name   string `json:"name"`
+	Input  string `json:"input,omitempty"`
+	Output string `json:"output,omitempty"`
+}
+
+// claudeStopOutput is Claude Code's expected stdout for stop hooks.
+type claudeStopOutput struct {
+	Decision string `json:"decision"`          // "block" to send feedback, "" to release
+	Reason   string `json:"reason,omitempty"`   // system message when blocking
+}
+
+func (a *ClaudeAdapter) ParseHookInput(event string, raw []byte) (any, error) {
+	var input claudeHookInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return nil, fmt.Errorf("parse claude input: %w", err)
+	}
+
+	switch event {
+	case "post-tool-use":
+		msg := &protocol.PostToolUseMsg{
+			Type:  protocol.TypePostToolUse,
+			Agent: "claude",
+		}
+		if input.Tool != nil {
+			msg.Tool = input.Tool.Name
+			msg.ToolInput = input.Tool.Input
+			msg.ToolOutput = input.Tool.Output
+		}
+		return msg, nil
+
+	case "stop":
+		return &protocol.StopMsg{
+			Type:       protocol.TypeStop,
+			Agent:      "claude",
+			StopReason: input.StopReason,
+			RequestID:  input.RequestID,
+		}, nil
+
+	case "prompt-submit":
+		return &protocol.PromptSubmitMsg{
+			Type:      protocol.TypePromptSubmit,
+			Agent:     "claude",
+			Prompt:    input.Prompt,
+			RequestID: input.RequestID,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown event: %s", event)
+	}
+}
+
+func (a *ClaudeAdapter) FormatHookOutput(response any) HookOutput {
+	switch r := response.(type) {
+	case *protocol.StopResponse:
+		out := claudeStopOutput{}
+		if r.Continue && r.SystemMessage != "" {
+			out.Decision = "block"
+			out.Reason = r.SystemMessage
+		}
+		data, _ := json.Marshal(out)
+		return HookOutput{Data: data, ExitCode: 0}
+
+	case *protocol.PromptSubmitResponse:
+		data, _ := json.Marshal(map[string]string{
+			"additional_context": r.AdditionalContext,
+		})
+		return HookOutput{Data: data, ExitCode: 0}
+
+	default:
+		return HookOutput{ExitCode: 0}
+	}
+}
+
+func (a *ClaudeAdapter) GenerateConfig(opts SetupOptions) string {
+	hookCmd := opts.HookBinaryPath
+	if hookCmd == "" {
+		hookCmd = "monocle-hook"
+	}
+
+	config := map[string]any{
+		"hooks": map[string]any{
+			"PostToolUse": []map[string]any{
+				{
+					"matcher": "Write|Edit|MultiEdit",
+					"hooks": []map[string]any{
+						{
+							"type":    "command",
+							"command": hookCmd + " post-tool-use --agent claude",
+							"async":   true,
+						},
+					},
+				},
+			},
+			"Stop": []map[string]any{
+				{
+					"matcher": "",
+					"hooks": []map[string]any{
+						{
+							"type":    "command",
+							"command": hookCmd + " stop --agent claude",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, _ := json.MarshalIndent(config, "", "  ")
+	return string(data)
+}
+
+func (a *ClaudeAdapter) Capabilities() AdapterCapabilities {
+	return AdapterCapabilities{
+		PostToolUse:  true,
+		StopBlocking: true,
+		AsyncHooks:   true,
+	}
+}
