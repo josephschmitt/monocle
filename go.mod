@@ -3,10 +3,15 @@ module github.com/anthropics/monocle
 go 1.25.0
 
 require (
-	charm.land/bubbles/v2 v2.0.0 // indirect
-	charm.land/bubbletea/v2 v2.0.2 // indirect
-	charm.land/lipgloss/v2 v2.0.2 // indirect
-	github.com/alecthomas/kong v1.14.0 // indirect
+	charm.land/bubbles/v2 v2.0.0
+	charm.land/bubbletea/v2 v2.0.2
+	charm.land/lipgloss/v2 v2.0.2
+	github.com/alecthomas/kong v1.14.0
+	github.com/google/uuid v1.6.0
+	modernc.org/sqlite v1.47.0
+)
+
+require (
 	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
@@ -16,7 +21,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
@@ -30,5 +34,4 @@ require (
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.47.0 // indirect
 )
