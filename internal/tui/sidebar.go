@@ -162,8 +162,11 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	}
 
 	// Layout: " {status} {recent}{icon} {name}     {review} "
+	// Note: icon glyphs may render as width 2 in terminals despite lipgloss
+	// measuring them as width 1. We add iconSlack to compensate.
 	icon := fileIcon(f.Path)
 	glyph := iconLookup(f.Path).glyph
+	const iconSlack = 1
 
 	if selected && m.focused {
 		plainReview := "○"
@@ -172,10 +175,10 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		}
 		right := plainReview + " "
 		prefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
-		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - 1
+		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 		name := truncatePath(f.Path, nameW)
 		left := prefix + name
-		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - iconSlack
 		if gap < 1 {
 			gap = 1
 		}
@@ -185,10 +188,10 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 
 	right := reviewChar + " "
 	prefix := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon)
-	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - 1
+	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	name := truncatePath(f.Path, nameW)
 	left := prefix + name
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - iconSlack
 	if gap < 1 {
 		gap = 1
 	}
