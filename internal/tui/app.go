@@ -173,8 +173,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
 
-	// Sidebar selection → load diff
+	// Sidebar selection → load diff and switch focus to diff pane
 	case sidebarSelectMsg:
+		m.focus = focusMain
+		m.sidebar.focused = false
+		m.diffView.focused = true
 		return m, m.handleSidebarSelect(msg)
 
 	// Comment overlay
@@ -285,7 +288,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
-	case "escape":
+	case "esc":
 		m.commandMode = false
 		m.commandBuffer = ""
 		m.statusBar.commandMode = false

@@ -118,7 +118,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			} else {
 				m.visualMode = false
 			}
-		case "escape":
+		case "esc":
 			m.visualMode = false
 		case "t":
 			// Toggle diff style

@@ -54,7 +54,7 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "escape":
+		case "esc":
 			m.active = false
 			return m, func() tea.Msg { return cancelCommentMsg{} }
 		case "ctrl+s":

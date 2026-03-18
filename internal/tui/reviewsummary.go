@@ -41,7 +41,7 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 		case "enter":
 			m.active = false
 			return m, func() tea.Msg { return confirmSubmitMsg{} }
-		case "escape":
+		case "esc":
 			m.active = false
 			return m, func() tea.Msg { return cancelSubmitMsg{} }
 		}
