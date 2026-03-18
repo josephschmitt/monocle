@@ -161,24 +161,26 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		recentChar = "~"
 	}
 
-	// Build line: " {recent}{icon} {name}  {review}{status} "
-	// Status indicators are right-aligned
+	// Layout: " {status} {recent}{icon} {name}     {review} "
 	icon := fileIcon(f.Path)
-	rightWidth := 4 // " ○M " or " ✓A "
-	nameWidth := m.width - 4 - rightWidth // 4 = " " + recent + icon + " "
+	glyph := iconLookup(f.Path).glyph
+	rightWidth := 3 // "○ " or "✓ "
+	leftPrefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
+	prefixW := lipgloss.Width(leftPrefix)
+	nameWidth := m.width - prefixW - rightWidth
 	if nameWidth < 1 {
 		nameWidth = 1
 	}
 	name := truncatePath(f.Path, nameWidth)
-	left := fmt.Sprintf(" %s%s %s", recentChar, iconLookup(f.Path).glyph, name)
 
 	if selected && m.focused {
 		plainReview := "○"
 		if f.Reviewed {
 			plainReview = "✓"
 		}
-		right := fmt.Sprintf("%s%s ", plainReview, statusChar)
-		gap := m.width - len(left) - len(right)
+		left := leftPrefix + name
+		right := fmt.Sprintf("%s ", plainReview)
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 		if gap < 0 {
 			gap = 0
 		}
@@ -186,8 +188,8 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
-	styledLeft := fmt.Sprintf(" %s%s %s", recentChar, icon, name)
-	right := fmt.Sprintf("%s%s ", reviewChar, styledStatus)
+	styledLeft := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon) + name
+	right := fmt.Sprintf("%s ", reviewChar)
 	gap := m.width - lipgloss.Width(styledLeft) - lipgloss.Width(right)
 	if gap < 0 {
 		gap = 0
