@@ -90,6 +90,7 @@ func (m statusBarModel) View() string {
 		gap = 1
 	}
 
-	bar := left + strings.Repeat(" ", gap) + lipgloss.NewStyle().Faint(true).Render(hints)
-	return m.theme.StatusBar.Width(m.width).Render(bar)
+	styledHints := lipgloss.NewStyle().Faint(true).Render(hints)
+	bar := left + strings.Repeat(" ", gap) + styledHints
+	return m.theme.StatusBar.Render(bar)
 }
