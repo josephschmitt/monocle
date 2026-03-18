@@ -70,7 +70,15 @@ User submits review → Engine → FeedbackQueue → blocks until agent stops �
 - **DB tests**: Use `:memory:` SQLite
 - **Git tests**: Create temp repos with `setupTestRepo(t)`
 - **Nerd Font icons**: Glyphs render wider than `lipgloss.Width()` measures. Use `iconSlack` compensation in layout math.
-- **Conventional commits**: Required for release-please (`feat:`, `fix:`, `chore:`, etc.)
+- **Conventional commits**: **All commit messages MUST use conventional commit format.** Release-please uses these to determine version bumps and generate changelogs.
+  - `feat: ...` — New feature (minor version bump)
+  - `fix: ...` — Bug fix (patch version bump)
+  - `chore: ...` — Maintenance, deps, CI (no release)
+  - `refactor: ...` — Code restructuring (no release)
+  - `docs: ...` — Documentation only (no release)
+  - `test: ...` — Test changes (no release)
+  - `feat!: ...` or `BREAKING CHANGE:` in body — Breaking change (major version bump)
+  - Scope is optional: `feat(tui): ...`, `fix(db): ...`
 
 ## Common Tasks
 
