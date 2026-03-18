@@ -327,6 +327,18 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "1":
+		m.focus = focusSidebar
+		m.sidebar.focused = true
+		m.diffView.focused = false
+		return m, nil
+
+	case "2":
+		m.focus = focusMain
+		m.sidebar.focused = false
+		m.diffView.focused = true
+		return m, nil
+
 	case "r":
 		return m, m.handleMarkReviewed()
 
