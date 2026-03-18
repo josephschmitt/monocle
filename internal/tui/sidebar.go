@@ -166,7 +166,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	// measuring them as width 1. We add iconSlack to compensate.
 	icon := fileIcon(f.Path)
 	glyph := iconLookup(f.Path).glyph
-	const iconSlack = 1
+	const iconSlack = 2
 
 	if selected && m.focused {
 		plainReview := "○"
