@@ -174,7 +174,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		if f.Reviewed {
 			plainReview = "✓"
 		}
-		right := plainReview + " "
+		right := " " + plainReview + " "
 		prefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
 		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 		if nameW < 1 {
@@ -185,7 +185,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
-	right := reviewChar + " "
+	right := " " + reviewChar + " "
 	prefix := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	if nameW < 1 {
