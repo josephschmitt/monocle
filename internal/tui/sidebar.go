@@ -128,25 +128,31 @@ func (m sidebarModel) View() string {
 }
 
 func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string {
-	// Status indicator
-	var statusChar string
+	// Status indicator (lazygit-style colors)
+	var statusChar, statusColor string
 	switch f.Status {
 	case types.FileAdded:
 		statusChar = "A"
+		statusColor = "#2ea043"
 	case types.FileModified:
 		statusChar = "M"
+		statusColor = "#d29922"
 	case types.FileDeleted:
 		statusChar = "D"
+		statusColor = "#f85149"
 	case types.FileRenamed:
 		statusChar = "R"
+		statusColor = "#a371f7"
 	default:
 		statusChar = "?"
+		statusColor = "7"
 	}
+	styledStatus := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true).Render(statusChar)
 
 	// Review status
 	reviewChar := "○"
 	if f.Reviewed {
-		reviewChar = "✓"
+		reviewChar = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea043")).Render("✓")
 	}
 
 	// Recent indicator
@@ -158,26 +164,12 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	// Build line
 	icon := fileIcon(f.Path)
 	name := truncatePath(f.Path, m.width-11)
-	line := fmt.Sprintf(" %s %s%s %s %s", statusChar, recentChar, icon, name, reviewChar)
+	line := fmt.Sprintf(" %s %s%s %s %s", styledStatus, recentChar, icon, name, reviewChar)
 
 	if selected && m.focused {
 		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
 		return style.Render(line)
 	}
-
-	// Color status character
-	var statusStyle lipgloss.Style
-	switch f.Status {
-	case types.FileAdded:
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	case types.FileDeleted:
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	case types.FileModified:
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	default:
-		statusStyle = lipgloss.NewStyle()
-	}
-	_ = statusStyle // Used in full render; keeping simple for now
 
 	return fmt.Sprintf("%-*s", m.width, line)
 }
