@@ -161,23 +161,38 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		recentChar = "~"
 	}
 
-	// Build line
+	// Build line: " {recent}{icon} {name}  {review}{status} "
+	// Status indicators are right-aligned
 	icon := fileIcon(f.Path)
-	name := truncatePath(f.Path, m.width-11)
+	rightWidth := 4 // " ○M " or " ✓A "
+	nameWidth := m.width - 4 - rightWidth // 4 = " " + recent + icon + " "
+	if nameWidth < 1 {
+		nameWidth = 1
+	}
+	name := truncatePath(f.Path, nameWidth)
+	left := fmt.Sprintf(" %s%s %s", recentChar, iconLookup(f.Path).glyph, name)
 
 	if selected && m.focused {
-		// Plain text (no embedded ANSI) so Reverse works cleanly
 		plainReview := "○"
 		if f.Reviewed {
 			plainReview = "✓"
 		}
-		plain := fmt.Sprintf(" %s %s%s %s %s", statusChar, recentChar, iconLookup(f.Path).glyph, name, plainReview)
-		padded := fmt.Sprintf("%-*s", m.width, plain)
+		right := fmt.Sprintf("%s%s ", plainReview, statusChar)
+		gap := m.width - len(left) - len(right)
+		if gap < 0 {
+			gap = 0
+		}
+		padded := left + strings.Repeat(" ", gap) + right
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
-	line := fmt.Sprintf(" %s %s%s %s %s", styledStatus, recentChar, icon, name, reviewChar)
-	return fmt.Sprintf("%-*s", m.width, line)
+	styledLeft := fmt.Sprintf(" %s%s %s", recentChar, icon, name)
+	right := fmt.Sprintf("%s%s ", reviewChar, styledStatus)
+	gap := m.width - lipgloss.Width(styledLeft) - lipgloss.Width(right)
+	if gap < 0 {
+		gap = 0
+	}
+	return styledLeft + strings.Repeat(" ", gap) + right
 }
 
 func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) string {
