@@ -132,6 +132,28 @@ func (e *Engine) ListSessions(opts ListSessionsOptions) ([]types.SessionSummary,
 
 // -- Browsing --
 
+func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return nil, fmt.Errorf("no active session")
+	}
+
+	files, err := e.sessions.RefreshChangedFiles(session)
+	if err != nil {
+		return nil, err
+	}
+
+	e.mu.Lock()
+	if e.current != nil && e.current.ID == session.ID {
+		e.current.ChangedFiles = files
+	}
+	e.mu.Unlock()
+
+	return files, nil
+}
+
 func (e *Engine) GetChangedFiles() []types.ChangedFile {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

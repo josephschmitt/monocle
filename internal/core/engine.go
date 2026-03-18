@@ -62,6 +62,7 @@ type EngineAPI interface {
 	ListSessions(opts ListSessionsOptions) ([]types.SessionSummary, error)
 
 	// Browsing
+	RefreshChangedFiles() ([]types.ChangedFile, error)
 	GetChangedFiles() []types.ChangedFile
 	GetContentItems() []types.ContentItem
 	GetFileDiff(path string) (*types.DiffResult, error)

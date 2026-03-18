@@ -64,16 +64,25 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadDiffMsg:
 		m.path = msg.path
+		sameFile := msg.path == m.path
 		if msg.result != nil {
 			m.hunks = msg.result.Hunks
 		} else {
 			m.hunks = nil
 		}
+		m.path = msg.path
 		m.comments = msg.comments
+		prevCursor := m.cursor
+		prevOffset := m.offset
 		m.buildLines()
-		m.cursor = 0
-		m.offset = 0
-		m.visualMode = false
+		if sameFile && prevCursor < len(m.lines) {
+			m.cursor = prevCursor
+			m.offset = prevOffset
+		} else {
+			m.cursor = m.nearestSelectable(0, 1)
+			m.offset = 0
+			m.visualMode = false
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -82,33 +91,31 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor < len(m.lines)-1 {
-				m.cursor++
-				m.ensureVisible()
-			}
+			m.cursor = m.nextSelectable(m.cursor, 1)
+			m.ensureVisible()
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-				m.ensureVisible()
-			}
+			m.cursor = m.nextSelectable(m.cursor, -1)
+			m.ensureVisible()
 		case "ctrl+d":
 			m.cursor += m.height / 2
 			if m.cursor >= len(m.lines) {
 				m.cursor = len(m.lines) - 1
 			}
+			m.cursor = m.nearestSelectable(m.cursor, 1)
 			m.ensureVisible()
 		case "ctrl+u":
 			m.cursor -= m.height / 2
 			if m.cursor < 0 {
 				m.cursor = 0
 			}
+			m.cursor = m.nearestSelectable(m.cursor, -1)
 			m.ensureVisible()
 		case "g":
-			m.cursor = 0
+			m.cursor = m.nearestSelectable(0, 1)
 			m.ensureVisible()
 		case "G":
 			if len(m.lines) > 0 {
-				m.cursor = len(m.lines) - 1
+				m.cursor = m.nearestSelectable(len(m.lines)-1, -1)
 			}
 			m.ensureVisible()
 		case "v":
@@ -277,6 +284,41 @@ func (m *diffViewModel) ensureVisible() {
 	if m.cursor >= m.offset+m.height {
 		m.offset = m.cursor - m.height + 1
 	}
+}
+
+// isSelectable returns true if the line at idx is a diff content line (not a hunk header or comment).
+func (m diffViewModel) isSelectable(idx int) bool {
+	if idx < 0 || idx >= len(m.lines) {
+		return false
+	}
+	line := m.lines[idx]
+	return !line.isHunk && !line.isComment
+}
+
+// nextSelectable moves from current position by dir (+1 or -1), skipping non-selectable lines.
+func (m diffViewModel) nextSelectable(from, dir int) int {
+	next := from + dir
+	for next >= 0 && next < len(m.lines) && !m.isSelectable(next) {
+		next += dir
+	}
+	if next < 0 || next >= len(m.lines) {
+		return from // stay put if nothing selectable in that direction
+	}
+	return next
+}
+
+// nearestSelectable finds the closest selectable line from pos, preferring the given direction.
+func (m diffViewModel) nearestSelectable(pos, dir int) int {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(m.lines) {
+		pos = len(m.lines) - 1
+	}
+	if m.isSelectable(pos) {
+		return pos
+	}
+	return m.nextSelectable(pos, dir)
 }
 
 func (m diffViewModel) visualRange() (int, int) {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -43,6 +44,14 @@ type feedbackStatusMsg struct {
 
 type contentItemMsg struct {
 	id string
+}
+
+type refreshTickMsg struct{}
+
+func refreshTick() tea.Cmd {
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		return refreshTickMsg{}
+	})
 }
 
 // appModel is the root model that composes all sub-models.
@@ -87,13 +96,16 @@ func NewApp(engine core.EngineAPI) appModel {
 	}
 }
 
-// Init loads the initial file list from the engine.
+// Init loads the initial file list from the engine and starts the refresh tick.
 func (m appModel) Init() tea.Cmd {
-	return func() tea.Msg {
-		files := m.engine.GetChangedFiles()
-		items := m.engine.GetContentItems()
-		return initialLoadMsg{files: files, items: items}
-	}
+	return tea.Batch(
+		func() tea.Msg {
+			files := m.engine.GetChangedFiles()
+			items := m.engine.GetContentItems()
+			return initialLoadMsg{files: files, items: items}
+		},
+		refreshTick(),
+	)
 }
 
 // initialLoadMsg carries the initial file and content item lists.
@@ -155,10 +167,27 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	// Periodic refresh
+	case refreshTickMsg:
+		return m, tea.Batch(m.refreshFiles(), refreshTick())
+
+	case refreshResultMsg:
+		m.sidebar.files = msg.files
+		m.statusBar.fileCount = len(msg.files)
+		if msg.path != "" && msg.result != nil {
+			m.diffView, _ = m.diffView.Update(loadDiffMsg{
+				path:     msg.path,
+				result:   msg.result,
+				comments: msg.comments,
+			})
+		}
+		return m, nil
+
 	// Engine events
 	case fileChangedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.statusBar.fileCount = len(m.sidebar.files)
+		m.statusBar.commentCount = len(m.engine.GetSession().Comments)
 		return m, nil
 
 	case agentStatusMsg:
@@ -471,6 +500,46 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 		}
 		return fileChangedMsg{path: file.Path}
 	}
+}
+
+// refreshFiles returns a Cmd that refreshes the file list and current diff from git.
+func (m appModel) refreshFiles() tea.Cmd {
+	engine := m.engine
+	currentPath := m.diffView.path
+	return func() tea.Msg {
+		// Refresh the file list from git
+		files, err := engine.RefreshChangedFiles()
+		if err != nil {
+			return nil
+		}
+		session := engine.GetSession()
+
+		// Also reload the current diff if one is being viewed
+		var result *types.DiffResult
+		var comments []types.ReviewComment
+		if currentPath != "" {
+			result, _ = engine.GetFileDiff(currentPath)
+			for _, c := range session.Comments {
+				if c.TargetRef == currentPath {
+					comments = append(comments, c)
+				}
+			}
+		}
+
+		return refreshResultMsg{
+			files:    files,
+			path:     currentPath,
+			result:   result,
+			comments: comments,
+		}
+	}
+}
+
+type refreshResultMsg struct {
+	files    []types.ChangedFile
+	path     string
+	result   *types.DiffResult
+	comments []types.ReviewComment
 }
 
 // View renders the full TUI layout.
