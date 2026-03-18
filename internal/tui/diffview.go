@@ -181,12 +181,6 @@ func (m diffViewModel) View() string {
 		}
 	}
 
-	// Pad remaining height
-	rendered := end - m.offset
-	for i := rendered; i < visibleLines; i++ {
-		b.WriteString("\n")
-	}
-
 	return b.String()
 }
 

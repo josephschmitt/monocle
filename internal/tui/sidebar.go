@@ -124,12 +124,6 @@ func (m sidebarModel) View() string {
 		}
 	}
 
-	// Pad remaining height
-	rendered := strings.Count(b.String(), "\n")
-	for i := rendered; i < m.height-1; i++ {
-		b.WriteString("\n")
-	}
-
 	return b.String()
 }
 
