@@ -1,0 +1,90 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: monocle
+    main: ./cmd/monocle
+    binary: monocle
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  - id: monocle-hook
+    main: ./cmd/monocle-hook
+    binary: monocle-hook
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: monocle
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    files:
+      - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^build\(deps\):'
+      - 'README'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: monocle
+    repository:
+      owner: josephschmitt
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/josephschmitt/monocle
+    description: "Terminal-based code review companion for AI coding agents"
+    license: MIT
+    test: |
+      system "#{bin}/monocle", "--help"
+    install: |
+      bin.install "monocle"
+      bin.install "monocle-hook"
+
+release:
+  github:
+    owner: josephschmitt
+    name: monocle
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
