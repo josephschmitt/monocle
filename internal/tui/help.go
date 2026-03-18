@@ -62,9 +62,11 @@ func (m helpModel) View() string {
 			{"Ctrl+d/u", "Half page down/up"},
 			{"g/G", "Top/bottom"},
 			{"[/]", "Previous/next file"},
-			{"Enter", "Focus diff pane"},
+			{"Enter", "Focus diff pane / toggle dir"},
 			{"Tab", "Switch pane focus"},
 			{"1/2", "Jump to pane"},
+			{"f", "Toggle flat/tree view"},
+			{"z/e", "Collapse/expand all (tree)"},
 		}},
 		{"Review", []struct{ key, desc string }{
 			{"c", "Add comment at cursor"},

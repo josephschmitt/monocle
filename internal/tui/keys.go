@@ -18,8 +18,9 @@ type KeyMap struct {
 	VisualLine key.Binding
 	Reviewed  key.Binding
 	ToggleDiff key.Binding
-	TreeMode  key.Binding
-	Collapse  key.Binding
+	TreeMode   key.Binding
+	Collapse   key.Binding
+	ExpandAll  key.Binding
 	FocusSwap key.Binding
 	Quit      key.Binding
 }
@@ -41,8 +42,9 @@ func DefaultKeyMap() KeyMap {
 		VisualLine: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "visual line")),
 		Reviewed:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "mark reviewed")),
 		ToggleDiff: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "toggle diff style")),
-		TreeMode:  key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "tree mode")),
-		Collapse:  key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "collapse")),
+		TreeMode:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "tree mode")),
+		Collapse:   key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "collapse all")),
+		ExpandAll:  key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expand all")),
 		FocusSwap: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
 		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}

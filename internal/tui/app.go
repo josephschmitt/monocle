@@ -167,6 +167,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case initialLoadMsg:
 		m.sidebar.files = msg.files
 		m.sidebar.contentItems = msg.items
+		m.sidebar.rebuildTree()
 		// Sync status bar file count
 		session := m.engine.GetSession()
 		if session != nil {
@@ -188,6 +189,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshResultMsg:
 		m.sidebar.files = msg.files
+		m.sidebar.rebuildTree()
 		m.statusBar.fileCount = len(msg.files)
 		if msg.path != "" && msg.result != nil {
 			m.diffView, _ = m.diffView.Update(loadDiffMsg{
@@ -201,6 +203,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Engine events
 	case fileChangedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
+		m.sidebar.rebuildTree()
 		m.statusBar.fileCount = len(m.sidebar.files)
 		session := m.engine.GetSession()
 		if session != nil {
@@ -361,6 +364,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if m.focus == focusSidebar {
+			// In tree mode, enter on a directory toggles collapse
+			if m.sidebar.treeMode && m.sidebar.selectedFile() == nil {
+				var cmd tea.Cmd
+				m.sidebar, cmd = m.sidebar.Update(msg)
+				return m, cmd
+			}
 			m.focus = focusMain
 			m.sidebar.focused = false
 			m.diffView.focused = true
@@ -544,17 +553,19 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 	if m.focus != focusSidebar {
 		return nil
 	}
-	if m.sidebar.cursor >= len(m.sidebar.files) {
+	file := m.sidebar.selectedFile()
+	if file == nil {
 		return nil
 	}
-	file := m.sidebar.files[m.sidebar.cursor]
+	filePath := file.Path
+	reviewed := file.Reviewed
 	return func() tea.Msg {
-		if file.Reviewed {
-			_ = m.engine.UnmarkReviewed(file.Path)
+		if reviewed {
+			_ = m.engine.UnmarkReviewed(filePath)
 		} else {
-			_ = m.engine.MarkReviewed(file.Path)
+			_ = m.engine.MarkReviewed(filePath)
 		}
-		return fileChangedMsg{path: file.Path}
+		return fileChangedMsg{path: filePath}
 	}
 }
 
