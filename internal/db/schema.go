@@ -7,6 +7,15 @@ import (
 
 const schemaVersion = 1
 
+const dropSQL = `
+DROP TABLE IF EXISTS review_submissions;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS content_items;
+DROP TABLE IF EXISTS changed_files;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS schema_version;
+`
+
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS schema_version (
 	version INTEGER NOT NULL
@@ -105,14 +114,31 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 
-	if currentVersion == schemaVersion {
-		return nil
-	}
-
-	// Future migrations would go here
 	if currentVersion > schemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", currentVersion, schemaVersion)
 	}
 
+	if currentVersion == schemaVersion {
+		// Verify schema integrity — check that key columns exist.
+		var colCount int
+		err = db.QueryRow(
+			"SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'agent_status'",
+		).Scan(&colCount)
+		if err != nil || colCount == 1 {
+			return nil // schema looks good
+		}
+		// Schema is stale — fall through to recreate.
+	}
+
+	// Drop and recreate (safe during pre-release development).
+	if _, err := db.Exec(dropSQL); err != nil {
+		return fmt.Errorf("drop old schema: %w", err)
+	}
+	if _, err := db.Exec(schemaSQL); err != nil {
+		return fmt.Errorf("apply schema: %w", err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion); err != nil {
+		return fmt.Errorf("set schema version: %w", err)
+	}
 	return nil
 }
