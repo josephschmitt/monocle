@@ -480,6 +480,18 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 	}
 }
 
+// -- Lifecycle --
+
+// StartHookServer starts the Unix domain socket server at the given path.
+func (e *Engine) StartHookServer(socketPath string) error {
+	return e.hooks.Start(socketPath)
+}
+
+// Shutdown stops the hook server and cleans up resources.
+func (e *Engine) Shutdown() {
+	_ = e.hooks.Shutdown()
+}
+
 // -- Hook handlers --
 
 // handlePostToolUse is called by the HookServer for PostToolUse messages.

@@ -89,4 +89,8 @@ type EngineAPI interface {
 
 	// Events
 	On(event EventKind, callback EventCallback) UnsubscribeFunc
+
+	// Lifecycle
+	StartHookServer(socketPath string) error
+	Shutdown()
 }
