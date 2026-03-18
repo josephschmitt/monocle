@@ -51,10 +51,12 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			if m.cursor < m.totalItems()-1 {
 				m.cursor++
 			}
+			return m, m.selectCurrent()
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			return m, m.selectCurrent()
 		case "g":
 			m.cursor = 0
 		case "G":
@@ -163,13 +165,8 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	name := truncatePath(f.Path, m.width-8)
 	line := fmt.Sprintf(" %s %s%s %s", statusChar, recentChar, name, reviewChar)
 
-	if selected {
-		var style lipgloss.Style
-		if m.focused {
-			style = lipgloss.NewStyle().Reverse(true).Width(m.width)
-		} else {
-			style = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Width(m.width)
-		}
+	if selected && m.focused {
+		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
 		return style.Render(line)
 	}
 
@@ -199,13 +196,8 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 	name := truncatePath(item.Title, m.width-6)
 	line := fmt.Sprintf("   %s %s", name, reviewChar)
 
-	if selected {
-		var style lipgloss.Style
-		if m.focused {
-			style = lipgloss.NewStyle().Reverse(true).Width(m.width)
-		} else {
-			style = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Width(m.width)
-		}
+	if selected && m.focused {
+		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
 		return style.Render(line)
 	}
 	return fmt.Sprintf("%-*s", m.width, line)

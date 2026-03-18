@@ -110,19 +110,21 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		const sidebarWidth = 30
+		const sidebarOuter = 32 // 30 content + 2 border
 		const statusBarHeight = 1
-		mainWidth := m.width - sidebarWidth
-		if mainWidth < 0 {
-			mainWidth = 0
+		const borderH = 2 // top + bottom border
+		const borderW = 2 // left + right border
+		mainOuter := m.width - sidebarOuter
+		if mainOuter < 0 {
+			mainOuter = 0
 		}
-		contentHeight := m.height - statusBarHeight
+		contentHeight := m.height - statusBarHeight - borderH
 		if contentHeight < 0 {
 			contentHeight = 0
 		}
-		m.sidebar.width = sidebarWidth
+		m.sidebar.width = sidebarOuter - borderW
 		m.sidebar.height = contentHeight
-		m.diffView.width = mainWidth
+		m.diffView.width = mainOuter - borderW
 		m.diffView.height = contentHeight
 		m.statusBar.width = m.width
 		m.commentEditor.width = m.width
@@ -173,11 +175,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
 
-	// Sidebar selection → load diff and switch focus to diff pane
+	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
-		m.focus = focusMain
-		m.sidebar.focused = false
-		m.diffView.focused = true
 		return m, m.handleSidebarSelect(msg)
 
 	// Comment overlay
@@ -270,6 +269,14 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "r":
 		return m, m.handleMarkReviewed()
+
+	case "enter":
+		if m.focus == focusSidebar {
+			m.focus = focusMain
+			m.sidebar.focused = false
+			m.diffView.focused = true
+			return m, nil
+		}
 	}
 
 	// Route to focused sub-model.
