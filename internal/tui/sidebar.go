@@ -161,9 +161,10 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		recentChar = "~"
 	}
 
-	// Layout: " {status} {recent}{icon} {name}     {review} "
-	// Note: icon glyphs may render as width 2 in terminals despite lipgloss
-	// measuring them as width 1. We add iconSlack to compensate.
+	// Layout: " {status} {recent}{icon} {name...}  {review} "
+	// Icon glyphs render as width 2 in terminals but lipgloss measures them
+	// as width 1. We account for this by subtracting iconSlack from nameW
+	// and always padding name to a fixed width so alignment is consistent.
 	icon := fileIcon(f.Path)
 	glyph := iconLookup(f.Path).glyph
 	const iconSlack = 2
@@ -176,26 +177,22 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		right := plainReview + " "
 		prefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
 		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
-		name := truncatePath(f.Path, nameW)
-		left := prefix + name
-		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - iconSlack
-		if gap < 1 {
-			gap = 1
+		if nameW < 1 {
+			nameW = 1
 		}
-		padded := left + strings.Repeat(" ", gap) + right
+		name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
+		padded := prefix + name + right
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
 	right := reviewChar + " "
 	prefix := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
-	name := truncatePath(f.Path, nameW)
-	left := prefix + name
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - iconSlack
-	if gap < 1 {
-		gap = 1
+	if nameW < 1 {
+		nameW = 1
 	}
-	return left + strings.Repeat(" ", gap) + right
+	name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
+	return prefix + name + right
 }
 
 func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) string {
