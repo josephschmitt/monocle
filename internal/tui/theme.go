@@ -5,8 +5,10 @@ import "charm.land/lipgloss/v2"
 // Theme holds all styles for the TUI.
 type Theme struct {
 	// Layout
-	SidebarBorder  lipgloss.Style
-	MainPane       lipgloss.Style
+	SidebarBorder        lipgloss.Style
+	SidebarBorderFocused lipgloss.Style
+	MainPane             lipgloss.Style
+	MainPaneFocused      lipgloss.Style
 
 	// Diff colors
 	Added          lipgloss.Style
@@ -36,8 +38,10 @@ type Theme struct {
 // DefaultTheme returns a theme using 16-color ANSI for maximum compatibility.
 func DefaultTheme() Theme {
 	return Theme{
-		SidebarBorder:  lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
-		MainPane:       lipgloss.NewStyle(),
+		SidebarBorder:        lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
+		SidebarBorderFocused: lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
+		MainPane:             lipgloss.NewStyle().BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
+		MainPaneFocused:      lipgloss.NewStyle().BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
 
 		Added:          lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
 		Removed:        lipgloss.NewStyle().Foreground(lipgloss.Color("1")),

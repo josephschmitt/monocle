@@ -164,7 +164,12 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	line := fmt.Sprintf(" %s %s%s %s", statusChar, recentChar, name, reviewChar)
 
 	if selected {
-		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
+		var style lipgloss.Style
+		if m.focused {
+			style = lipgloss.NewStyle().Reverse(true).Width(m.width)
+		} else {
+			style = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Width(m.width)
+		}
 		return style.Render(line)
 	}
 
@@ -195,7 +200,12 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 	line := fmt.Sprintf("   %s %s", name, reviewChar)
 
 	if selected {
-		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
+		var style lipgloss.Style
+		if m.focused {
+			style = lipgloss.NewStyle().Reverse(true).Width(m.width)
+		} else {
+			style = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Width(m.width)
+		}
 		return style.Render(line)
 	}
 	return fmt.Sprintf("%-*s", m.width, line)

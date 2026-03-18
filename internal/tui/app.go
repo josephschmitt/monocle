@@ -464,12 +464,21 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 
 // View renders the full TUI layout.
 func (m appModel) View() tea.View {
-	sidebarView := m.theme.SidebarBorder.
+	sidebarStyle := m.theme.SidebarBorder
+	if m.focus == focusSidebar {
+		sidebarStyle = m.theme.SidebarBorderFocused
+	}
+	mainStyle := m.theme.MainPane
+	if m.focus == focusMain {
+		mainStyle = m.theme.MainPaneFocused
+	}
+
+	sidebarView := sidebarStyle.
 		Width(m.sidebar.width).
 		Height(m.sidebar.height).
 		Render(m.sidebar.View())
 
-	mainView := m.theme.MainPane.
+	mainView := mainStyle.
 		Width(m.diffView.width).
 		Height(m.diffView.height).
 		Render(m.diffView.View())
