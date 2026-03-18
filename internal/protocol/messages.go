@@ -28,6 +28,12 @@ type StopMsg struct {
 	Agent      string `json:"agent"`
 	StopReason string `json:"stop_reason,omitempty"`
 	RequestID  string `json:"request_id"`
+
+	// Content to present for review when the agent stops (e.g., plans).
+	// Adapters populate these when the agent has reviewable non-file content.
+	ReviewContent      string `json:"review_content,omitempty"`
+	ReviewContentTitle string `json:"review_content_title,omitempty"`
+	ReviewContentType  string `json:"review_content_type,omitempty"`
 }
 
 type PromptSubmitMsg struct {

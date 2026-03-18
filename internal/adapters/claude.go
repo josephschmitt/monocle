@@ -15,11 +15,13 @@ type ClaudeAdapter struct{}
 
 // claudeHookInput represents Claude Code's hook stdin JSON.
 type claudeHookInput struct {
-	SessionID string          `json:"session_id,omitempty"`
-	Tool      *claudeToolInfo `json:"tool,omitempty"`
-	StopReason string         `json:"stop_reason,omitempty"`
-	RequestID  string         `json:"request_id,omitempty"`
-	Prompt     string         `json:"prompt,omitempty"`
+	SessionID           string          `json:"session_id,omitempty"`
+	Tool                *claudeToolInfo `json:"tool,omitempty"`
+	StopReason          string          `json:"stop_reason,omitempty"`
+	RequestID           string          `json:"request_id,omitempty"`
+	Prompt              string          `json:"prompt,omitempty"`
+	PermissionMode      string          `json:"permission_mode,omitempty"`
+	LastAssistantMessage string         `json:"last_assistant_message,omitempty"`
 }
 
 type claudeToolInfo struct {
@@ -54,12 +56,18 @@ func (a *ClaudeAdapter) ParseHookInput(event string, raw []byte) (any, error) {
 		return msg, nil
 
 	case "stop":
-		return &protocol.StopMsg{
+		msg := &protocol.StopMsg{
 			Type:       protocol.TypeStop,
 			Agent:      "claude",
 			StopReason: input.StopReason,
 			RequestID:  input.RequestID,
-		}, nil
+		}
+		if input.PermissionMode == "plan" && input.LastAssistantMessage != "" {
+			msg.ReviewContent = input.LastAssistantMessage
+			msg.ReviewContentTitle = "Plan"
+			msg.ReviewContentType = "markdown"
+		}
+		return msg, nil
 
 	case "prompt-submit":
 		return &protocol.PromptSubmitMsg{

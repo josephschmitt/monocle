@@ -130,6 +130,13 @@ func (fq *FeedbackQueue) GetStatus() string {
 	return fq.status
 }
 
+// HasPending returns true if there is a queued review waiting for delivery.
+func (fq *FeedbackQueue) HasPending() bool {
+	fq.mu.Lock()
+	defer fq.mu.Unlock()
+	return fq.pending != nil
+}
+
 // Reset clears the queue state.
 func (fq *FeedbackQueue) Reset() {
 	fq.mu.Lock()

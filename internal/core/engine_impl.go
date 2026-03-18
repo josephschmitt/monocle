@@ -552,6 +552,23 @@ func (e *Engine) handlePostToolUse(msg *protocol.PostToolUseMsg) {
 	})
 }
 
+// shouldAutoApprove returns true when there is nothing for the user to review.
+// Must be called with e.mu held.
+func (e *Engine) shouldAutoApprove() bool {
+	if e.current == nil {
+		return true
+	}
+	if len(e.current.ChangedFiles) > 0 || len(e.current.ContentItems) > 0 {
+		return false
+	}
+	for _, c := range e.current.Comments {
+		if !c.Outdated {
+			return false
+		}
+	}
+	return !e.feedback.HasPending()
+}
+
 // handleStop is called by the HookServer for Stop messages.
 // It blocks until the user submits or approves, then returns the response.
 func (e *Engine) handleStop(msg *protocol.StopMsg) *protocol.StopResponse {
@@ -567,12 +584,70 @@ func (e *Engine) handleStop(msg *protocol.StopMsg) *protocol.StopResponse {
 		Status: string(types.AgentStatusStopped),
 	})
 
+	// If the stop carries review content (e.g., a plan), inject it as a content item.
+	// Uses a stable ID so repeated plan stops replace the previous plan.
+	if msg.ReviewContent != "" {
+		e.handleContentReview(&protocol.ContentReviewMsg{
+			Type:        protocol.TypeContentReview,
+			ID:          "plan",
+			Title:       msg.ReviewContentTitle,
+			Content:     msg.ReviewContent,
+			ContentType: msg.ReviewContentType,
+		})
+	}
+
+	// Refresh git state to ensure auto-approve decision is based on current state
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session != nil {
+		files, err := e.sessions.RefreshChangedFiles(session)
+		if err == nil {
+			e.mu.Lock()
+			if e.current != nil && e.current.ID == session.ID {
+				e.current.ChangedFiles = files
+			}
+			e.mu.Unlock()
+		}
+	}
+
+	// Check if there's nothing to review — auto-approve without blocking
+	e.mu.Lock()
+	if e.shouldAutoApprove() {
+		if e.current != nil {
+			e.current.AgentStatus = types.AgentStatusIdle
+			_ = e.database.UpdateSession(e.current)
+		}
+		e.mu.Unlock()
+
+		e.emit(EventAutoApproved, EventPayload{
+			Kind: EventAutoApproved,
+		})
+		e.emit(EventAgentStatusChanged, EventPayload{
+			Kind:   EventAgentStatusChanged,
+			Status: string(types.AgentStatusIdle),
+		})
+		e.emit(EventFeedbackStatusChanged, EventPayload{
+			Kind:   EventFeedbackStatusChanged,
+			Status: "none",
+		})
+
+		return &protocol.StopResponse{
+			Type:      protocol.TypeStopResponse,
+			RequestID: msg.RequestID,
+			Continue:  false,
+		}
+	}
+	e.mu.Unlock()
+
 	// Block until user acts
 	resp := e.feedback.OnStop(msg.RequestID)
 
 	e.mu.Lock()
 	if e.current != nil {
 		e.current.AgentStatus = types.AgentStatusIdle
+		// Clear content items so they don't prevent auto-approve on the next stop
+		e.current.ContentItems = nil
 		_ = e.database.UpdateSession(e.current)
 
 		// Advance the round (reset baseRef to HEAD) on both submit and approve.

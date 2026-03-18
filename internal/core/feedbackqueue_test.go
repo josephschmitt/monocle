@@ -104,6 +104,31 @@ func TestApproveWhileStopped(t *testing.T) {
 	}
 }
 
+func TestHasPending(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	if fq.HasPending() {
+		t.Error("expected HasPending=false on new queue")
+	}
+
+	fq.Submit(&FormattedReview{
+		Formatted:    "review",
+		CommentCount: 1,
+		Action:       "request_changes",
+	})
+
+	if !fq.HasPending() {
+		t.Error("expected HasPending=true after Submit")
+	}
+
+	// Drain the queued review via OnStop
+	_ = fq.OnStop("req-hp")
+
+	if fq.HasPending() {
+		t.Error("expected HasPending=false after delivery")
+	}
+}
+
 func TestApproveWhileWorking(t *testing.T) {
 	fq := NewFeedbackQueue()
 

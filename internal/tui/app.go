@@ -47,6 +47,8 @@ type contentItemMsg struct {
 	id string
 }
 
+type autoApprovedMsg struct{}
+
 type refreshTickMsg struct{}
 
 func refreshTick() tea.Cmd {
@@ -217,6 +219,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contentItemMsg:
 		m.sidebar.contentItems = m.engine.GetContentItems()
+		return m, nil
+
+	case autoApprovedMsg:
+		m.statusBar.agentStatus = m.engine.GetAgentStatus()
+		m.statusBar.feedbackStatus = "auto-approved"
 		return m, nil
 
 	// Diff loading
@@ -716,5 +723,8 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventContentItemAdded, func(e core.EventPayload) {
 		p.Send(contentItemMsg{id: e.ItemID})
+	})
+	engine.On(core.EventAutoApproved, func(e core.EventPayload) {
+		p.Send(autoApprovedMsg{})
 	})
 }
