@@ -82,7 +82,7 @@ func (m statusBarModel) View() string {
 	}
 
 	// Key hints (right-aligned, collapse to ?:help when narrow)
-	fullHints := "c:comment  :submit  :approve  q:quit"
+	fullHints := "c:comment  S:submit  A:approve  D:dismiss  q:quit"
 	shortHints := "?:help"
 	left := strings.Join(parts, "  ")
 

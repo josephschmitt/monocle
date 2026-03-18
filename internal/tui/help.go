@@ -70,9 +70,9 @@ func (m helpModel) View() string {
 			{"c", "Add comment at cursor"},
 			{"v", "Visual select mode"},
 			{"r", "Toggle file reviewed"},
-			{":submit", "Submit review"},
-			{":approve", "Approve and release agent"},
-			{":dismiss-outdated", "Dismiss outdated comments"},
+			{"S / :submit", "Submit review"},
+			{"A / :approve", "Approve and release agent"},
+			{"D / :dismiss-outdated", "Dismiss outdated comments"},
 		}},
 		{"General", []struct{ key, desc string }{
 			{"t", "Toggle unified/split diff"},

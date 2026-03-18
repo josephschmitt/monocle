@@ -342,6 +342,15 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m, m.handleMarkReviewed()
 
+	case "S":
+		return m, m.executeCommand("submit")
+
+	case "A":
+		return m, m.executeCommand("approve")
+
+	case "D":
+		return m, m.executeCommand("dismiss-outdated")
+
 	case "enter":
 		if m.focus == focusSidebar {
 			m.focus = focusMain

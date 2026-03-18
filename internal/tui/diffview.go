@@ -27,6 +27,14 @@ type diffViewLine struct {
 	hunkHeader string
 	isComment  bool
 	comment    *types.ReviewComment
+
+	// Split diff: right side
+	isSplit      bool
+	rightKind    types.DiffLineKind
+	rightLineNum int
+	rightContent string
+	rightEmpty   bool // true if this side is a blank filler
+	leftEmpty    bool
 }
 
 type diffViewModel struct {
@@ -159,8 +167,6 @@ func (m diffViewModel) View() string {
 	}
 
 	var b strings.Builder
-	gutterWidth := 10 // "NNNN NNNN "
-	contentWidth := m.width - gutterWidth
 
 	visibleLines := m.height
 	end := m.offset + visibleLines
@@ -178,7 +184,11 @@ func (m diffViewModel) View() string {
 			rendered = m.renderHunkHeader(line, selected)
 		} else if line.isComment {
 			rendered = m.renderCommentLine(line, selected)
+		} else if line.isSplit {
+			rendered = m.renderSplitLine(line, selected, inVisual)
 		} else {
+			gutterWidth := 10
+			contentWidth := m.width - gutterWidth
 			rendered = m.renderDiffLine(line, gutterWidth, contentWidth, selected, inVisual)
 		}
 
@@ -193,6 +203,11 @@ func (m diffViewModel) View() string {
 
 func (m *diffViewModel) buildLines() {
 	m.lines = nil
+
+	if m.style == diffStyleSplit {
+		m.buildSplitLines()
+		return
+	}
 
 	for _, hunk := range m.hunks {
 		// Hunk header
@@ -213,6 +228,79 @@ func (m *diffViewModel) buildLines() {
 		}
 
 		// Inline comments for this hunk
+		for _, c := range m.comments {
+			if c.TargetRef == m.path && c.LineStart >= hunk.NewStart && c.LineStart <= hunk.NewStart+hunk.NewCount {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   &c,
+					content:   formatInlineComment(&c),
+				})
+			}
+		}
+	}
+}
+
+func (m *diffViewModel) buildSplitLines() {
+	for _, hunk := range m.hunks {
+		m.lines = append(m.lines, diffViewLine{
+			isHunk:     true,
+			hunkHeader: hunk.Header,
+			content:    fmt.Sprintf("@@ -%d,%d +%d,%d @@ %s", hunk.OldStart, hunk.OldCount, hunk.NewStart, hunk.NewCount, hunk.Header),
+		})
+
+		// Collect removed and added runs, pair them up
+		var removed, added []types.DiffLine
+		flushPairs := func() {
+			maxLen := len(removed)
+			if len(added) > maxLen {
+				maxLen = len(added)
+			}
+			for i := 0; i < maxLen; i++ {
+				sl := diffViewLine{isSplit: true}
+				if i < len(removed) {
+					sl.kind = types.DiffLineRemoved
+					sl.oldLineNum = removed[i].OldLineNum
+					sl.content = removed[i].Content
+				} else {
+					sl.leftEmpty = true
+					sl.kind = types.DiffLineContext
+				}
+				if i < len(added) {
+					sl.rightKind = types.DiffLineAdded
+					sl.rightLineNum = added[i].NewLineNum
+					sl.rightContent = added[i].Content
+				} else {
+					sl.rightEmpty = true
+					sl.rightKind = types.DiffLineContext
+				}
+				m.lines = append(m.lines, sl)
+			}
+			removed = removed[:0]
+			added = added[:0]
+		}
+
+		for _, dl := range hunk.Lines {
+			switch dl.Kind {
+			case types.DiffLineRemoved:
+				removed = append(removed, dl)
+			case types.DiffLineAdded:
+				added = append(added, dl)
+			case types.DiffLineContext:
+				flushPairs()
+				m.lines = append(m.lines, diffViewLine{
+					isSplit:      true,
+					kind:         types.DiffLineContext,
+					oldLineNum:   dl.OldLineNum,
+					content:      dl.Content,
+					rightKind:    types.DiffLineContext,
+					rightLineNum: dl.NewLineNum,
+					rightContent: dl.Content,
+				})
+			}
+		}
+		flushPairs()
+
+		// Inline comments
 		for _, c := range m.comments {
 			if c.TargetRef == m.path && c.LineStart >= hunk.NewStart && c.LineStart <= hunk.NewStart+hunk.NewCount {
 				m.lines = append(m.lines, diffViewLine{
@@ -274,6 +362,80 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, gutterWidth, contentWid
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(full)
 	default:
 		return full
+	}
+}
+
+func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual bool) string {
+	halfW := m.width / 2
+	gutterW := 5 // "NNNN "
+	contentW := halfW - gutterW - 1 // -1 for divider
+	if contentW < 1 {
+		contentW = 1
+	}
+
+	// Left side
+	var leftGutter, leftContent string
+	if line.leftEmpty {
+		leftGutter = strings.Repeat(" ", gutterW)
+		leftContent = strings.Repeat(" ", contentW)
+	} else {
+		if line.oldLineNum > 0 {
+			leftGutter = fmt.Sprintf("%4d ", line.oldLineNum)
+		} else {
+			leftGutter = strings.Repeat(" ", gutterW)
+		}
+		lc := line.content
+		if len(lc) > contentW {
+			lc = lc[:contentW-1] + "…"
+		}
+		leftContent = fmt.Sprintf("%-*s", contentW, lc)
+	}
+
+	// Right side
+	var rightGutter, rightContent string
+	if line.rightEmpty {
+		rightGutter = strings.Repeat(" ", gutterW)
+		rightContent = strings.Repeat(" ", contentW)
+	} else {
+		if line.rightLineNum > 0 {
+			rightGutter = fmt.Sprintf("%4d ", line.rightLineNum)
+		} else {
+			rightGutter = strings.Repeat(" ", gutterW)
+		}
+		rc := line.rightContent
+		if len(rc) > contentW {
+			rc = rc[:contentW-1] + "…"
+		}
+		rightContent = fmt.Sprintf("%-*s", contentW, rc)
+	}
+
+	leftFull := leftGutter + leftContent
+	rightFull := rightGutter + rightContent
+	divider := "│"
+
+	if (selected || inVisual) && m.focused {
+		return lipgloss.NewStyle().Reverse(true).Render(leftFull + divider + rightFull)
+	}
+
+	// Color each side
+	leftStyled := m.colorSide(leftFull, line.kind, line.leftEmpty)
+	rightStyled := m.colorSide(rightFull, line.rightKind, line.rightEmpty)
+	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
+
+	return leftStyled + divStyled + rightStyled
+}
+
+func (m diffViewModel) colorSide(text string, kind types.DiffLineKind, empty bool) string {
+	if empty {
+		return lipgloss.NewStyle().Faint(true).Render(text)
+	}
+	switch kind {
+	case types.DiffLineAdded:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(text)
+	case types.DiffLineRemoved:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(text)
+	default:
+		return text
 	}
 }
 
