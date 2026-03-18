@@ -3,6 +3,9 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/anthropics/monocle/internal/protocol"
 )
@@ -96,7 +99,7 @@ func (a *ClaudeAdapter) FormatHookOutput(response any) HookOutput {
 func (a *ClaudeAdapter) GenerateConfig(opts SetupOptions) string {
 	hookCmd := opts.HookBinaryPath
 	if hookCmd == "" {
-		hookCmd = "monocle-hook"
+		hookCmd = "monocle"
 	}
 
 	config := map[string]any{
@@ -107,7 +110,7 @@ func (a *ClaudeAdapter) GenerateConfig(opts SetupOptions) string {
 					"hooks": []map[string]any{
 						{
 							"type":    "command",
-							"command": hookCmd + " post-tool-use --agent claude",
+							"command": hookCmd + " hook post-tool-use --agent claude",
 							"async":   true,
 						},
 					},
@@ -119,7 +122,7 @@ func (a *ClaudeAdapter) GenerateConfig(opts SetupOptions) string {
 					"hooks": []map[string]any{
 						{
 							"type":    "command",
-							"command": hookCmd + " stop --agent claude",
+							"command": hookCmd + " hook stop --agent claude",
 						},
 					},
 				},
@@ -137,4 +140,100 @@ func (a *ClaudeAdapter) Capabilities() AdapterCapabilities {
 		StopBlocking: true,
 		AsyncHooks:   true,
 	}
+}
+
+// AgentInstaller implementation
+
+func (a *ClaudeAdapter) Name() string { return "claude" }
+
+func (a *ClaudeAdapter) Detect() bool {
+	if _, err := exec.LookPath("claude"); err == nil {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	if info, err := os.Stat(filepath.Join(home, ".claude")); err == nil && info.IsDir() {
+		return true
+	}
+	return false
+}
+
+func (a *ClaudeAdapter) ConfigPath(global bool) (string, bool) {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", false
+		}
+		return filepath.Join(home, ".claude", "settings.json"), true
+	}
+	return filepath.Join(".claude", "settings.json"), true
+}
+
+func (a *ClaudeAdapter) IsInstalled(configPath string) (bool, error) {
+	config, err := ReadJSONFile(configPath)
+	if err != nil {
+		return false, err
+	}
+	return jsonHooksContainMonocle(config, "PostToolUse") ||
+		jsonHooksContainMonocle(config, "Stop"), nil
+}
+
+func (a *ClaudeAdapter) Install(configPath string, opts InstallOptions) error {
+	hookCmd := opts.HookBinaryPath
+	if hookCmd == "" {
+		hookCmd = "monocle"
+	}
+
+	config, err := ReadJSONFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	hooks := getOrCreateMap(config, "hooks")
+
+	mergeJSONHookEvent(hooks, "PostToolUse", map[string]any{
+		"matcher": "Write|Edit|MultiEdit",
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": hookCmd + " hook post-tool-use --agent claude",
+				"async":   true,
+			},
+		},
+	})
+
+	mergeJSONHookEvent(hooks, "Stop", map[string]any{
+		"matcher": "",
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": hookCmd + " hook stop --agent claude",
+			},
+		},
+	})
+
+	return WriteJSONFile(configPath, config)
+}
+
+func (a *ClaudeAdapter) Uninstall(configPath string) error {
+	config, err := ReadJSONFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	hooks, ok := config["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	removeMonocleHooks(hooks, "PostToolUse")
+	removeMonocleHooks(hooks, "Stop")
+
+	if len(hooks) == 0 {
+		delete(config, "hooks")
+	}
+
+	return WriteJSONFile(configPath, config)
 }

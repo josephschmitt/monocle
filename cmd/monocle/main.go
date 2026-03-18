@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,15 +11,18 @@ import (
 	"github.com/anthropics/monocle/internal/adapters"
 	"github.com/anthropics/monocle/internal/core"
 	"github.com/anthropics/monocle/internal/db"
+	"github.com/anthropics/monocle/internal/protocol"
 	"github.com/anthropics/monocle/internal/tui"
 )
 
 type CLI struct {
-	Start    StartCmd    `cmd:"" default:"withargs" help:"Start a new review session"`
-	Resume   ResumeCmd   `cmd:"" help:"Resume an existing session"`
-	Sessions SessionsCmd `cmd:"" help:"List sessions"`
-	Setup    SetupCmd    `cmd:"" help:"Install agent hooks"`
-	Review   ReviewCmd   `cmd:"" help:"Send content for review"`
+	Start     StartCmd     `cmd:"" default:"withargs" help:"Start a new review session"`
+	Resume    ResumeCmd    `cmd:"" help:"Resume an existing session"`
+	Sessions  SessionsCmd  `cmd:"" help:"List sessions"`
+	Install   InstallCmd   `cmd:"" help:"Install agent hooks"`
+	Uninstall UninstallCmd `cmd:"" help:"Remove agent hooks"`
+	Hook      HookCmd      `cmd:"" hidden:"" help:"Hook shim invoked by agent hooks"`
+	Review    ReviewCmd    `cmd:"" help:"Send content for review"`
 }
 
 type StartCmd struct {
@@ -33,9 +37,19 @@ type SessionsCmd struct {
 	Repo string `help:"Filter by repo root" default:"."`
 }
 
-type SetupCmd struct {
-	Agent     string `arg:"" help:"Agent to configure (claude|gemini|codex|opencode)"`
-	Uninstall bool   `help:"Remove hooks instead of installing"`
+type InstallCmd struct {
+	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to install (auto, claude, codex, gemini, opencode)"`
+	Global bool     `help:"Install to global/user config instead of project" default:"false"`
+}
+
+type UninstallCmd struct {
+	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to uninstall (auto, claude, codex, gemini, opencode)"`
+	Global bool     `help:"Remove from global/user config" default:"false"`
+}
+
+type HookCmd struct {
+	Event string `arg:"" help:"Hook event name"`
+	Agent string `help:"Agent name" default:"claude"`
 }
 
 type ReviewCmd struct {
@@ -95,19 +109,94 @@ func (cmd *SessionsCmd) Run() error {
 	return nil
 }
 
-func (cmd *SetupCmd) Run() error {
-	adapter := adapters.GetAdapter(cmd.Agent)
-	config := adapter.GenerateConfig(adapters.SetupOptions{})
+func (cmd *InstallCmd) Run() error {
+	results := adapters.InstallAgents(cmd.Agents, cmd.Global)
 
-	if cmd.Uninstall {
-		fmt.Printf("To uninstall, remove the monocle hooks from your %s configuration.\n", cmd.Agent)
+	if len(results) == 0 {
+		fmt.Println("No agents detected. Specify an agent explicitly: monocle install claude")
 		return nil
 	}
 
-	fmt.Printf("Add the following to your %s hooks configuration:\n\n", cmd.Agent)
-	fmt.Println(config)
-	fmt.Println()
-	fmt.Println("Make sure 'monocle-hook' is in your PATH.")
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
+		} else if r.AlreadyDone {
+			fmt.Printf("  ✓ %s: already installed (%s)\n", r.Agent, r.ConfigPath)
+		} else if r.Installed {
+			fmt.Printf("  ✓ %s: hooks installed → %s\n", r.Agent, r.ConfigPath)
+		}
+	}
+
+	fmt.Println("\nMake sure 'monocle' is in your PATH.")
+	return nil
+}
+
+func (cmd *UninstallCmd) Run() error {
+	results := adapters.UninstallAgents(cmd.Agents, cmd.Global)
+
+	if len(results) == 0 {
+		fmt.Println("No agents detected. Specify an agent explicitly: monocle uninstall claude")
+		return nil
+	}
+
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
+		} else if r.AlreadyDone {
+			fmt.Printf("  ✓ %s: no hooks to remove\n", r.Agent)
+		} else if r.Installed {
+			fmt.Printf("  ✓ %s: hooks removed from %s\n", r.Agent, r.ConfigPath)
+		}
+	}
+	return nil
+}
+
+func (cmd *HookCmd) Run() error {
+	// Read stdin completely.
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return nil // never block the agent
+	}
+
+	// Parse the input via the adapter.
+	adapter := adapters.GetAdapter(cmd.Agent)
+	msg, err := adapter.ParseHookInput(cmd.Event, raw)
+	if err != nil {
+		return nil
+	}
+
+	// Get the socket path from the environment.
+	socketPath := os.Getenv("MONOCLE_SOCKET")
+	if socketPath == "" {
+		return nil
+	}
+
+	// Connect to the engine.
+	client, err := adapters.NewSocketClient(socketPath)
+	if err != nil {
+		return nil
+	}
+	defer client.Close()
+
+	if protocol.IsBlocking(msg) {
+		// Send and wait for a response.
+		response, err := client.SendAndWait(msg)
+		if err != nil {
+			return nil
+		}
+
+		out := adapter.FormatHookOutput(response)
+		if len(out.Data) > 0 {
+			os.Stdout.Write(out.Data) //nolint:errcheck
+		}
+		if out.ExitCode != 0 {
+			os.Exit(out.ExitCode)
+		}
+		return nil
+	}
+
+	// Non-blocking: fire and forget.
+	_ = client.Send(msg)
 	return nil
 }
 

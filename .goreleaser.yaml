@@ -22,20 +22,6 @@ builds:
       - -s -w
       - -X main.version={{.Version}}
 
-  - id: monocle-hook
-    main: ./cmd/monocle-hook
-    binary: monocle-hook
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
 
 archives:
   - id: monocle
@@ -79,7 +65,6 @@ brews:
       system "#{bin}/monocle", "--help"
     install: |
       bin.install "monocle"
-      bin.install "monocle-hook"
 
 release:
   github:
