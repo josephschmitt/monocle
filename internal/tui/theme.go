@@ -38,10 +38,10 @@ type Theme struct {
 // DefaultTheme returns a theme using 16-color ANSI for maximum compatibility.
 func DefaultTheme() Theme {
 	return Theme{
-		SidebarBorder:        lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
-		SidebarBorderFocused: lipgloss.NewStyle().BorderRight(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
-		MainPane:             lipgloss.NewStyle().BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
-		MainPaneFocused:      lipgloss.NewStyle().BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
+		SidebarBorder:        lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
+		SidebarBorderFocused: lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
+		MainPane:             lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
+		MainPaneFocused:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
 
 		Added:          lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
 		Removed:        lipgloss.NewStyle().Foreground(lipgloss.Color("1")),

@@ -227,12 +227,8 @@ func (m *diffViewModel) buildLines() {
 func (m diffViewModel) renderHunkHeader(line diffViewLine, selected bool) string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true)
 	content := style.Render(line.content)
-	if selected {
-		if m.focused {
-			content = lipgloss.NewStyle().Reverse(true).Render(line.content)
-		} else {
-			content = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Render(line.content)
-		}
+	if selected && m.focused {
+		content = lipgloss.NewStyle().Reverse(true).Render(line.content)
 	}
 	return fmt.Sprintf("%-*s", m.width, content)
 }
@@ -265,11 +261,8 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, gutterWidth, contentWid
 
 	full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
 
-	if selected || inVisual {
-		if m.focused {
-			return lipgloss.NewStyle().Reverse(true).Render(full)
-		}
-		return lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("7")).Render(full)
+	if (selected || inVisual) && m.focused {
+		return lipgloss.NewStyle().Reverse(true).Render(full)
 	}
 
 	// Color by diff type
