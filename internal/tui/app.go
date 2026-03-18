@@ -127,10 +127,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		const borderH = 2 // top + bottom border
 		const titleHeight = 1
 		const statusBarHeight = 1
-		const iconSlack = 2 // icon glyphs render wider than lipgloss measures
 		const chrome = titleHeight + statusBarHeight + borderH
 
-		sidebarOuter := sidebarContentW + borderW + iconSlack
+		sidebarOuter := sidebarContentW + borderW
 		mainOuter := m.width - sidebarOuter
 		if mainOuter < 0 {
 			mainOuter = 0
@@ -563,14 +562,21 @@ func (m appModel) View() tea.View {
 		Height(m.sidebar.height).
 		Render(m.sidebar.View())
 
+	// Measure actual rendered sidebar width and give diff view the rest
+	sidebarRenderedW := lipgloss.Width(sidebarView)
+	diffContentW := m.width - sidebarRenderedW - 2 // 2 = main pane border
+	if diffContentW < 0 {
+		diffContentW = 0
+	}
+	m.diffView.width = diffContentW
+
 	mainView := mainStyle.
-		Width(m.diffView.width).
+		Width(diffContentW).
 		Height(m.diffView.height).
 		Render(m.diffView.View())
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
-	bodyWidth := lipgloss.Width(body)
-	m.statusBar.width = bodyWidth
+	m.statusBar.width = m.width
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
