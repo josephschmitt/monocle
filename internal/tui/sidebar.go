@@ -164,13 +164,18 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	// Build line
 	icon := fileIcon(f.Path)
 	name := truncatePath(f.Path, m.width-11)
-	line := fmt.Sprintf(" %s %s%s %s %s", styledStatus, recentChar, icon, name, reviewChar)
 
 	if selected && m.focused {
-		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
-		return style.Render(line)
+		// Plain text (no embedded ANSI) so Reverse works cleanly
+		plainReview := "○"
+		if f.Reviewed {
+			plainReview = "✓"
+		}
+		plain := fmt.Sprintf(" %s %s%s %s %s", statusChar, recentChar, iconLookup(f.Path).glyph, name, plainReview)
+		return lipgloss.NewStyle().Reverse(true).Width(m.width).Render(plain)
 	}
 
+	line := fmt.Sprintf(" %s %s%s %s %s", styledStatus, recentChar, icon, name, reviewChar)
 	return fmt.Sprintf("%-*s", m.width, line)
 }
 
