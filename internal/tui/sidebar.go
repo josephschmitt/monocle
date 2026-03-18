@@ -164,37 +164,35 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	// Layout: " {status} {recent}{icon} {name}     {review} "
 	icon := fileIcon(f.Path)
 	glyph := iconLookup(f.Path).glyph
-	rightWidth := 3 // "○ " or "✓ "
-	leftPrefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
-	prefixW := lipgloss.Width(leftPrefix)
-	nameWidth := m.width - prefixW - rightWidth
-	if nameWidth < 1 {
-		nameWidth = 1
-	}
-	name := truncatePath(f.Path, nameWidth)
 
 	if selected && m.focused {
 		plainReview := "○"
 		if f.Reviewed {
 			plainReview = "✓"
 		}
-		left := leftPrefix + name
-		right := fmt.Sprintf("%s ", plainReview)
+		right := plainReview + " "
+		prefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
+		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - 1
+		name := truncatePath(f.Path, nameW)
+		left := prefix + name
 		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-		if gap < 0 {
-			gap = 0
+		if gap < 1 {
+			gap = 1
 		}
 		padded := left + strings.Repeat(" ", gap) + right
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
-	styledLeft := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon) + name
-	right := fmt.Sprintf("%s ", reviewChar)
-	gap := m.width - lipgloss.Width(styledLeft) - lipgloss.Width(right)
-	if gap < 0 {
-		gap = 0
+	right := reviewChar + " "
+	prefix := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon)
+	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - 1
+	name := truncatePath(f.Path, nameW)
+	left := prefix + name
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
 	}
-	return styledLeft + strings.Repeat(" ", gap) + right
+	return left + strings.Repeat(" ", gap) + right
 }
 
 func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) string {
