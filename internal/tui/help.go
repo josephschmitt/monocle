@@ -64,6 +64,7 @@ func (m helpModel) View() string {
 			{"[/]", "Previous/next file"},
 			{"Enter", "Focus diff pane"},
 			{"Tab", "Switch pane focus"},
+			{"1/2", "Jump to pane"},
 		}},
 		{"Review", []struct{ key, desc string }{
 			{"c", "Add comment at cursor"},
