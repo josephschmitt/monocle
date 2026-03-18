@@ -26,7 +26,7 @@ Monocle integrates with agents via their native hook systems to create a real re
 - **Automatic refresh** — File list and diffs update live as the agent makes changes
 - **Feedback queue** — Submit reviews while the agent is working; they're delivered when it next stops
 - **Session persistence** — Reviews survive restarts via SQLite
-- **Agent hooks** — Direct integration with Claude Code (more agents coming)
+- **Agent hooks** — Direct integration with Claude Code, Gemini CLI, Codex CLI, and OpenCode
 - **Nerd Font icons** — File type icons with true color in the sidebar
 
 ## Installation
@@ -41,7 +41,6 @@ brew install josephschmitt/tap/monocle
 
 ```bash
 go install github.com/anthropics/monocle/cmd/monocle@latest
-go install github.com/anthropics/monocle/cmd/monocle-hook@latest
 ```
 
 ### Pre-built Binaries
@@ -55,12 +54,12 @@ Download from [GitHub Releases](https://github.com/josephschmitt/monocle/release
 # Apple Silicon
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_darwin_arm64.tar.gz
 tar xzf monocle.tar.gz
-sudo mv monocle monocle-hook /usr/local/bin/
+sudo mv monocle /usr/local/bin/
 
 # Intel
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_darwin_amd64.tar.gz
 tar xzf monocle.tar.gz
-sudo mv monocle monocle-hook /usr/local/bin/
+sudo mv monocle /usr/local/bin/
 ```
 
 **Linux:**
@@ -68,12 +67,12 @@ sudo mv monocle monocle-hook /usr/local/bin/
 # x86_64
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_linux_amd64.tar.gz
 tar xzf monocle.tar.gz
-sudo mv monocle monocle-hook /usr/local/bin/
+sudo mv monocle /usr/local/bin/
 
 # ARM64
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_linux_arm64.tar.gz
 tar xzf monocle.tar.gz
-sudo mv monocle monocle-hook /usr/local/bin/
+sudo mv monocle /usr/local/bin/
 ```
 
 <!-- x-release-please-end -->
@@ -92,10 +91,12 @@ devbox run -- make build
 ### 1. Install hooks for your agent
 
 ```bash
-monocle setup claude
+monocle install              # Auto-detect installed agents
+monocle install claude       # Install for Claude Code specifically
+monocle install --global     # Install to global/user config
 ```
 
-This outputs the hook configuration to add to your Claude Code settings. Copy it into `.claude/settings.json` (project) or `~/.claude/settings.json` (global).
+This writes the hook configuration directly into your agent's settings file.
 
 ### 2. Start a review session
 
@@ -133,17 +134,17 @@ Press `A` to approve and release the agent without feedback.
 ## How It Works
 
 ```
-┌─────────────┐     hooks      ┌──────────────┐    socket     ┌──────────┐
-│  AI Agent   │ ──────────────▸│ monocle-hook │ ─────────────▸│ monocle  │
-│ (Claude,etc)│                │   (shim)     │               │  (TUI)   │
-└─────────────┘                └──────────────┘               └──────────┘
-       ▲                                                           │
-       │                     formatted review                      │
-       └───────────────────────────────────────────────────────────┘
+┌─────────────┐     hooks      ┌───────────────┐    socket     ┌──────────┐
+│  AI Agent   │ ──────────────▸│ monocle hook  │ ─────────────▸│ monocle  │
+│ (Claude,etc)│                │  (subcommand) │               │  (TUI)   │
+└─────────────┘                └───────────────┘               └──────────┘
+       ▲                                                            │
+       │                     formatted review                       │
+       └────────────────────────────────────────────────────────────┘
 ```
 
 1. Your AI agent fires hooks as it works (file edits, stop events)
-2. `monocle-hook` (a lightweight shim) forwards these to the running `monocle` instance via a Unix domain socket
+2. `monocle hook` (a hidden subcommand) forwards these to the running `monocle` instance via a Unix domain socket
 3. Monocle updates its diff view in real time
 4. When you submit a review, it's formatted as structured markdown and injected back into the agent's context
 5. The agent sees your feedback and can address the issues
@@ -155,7 +156,8 @@ monocle                     Start a new review session (default)
 monocle start --agent X     Start with a specific agent type
 monocle resume <session-id> Resume a previous session
 monocle sessions            List past sessions
-monocle setup claude        Show hook configuration for Claude Code
+monocle install [agents]    Install hooks (auto-detect, or specify agents)
+monocle uninstall [agents]  Remove hooks
 ```
 
 ## Requirements

@@ -6,7 +6,7 @@ Terminal-based code review companion for AI coding agents (Claude Code, Codex, G
 
 ```bash
 devbox shell                          # Sets up Go + lefthook
-devbox run -- make build              # Build both binaries → bin/
+devbox run -- make build              # Build binary → bin/
 devbox run -- make test               # Run tests
 devbox run -- make lint               # Vet + build check
 ```
@@ -15,21 +15,20 @@ devbox run -- make lint               # Vet + build check
 
 ## Architecture
 
-Two binaries:
+Single binary with a hidden `hook` subcommand:
 - **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs, collects comments, delivers reviews.
-- **`monocle-hook`** — Lightweight shim invoked by agent hooks. Connects to monocle via Unix domain socket. Exits 0 on any error (never blocks the agent).
+- **`monocle hook`** — Hidden subcommand invoked by agent hooks. Connects to monocle via Unix domain socket. Exits 0 on any error (never blocks the agent).
 
 ### Package Layout
 
 ```
-cmd/monocle/          Main CLI entry point (Kong commands)
-cmd/monocle-hook/     Hook shim binary
+cmd/monocle/          Main CLI entry point (Kong commands, including hidden hook subcommand)
 internal/
   types/              Domain types (ReviewSession, ChangedFile, ReviewComment, Config)
   protocol/           NDJSON message types + marshal/unmarshal
   db/                 SQLite layer (schema, migrations, typed queries)
   core/               Engine, git client, feedback queue, formatter, session manager, hook server
-  adapters/           Agent-specific adapters (Claude Code), socket client
+  adapters/           Agent-specific adapters (Claude, Gemini, Codex, OpenCode), installers, socket client
   tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, modals, theme)
 ```
 
@@ -37,11 +36,12 @@ internal/
 
 - **`core.EngineAPI`** (`internal/core/engine.go`) — Contract between TUI and engine. TUI never imports engine internals.
 - **`adapters.AgentAdapter`** (`internal/adapters/adapter.go`) — Agent-specific hook parsing/formatting.
+- **`adapters.AgentInstaller`** (`internal/adapters/adapter.go`) — Agent-specific hook installation/uninstallation.
 
 ### Data Flow
 
 ```
-Agent hook fires → monocle-hook → Unix socket → HookServer → Engine
+Agent hook fires → monocle hook (subcommand) → Unix socket → HookServer → Engine
 Engine → emits events → BridgeEngineEvents → tea.Program.Send() → TUI updates
 User submits review → Engine → FeedbackQueue → blocks until agent stops → delivers via socket response
 ```
@@ -54,6 +54,7 @@ User submits review → Engine → FeedbackQueue → blocks until agent stops �
 - **Bubbles v2** — UI components (key bindings)
 - **Kong** — CLI parsing (not Cobra)
 - **modernc.org/sqlite** — Pure Go SQLite (no CGo)
+- **BurntSushi/toml** — TOML parsing for Codex CLI config
 - **16-color ANSI** base theme for terminal compatibility, with true color for icons
 
 ## Bubble Tea v2 Gotchas
@@ -88,8 +89,8 @@ User submits review → Engine → FeedbackQueue → blocks until agent stops �
 3. Wire into `appModel` in `app.go` (add field, init in `NewApp`, handle messages in `Update`, render in `View`)
 
 ### Add a new agent adapter
-1. Create `internal/adapters/youragent.go` implementing `AgentAdapter`
-2. Register in `GetAdapter()` switch in `adapter.go`
+1. Create `internal/adapters/youragent.go` implementing `AgentAdapter` + `AgentInstaller`
+2. Register in `GetAdapter()` switch and `AllInstallers()` in `adapter.go`
 
 ### Add a new CLI command
 1. Add a struct to `cmd/monocle/main.go` with Kong tags

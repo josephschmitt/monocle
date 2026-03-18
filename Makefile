@@ -3,6 +3,9 @@
 build:
 	go build -o bin/monocle ./cmd/monocle
 
+install:
+	go install ./cmd/monocle
+
 test:
 	go test ./internal/...
 
