@@ -156,8 +156,9 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	}
 
 	// Build line
-	name := truncatePath(f.Path, m.width-8)
-	line := fmt.Sprintf(" %s %s%s %s", statusChar, recentChar, name, reviewChar)
+	icon := fileIcon(f.Path)
+	name := truncatePath(f.Path, m.width-11)
+	line := fmt.Sprintf(" %s %s%s %s %s", statusChar, recentChar, icon, name, reviewChar)
 
 	if selected && m.focused {
 		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
