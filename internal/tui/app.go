@@ -110,19 +110,23 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		const sidebarOuter = 32 // 30 content + 2 border
-		const statusBarHeight = 1
-		const borderH = 2 // top + bottom border
+		const sidebarContentW = 30
 		const borderW = 2 // left + right border
+		const borderH = 2 // top + bottom border
+		const titleHeight = 1
+		const statusBarHeight = 1
+		const chrome = titleHeight + statusBarHeight + borderH
+
+		sidebarOuter := sidebarContentW + borderW
 		mainOuter := m.width - sidebarOuter
 		if mainOuter < 0 {
 			mainOuter = 0
 		}
-		contentHeight := m.height - statusBarHeight - borderH
+		contentHeight := m.height - chrome
 		if contentHeight < 0 {
 			contentHeight = 0
 		}
-		m.sidebar.width = sidebarOuter - borderW
+		m.sidebar.width = sidebarContentW
 		m.sidebar.height = contentHeight
 		m.diffView.width = mainOuter - borderW
 		m.diffView.height = contentHeight
@@ -471,6 +475,10 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 
 // View renders the full TUI layout.
 func (m appModel) View() tea.View {
+	// Title bar
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4")).Render(" monocle")
+	titleBar := lipgloss.NewStyle().Width(m.width).Render(title)
+
 	sidebarStyle := m.theme.SidebarBorder
 	if m.focus == focusSidebar {
 		sidebarStyle = m.theme.SidebarBorderFocused
@@ -492,7 +500,7 @@ func (m appModel) View() tea.View {
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	statusView := m.statusBar.View()
-	full := lipgloss.JoinVertical(lipgloss.Left, body, statusView)
+	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
 	// Render overlay centered on top of the layout if active.
 	if m.overlay == overlayComment {
