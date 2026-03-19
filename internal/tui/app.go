@@ -218,8 +218,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = session.BaseRef
 			m.statusBar.commentCount = len(session.Comments)
 		}
-		// Auto-select first file if nothing is currently displayed
-		if m.diffView.path == "" && len(m.sidebar.files) > 0 {
+		// Auto-select first file if the current view is empty or stale
+		if len(m.sidebar.files) > 0 && !m.diffViewShowsValidFile() {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
 		}
 		return m, nil
@@ -579,6 +579,23 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 
 type baseRefChangedMsg struct {
 	err string
+}
+
+// diffViewShowsValidFile returns true if the diff view is showing a file
+// that's still in the current file list (not stale or a content item).
+func (m appModel) diffViewShowsValidFile() bool {
+	if m.diffView.path == "" {
+		return false
+	}
+	if m.diffView.contentMode {
+		return false // content view, not a file
+	}
+	for _, f := range m.sidebar.files {
+		if f.Path == m.diffView.path {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSidebarSelect loads the diff for the selected file or content item.
