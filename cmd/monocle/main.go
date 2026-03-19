@@ -197,6 +197,10 @@ func (cmd *GetFeedbackCmd) Run() error {
 	}
 	defer client.Close()
 
+	if cmd.Wait {
+		fmt.Fprintln(os.Stderr, "Waiting for reviewer to submit feedback...")
+	}
+
 	resp, err := client.SendAndWait(&protocol.PollFeedbackMsg{
 		Type: protocol.TypePollFeedback,
 		Wait: cmd.Wait,

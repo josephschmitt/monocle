@@ -7,43 +7,32 @@ allowed-tools: Bash(monocle *)
 Your reviewer is watching your code changes in real-time using Monocle. They may
 leave comments on specific files and lines, or on your plans.
 
-**IMPORTANT:** Always check for feedback before starting new work. Your reviewer
-may have submitted comments while you were idle.
+## Wait for review feedback
 
-## Check for pending feedback
-
-Run this at the start of every new task, after receiving a new user prompt, and
-after completing a logical unit of work:
-
-```
-monocle review-status
-```
-
-This returns the current review state: no feedback, pending feedback (with count),
-or a pause request from your reviewer.
-
-## Retrieve feedback
-
-If review-status shows pending feedback:
-
-```
-monocle get-feedback
-```
-
-This returns formatted review comments with file paths, line numbers, and code
-snippets. Address the feedback before continuing.
-
-## When your reviewer requests a pause
-
-If review-status returns "pause_requested", your reviewer wants you to stop and
-wait for their feedback. Run:
+When your user asks you to wait for review, or when you want to check in with
+your reviewer after completing a logical unit of work, run:
 
 ```
 monocle get-feedback --wait
 ```
 
-This blocks until your reviewer submits their review. Do not continue working
-until you receive the feedback.
+This blocks until your reviewer submits their review. The reviewer will see your
+code changes and any plans you have submitted. Do not continue working until you
+receive the feedback. Address all issues before proceeding.
+
+## Quick status check
+
+To check if feedback is pending without blocking:
+
+```
+monocle review-status
+```
+
+If feedback is pending, retrieve it with:
+
+```
+monocle get-feedback
+```
 
 ## Submit a plan or content for review
 
