@@ -57,7 +57,7 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 		case "esc":
 			m.active = false
 			return m, func() tea.Msg { return cancelCommentMsg{} }
-		case "ctrl+s":
+		case "enter":
 			if strings.TrimSpace(m.body) == "" {
 				return m, nil
 			}
@@ -71,6 +71,8 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			}
 			m.active = false
 			return m, func() tea.Msg { return saveMsg }
+		case "shift+enter", "alt+enter":
+			m.body += "\n"
 		case "tab":
 			// Cycle comment type
 			switch m.commentType {
@@ -87,12 +89,13 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			if len(m.body) > 0 {
 				m.body = m.body[:len(m.body)-1]
 			}
-		case "enter":
-			m.body += "\n"
+		case "space":
+			m.body += " "
 		default:
 			// Only add printable characters
-			if len(msg.String()) == 1 || msg.String() == " " {
-				m.body += msg.String()
+			key := msg.String()
+			if len(key) == 1 {
+				m.body += key
 			}
 		}
 	}
@@ -159,7 +162,7 @@ func (m commentEditorModel) View() string {
 	b.WriteString("\n\n")
 
 	// Hints
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Ctrl+S: save  Escape: cancel  Tab: cycle type"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: save  Shift+Enter: newline  Esc: cancel  Tab: cycle type"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
