@@ -601,6 +601,7 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 func (m appModel) refreshFiles() tea.Cmd {
 	engine := m.engine
 	currentPath := m.diffView.path
+	inContentMode := m.diffView.contentMode
 	return func() tea.Msg {
 		// Refresh the file list from git
 		files, err := engine.RefreshChangedFiles()
@@ -609,10 +610,10 @@ func (m appModel) refreshFiles() tea.Cmd {
 		}
 		session := engine.GetSession()
 
-		// Also reload the current diff if one is being viewed
+		// Don't reload diff when viewing a content item — it's not a file
 		var result *types.DiffResult
 		var comments []types.ReviewComment
-		if currentPath != "" {
+		if currentPath != "" && !inContentMode {
 			result, _ = engine.GetFileDiff(currentPath)
 			for _, c := range session.Comments {
 				if c.TargetRef == currentPath {
