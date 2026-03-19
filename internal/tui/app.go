@@ -179,9 +179,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.agentStatus = m.engine.GetAgentStatus()
 		m.statusBar.feedbackStatus = m.engine.GetFeedbackStatus()
-		// Auto-select the first file
+		// Auto-select the first file, or first content item if no files
 		if len(msg.files) > 0 {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
+		}
+		if len(msg.items) > 0 {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.items[0].ID})
 		}
 		return m, nil
 
@@ -224,6 +227,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contentItemMsg:
 		m.sidebar.contentItems = m.engine.GetContentItems()
+		// Auto-select if nothing is currently displayed
+		if m.diffView.path == "" && msg.id != "" {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
+		}
 		return m, nil
 
 	case pauseChangedMsg:
