@@ -222,7 +222,7 @@ func (m diffViewModel) View() string {
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
 		} else if m.contentMode {
-			gutterWidth := 6
+			gutterWidth := 4
 			contentWidth := m.width - gutterWidth
 			rendered = m.renderContentLine(line, gutterWidth, contentWidth, selected, inVisual)
 		} else {
@@ -383,7 +383,7 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 }
 
 func (m diffViewModel) renderContentLine(line diffViewLine, gutterWidth, contentWidth int, selected, inVisual bool) string {
-	gutter := fmt.Sprintf("%4d ", line.newLineNum)
+	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
 
 	content := line.content
 	if len(content) > contentWidth {
