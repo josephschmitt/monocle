@@ -218,6 +218,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = session.BaseRef
 			m.statusBar.commentCount = len(session.Comments)
 		}
+		// Auto-select first file if nothing is currently displayed
+		if m.diffView.path == "" && len(m.sidebar.files) > 0 {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
+		}
 		return m, nil
 
 	case agentStatusMsg:
