@@ -236,6 +236,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
 
+	// Content item loading (plans, docs)
+	case loadContentMsg:
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
+
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
 		return m, m.handleSidebarSelect(msg)
