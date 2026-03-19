@@ -206,6 +206,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				comments: msg.comments,
 			})
 		}
+		// Auto-select first file if current view is stale
+		if len(msg.files) > 0 && !m.diffViewShowsValidFile() {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
+		}
 		return m, nil
 
 	// Engine events
