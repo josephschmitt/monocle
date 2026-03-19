@@ -1,16 +1,19 @@
 ---
 name: monocle-review
-description: Check for and receive code review feedback from your human reviewer who is watching your changes in real-time using Monocle. Invoke after completing a logical unit of work.
+description: Check for and receive code review feedback from your human reviewer who is watching your changes in real-time using Monocle. Invoke at the start of every new task AND after completing a logical unit of work.
 allowed-tools: Bash(monocle *)
 ---
 
 Your reviewer is watching your code changes in real-time using Monocle. They may
 leave comments on specific files and lines, or on your plans.
 
+**IMPORTANT:** Always check for feedback before starting new work. Your reviewer
+may have submitted comments while you were idle.
+
 ## Check for pending feedback
 
-Run this after completing a logical unit of work (implementing a feature, fixing
-a bug, finishing a refactoring step) or before starting a new task:
+Run this at the start of every new task, after receiving a new user prompt, and
+after completing a logical unit of work:
 
 ```
 monocle review-status
