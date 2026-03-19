@@ -131,6 +131,34 @@ func (g *GitClient) CurrentRef() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// LogEntry represents a single commit in the log.
+type LogEntry struct {
+	Hash    string
+	Subject string
+}
+
+// RecentCommits returns the last n commits as short hash + subject.
+func (g *GitClient) RecentCommits(n int) ([]LogEntry, error) {
+	out, err := g.run("log", "--oneline", fmt.Sprintf("-n%d", n), "--format=%h %s")
+	if err != nil {
+		return nil, fmt.Errorf("git log: %w", err)
+	}
+
+	var entries []LogEntry
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		entry := LogEntry{Hash: parts[0]}
+		if len(parts) > 1 {
+			entry.Subject = parts[1]
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
 func (g *GitClient) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.repoRoot

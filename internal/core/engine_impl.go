@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,10 @@ type Engine struct {
 
 	current *types.ReviewSession
 
+	// autoAdvanceRef: when true, baseRef advances to HEAD on each refresh
+	autoAdvanceRef bool
+	lastKnownHead  string
+
 	// event subscribers: EventKind -> subscriber ID -> callback
 	subscribers map[EventKind]map[int]EventCallback
 	nextSubID   int
@@ -37,13 +42,14 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string) (*Engine, er
 	feedback := NewFeedbackQueue()
 
 	e := &Engine{
-		cfg:         cfg,
-		database:    database,
-		git:         git,
-		server:      server,
-		feedback:    feedback,
-		sessions:    NewSessionManager(database, git),
-		subscribers: make(map[EventKind]map[int]EventCallback),
+		cfg:            cfg,
+		database:       database,
+		git:            git,
+		server:         server,
+		feedback:       feedback,
+		sessions:       NewSessionManager(database, git),
+		autoAdvanceRef: true,
+		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
 
 	e.formatter = NewReviewFormatter(func(path string, start, end int) string {
@@ -138,6 +144,23 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 	e.mu.RUnlock()
 	if session == nil {
 		return nil, fmt.Errorf("no active session")
+	}
+
+	// Auto-advance baseRef to HEAD when commits happen
+	if e.autoAdvanceRef {
+		head, err := e.git.CurrentRef()
+		if err == nil && head != e.lastKnownHead {
+			e.lastKnownHead = head
+			if head != session.BaseRef {
+				e.mu.Lock()
+				if e.current != nil {
+					e.current.BaseRef = head
+					e.current.UpdatedAt = time.Now()
+					_ = e.database.UpdateSession(e.current)
+				}
+				e.mu.Unlock()
+			}
+		}
 	}
 
 	files, err := e.sessions.RefreshChangedFiles(session)
@@ -447,6 +470,51 @@ func (e *Engine) Approve() (*types.SubmitResult, error) {
 		Delivered: false,
 		Queued:    false,
 	}, nil
+}
+
+// -- Base ref management --
+
+// SetBaseRef manually sets the diff baseline and disables auto-advance.
+func (e *Engine) SetBaseRef(ref string) error {
+	// Resolve the ref to a full hash
+	resolved, err := e.git.run("rev-parse", ref)
+	if err != nil {
+		return fmt.Errorf("resolve ref %q: %w", ref, err)
+	}
+	resolved = strings.TrimSpace(resolved)
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.current == nil {
+		return fmt.Errorf("no active session")
+	}
+
+	e.current.BaseRef = resolved
+	e.current.UpdatedAt = time.Now()
+	e.autoAdvanceRef = false
+	_ = e.database.UpdateSession(e.current)
+
+	return nil
+}
+
+// SetAutoAdvanceRef enables or disables auto-advancing baseRef to HEAD on each refresh.
+func (e *Engine) SetAutoAdvanceRef(enabled bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.autoAdvanceRef = enabled
+}
+
+// IsAutoAdvanceRef returns whether auto-advance is enabled.
+func (e *Engine) IsAutoAdvanceRef() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.autoAdvanceRef
+}
+
+// RecentCommits returns recent commits for the ref picker.
+func (e *Engine) RecentCommits(n int) ([]LogEntry, error) {
+	return e.git.RecentCommits(n)
 }
 
 // -- Server --

@@ -27,6 +27,7 @@ const (
 	overlayComment
 	overlayReview
 	overlayHelp
+	overlayRefPicker
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -69,6 +70,7 @@ type appModel struct {
 	commentEditor commentEditorModel
 	reviewSummary reviewSummaryModel
 	help          helpModel
+	refPicker     refPickerModel
 
 	focus   focusTarget
 	overlay overlayKind
@@ -96,6 +98,7 @@ func NewApp(engine core.EngineAPI) appModel {
 		commentEditor: newCommentEditorModel(theme),
 		reviewSummary: newReviewSummaryModel(theme),
 		help:          newHelpModel(theme),
+		refPicker:     newRefPickerModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		theme:         theme,
@@ -237,6 +240,36 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.agentStatus = m.engine.GetAgentStatus()
 		return m, nil
 
+	case baseRefChangedMsg:
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.baseRef = session.BaseRef
+		}
+		return m, m.refreshFiles()
+
+	case openRefPickerMsg:
+		m.refPicker.entries = msg.entries
+		m.refPicker.autoActive = msg.autoActive
+		m.refPicker.active = true
+		m.refPicker.cursor = 0
+		m.refPicker.width = m.width
+		m.refPicker.height = m.height
+		m.overlay = overlayRefPicker
+		return m, nil
+
+	case selectRefMsg:
+		m.overlay = overlayNone
+		m.refPicker.active = false
+		if msg.auto {
+			return m, m.executeCommand("ref auto")
+		}
+		return m, m.executeCommand("ref " + msg.hash)
+
+	case cancelRefPickerMsg:
+		m.overlay = overlayNone
+		m.refPicker.active = false
+		return m, nil
+
 	// Diff loading
 	case loadDiffMsg:
 		var cmd tea.Cmd
@@ -319,6 +352,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.help, cmd = m.help.Update(msg)
 		return m, cmd
 	}
+	if m.overlay == overlayRefPicker {
+		var cmd tea.Cmd
+		m.refPicker, cmd = m.refPicker.Update(msg)
+		return m, cmd
+	}
 
 	// Command mode input.
 	if m.commandMode {
@@ -379,6 +417,20 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "P":
 		// Toggle pause
 		return m, m.executeCommand("pause")
+
+	case "B":
+		// Open ref picker
+		engine := m.engine
+		return m, func() tea.Msg {
+			entries, err := engine.RecentCommits(20)
+			if err != nil {
+				return nil
+			}
+			return openRefPickerMsg{
+				entries:    entries,
+				autoActive: engine.IsAutoAdvanceRef(),
+			}
+		}
 
 	case "enter":
 		if m.focus == focusSidebar {
@@ -500,7 +552,29 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 		}
 	}
 
+	// Handle :ref commands
+	trimmed := strings.TrimSpace(cmd)
+	if strings.HasPrefix(trimmed, "ref ") {
+		arg := strings.TrimSpace(trimmed[4:])
+		if arg == "auto" {
+			return func() tea.Msg {
+				engine.SetAutoAdvanceRef(true)
+				return baseRefChangedMsg{}
+			}
+		}
+		return func() tea.Msg {
+			if err := engine.SetBaseRef(arg); err != nil {
+				return baseRefChangedMsg{err: err.Error()}
+			}
+			return baseRefChangedMsg{}
+		}
+	}
+
 	return nil
+}
+
+type baseRefChangedMsg struct {
+	err string
 }
 
 // handleSidebarSelect loads the diff for the selected file or content item.
@@ -703,6 +777,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayHelp {
 		overlayContent := m.help.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayRefPicker {
+		overlayContent := m.refPicker.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

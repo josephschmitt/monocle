@@ -85,6 +85,12 @@ type EngineAPI interface {
 	Submit() (*types.SubmitResult, error)
 	Approve() (*types.SubmitResult, error)
 
+	// Base ref management
+	SetBaseRef(ref string) error
+	SetAutoAdvanceRef(enabled bool)
+	IsAutoAdvanceRef() bool
+	RecentCommits(n int) ([]LogEntry, error)
+
 	// Server (socket for CLI subcommands)
 	StartServer(socketPath string) error
 
