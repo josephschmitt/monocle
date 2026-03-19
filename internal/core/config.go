@@ -40,9 +40,6 @@ func DefaultConfig() *types.Config {
 			MaxSnippetLines: 10,
 			IncludeSummary:  true,
 		},
-		Hooks: types.HooksConfig{
-			TimeoutMs: 30000,
-		},
 	}
 }
 
@@ -54,4 +51,3 @@ func configPath() string {
 	}
 	return filepath.Join(cfgDir, "monocle", "config.json")
 }
-

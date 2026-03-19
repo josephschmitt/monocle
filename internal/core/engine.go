@@ -8,12 +8,12 @@ import (
 type EventKind string
 
 const (
-	EventFileChanged          EventKind = "file_changed"
-	EventAgentStatusChanged   EventKind = "agent_status_changed"
+	EventFileChanged           EventKind = "file_changed"
+	EventAgentStatusChanged    EventKind = "agent_status_changed"
 	EventFeedbackStatusChanged EventKind = "feedback_status_changed"
-	EventContentItemAdded     EventKind = "content_item_added"
-	EventCommentsOutdated     EventKind = "comments_outdated"
-	EventAutoApproved         EventKind = "auto_approved"
+	EventContentItemAdded      EventKind = "content_item_added"
+	EventCommentsOutdated      EventKind = "comments_outdated"
+	EventPauseChanged          EventKind = "pause_changed"
 )
 
 // EventPayload carries data for an engine event.
@@ -85,6 +85,17 @@ type EngineAPI interface {
 	Submit() (*types.SubmitResult, error)
 	Approve() (*types.SubmitResult, error)
 
+	// Server (socket for CLI subcommands)
+	StartServer(socketPath string) error
+
+	// Feedback (skills-based model)
+	PollFeedback() *FormattedReview
+	WaitForFeedback() *FormattedReview
+	GetReviewStatusInfo() *ReviewStatusInfo
+	SubmitContentForReview(id, title, content, contentType string) error
+	RequestPause()
+	CancelPause()
+
 	// Agent status
 	GetAgentStatus() types.AgentStatus
 	GetFeedbackStatus() string
@@ -93,6 +104,5 @@ type EngineAPI interface {
 	On(event EventKind, callback EventCallback) UnsubscribeFunc
 
 	// Lifecycle
-	StartHookServer(socketPath string) error
 	Shutdown()
 }

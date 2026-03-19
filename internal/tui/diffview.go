@@ -52,6 +52,11 @@ type diffViewModel struct {
 	// Visual mode
 	visualMode  bool
 	visualStart int
+
+	// Content view mode (for plans/docs)
+	contentMode bool
+	contentID   string
+	contentTitle string
 }
 
 func newDiffViewModel() diffViewModel {
@@ -71,7 +76,9 @@ func (m diffViewModel) Init() tea.Cmd {
 func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadDiffMsg:
-		m.path = msg.path
+		m.contentMode = false
+		m.contentID = ""
+		m.contentTitle = ""
 		sameFile := msg.path == m.path
 		if msg.result != nil {
 			m.hunks = msg.result.Hunks
@@ -91,6 +98,19 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.offset = 0
 			m.visualMode = false
 		}
+		return m, nil
+
+	case loadContentMsg:
+		m.contentMode = true
+		m.contentID = msg.id
+		m.contentTitle = msg.title
+		m.path = msg.id
+		m.hunks = nil
+		m.comments = nil
+		m.buildContentLines(msg.content)
+		m.cursor = m.nearestSelectable(0, 1)
+		m.offset = 0
+		m.visualMode = false
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -145,13 +165,25 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.buildLines()
 		case "c":
 			// Open comment editor
-			if m.visualMode {
-				start, end := m.visualRange()
-				return m, openCommentCmd(m.path, start, end)
-			}
-			line := m.currentDiffLine()
-			if line > 0 {
-				return m, openCommentCmd(m.path, line, line)
+			if m.contentMode {
+				// Content mode: comment on the content item
+				if m.visualMode {
+					start, end := m.visualRange()
+					return m, openCommentCmd(m.contentID, start, end)
+				}
+				line := m.currentDiffLine()
+				if line > 0 {
+					return m, openCommentCmd(m.contentID, line, line)
+				}
+			} else {
+				if m.visualMode {
+					start, end := m.visualRange()
+					return m, openCommentCmd(m.path, start, end)
+				}
+				line := m.currentDiffLine()
+				if line > 0 {
+					return m, openCommentCmd(m.path, line, line)
+				}
 			}
 		}
 	}
@@ -162,6 +194,9 @@ func (m diffViewModel) View() string {
 	if m.width == 0 || len(m.lines) == 0 {
 		if m.path == "" {
 			return centerText("Select a file to view diff", m.width, m.height)
+		}
+		if m.contentMode {
+			return centerText("Empty content", m.width, m.height)
 		}
 		return centerText("No changes", m.width, m.height)
 	}
@@ -237,6 +272,19 @@ func (m *diffViewModel) buildLines() {
 				})
 			}
 		}
+	}
+}
+
+// buildContentLines builds lines for a content item (plan/doc) displayed as a document.
+func (m *diffViewModel) buildContentLines(content string) {
+	m.lines = nil
+	rawLines := strings.Split(content, "\n")
+	for i, line := range rawLines {
+		m.lines = append(m.lines, diffViewLine{
+			kind:       types.DiffLineContext,
+			newLineNum: i + 1,
+			content:    line,
+		})
 	}
 }
 

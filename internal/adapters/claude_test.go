@@ -1,76 +1,78 @@
 package adapters
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
-
-	"github.com/anthropics/monocle/internal/protocol"
 )
 
-func TestClaudeParseStop(t *testing.T) {
+func TestClaudeSkillInstall(t *testing.T) {
+	dir := t.TempDir()
+	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+
 	adapter := &ClaudeAdapter{}
 
-	t.Run("basic stop", func(t *testing.T) {
-		raw := []byte(`{"request_id":"r1","stop_reason":"end_turn"}`)
-		msg, err := adapter.ParseHookInput("stop", raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stop := msg.(*protocol.StopMsg)
-		if stop.RequestID != "r1" {
-			t.Errorf("expected request_id r1, got %q", stop.RequestID)
-		}
-		if stop.ReviewContent != "" {
-			t.Error("expected no review content for basic stop")
-		}
-	})
+	// Not installed initially
+	installed, err := adapter.IsInstalled(skillPath)
+	if err != nil {
+		t.Fatalf("IsInstalled error: %v", err)
+	}
+	if installed {
+		t.Fatal("should not be installed initially")
+	}
 
-	t.Run("plan mode stop", func(t *testing.T) {
-		raw := []byte(`{
-			"request_id": "r2",
-			"permission_mode": "plan",
-			"last_assistant_message": "# My Plan\n\n1. Do this\n2. Do that"
-		}`)
-		msg, err := adapter.ParseHookInput("stop", raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stop := msg.(*protocol.StopMsg)
-		if stop.ReviewContent != "# My Plan\n\n1. Do this\n2. Do that" {
-			t.Errorf("expected plan content, got %q", stop.ReviewContent)
-		}
-		if stop.ReviewContentTitle != "Plan" {
-			t.Errorf("expected title 'Plan', got %q", stop.ReviewContentTitle)
-		}
-		if stop.ReviewContentType != "markdown" {
-			t.Errorf("expected type 'markdown', got %q", stop.ReviewContentType)
-		}
-	})
+	// Install
+	if err := adapter.Install(skillPath); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
 
-	t.Run("plan mode without message", func(t *testing.T) {
-		raw := []byte(`{"request_id":"r3","permission_mode":"plan"}`)
-		msg, err := adapter.ParseHookInput("stop", raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stop := msg.(*protocol.StopMsg)
-		if stop.ReviewContent != "" {
-			t.Error("expected no review content when last_assistant_message is empty")
-		}
-	})
+	// Verify installed
+	installed, err = adapter.IsInstalled(skillPath)
+	if err != nil {
+		t.Fatalf("IsInstalled error: %v", err)
+	}
+	if !installed {
+		t.Fatal("should be installed after Install()")
+	}
 
-	t.Run("non-plan mode with message", func(t *testing.T) {
-		raw := []byte(`{
-			"request_id": "r4",
-			"permission_mode": "default",
-			"last_assistant_message": "I finished the task."
-		}`)
-		msg, err := adapter.ParseHookInput("stop", raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stop := msg.(*protocol.StopMsg)
-		if stop.ReviewContent != "" {
-			t.Error("expected no review content for non-plan mode")
-		}
-	})
+	// Verify content
+	data, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read skill file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("skill file should not be empty")
+	}
+}
+
+func TestClaudeSkillInstall_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Install(skillPath); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if err := adapter.Install(skillPath); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+
+	installed, _ := adapter.IsInstalled(skillPath)
+	if !installed {
+		t.Fatal("should be installed")
+	}
+}
+
+func TestClaudeSkillUninstall(t *testing.T) {
+	dir := t.TempDir()
+	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+
+	adapter := &ClaudeAdapter{}
+	adapter.Install(skillPath)
+	adapter.Uninstall(skillPath)
+
+	installed, _ := adapter.IsInstalled(skillPath)
+	if installed {
+		t.Fatal("should not be installed after uninstall")
+	}
 }

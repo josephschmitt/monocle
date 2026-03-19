@@ -16,18 +16,18 @@ import (
 )
 
 type CLI struct {
-	Start     StartCmd     `cmd:"" default:"withargs" help:"Start a new review session"`
-	Resume    ResumeCmd    `cmd:"" help:"Resume an existing session"`
-	Sessions  SessionsCmd  `cmd:"" help:"List sessions"`
-	Install   InstallCmd   `cmd:"" help:"Install agent hooks"`
-	Uninstall UninstallCmd `cmd:"" help:"Remove agent hooks"`
-	Hook      HookCmd      `cmd:"" hidden:"" help:"Hook shim invoked by agent hooks"`
-	Review    ReviewCmd    `cmd:"" help:"Send content for review"`
+	Start         StartCmd         `cmd:"" default:"withargs" help:"Start a new review session"`
+	Resume        ResumeCmd        `cmd:"" help:"Resume an existing session"`
+	Sessions      SessionsCmd      `cmd:"" help:"List sessions"`
+	Install       InstallCmd       `cmd:"" help:"Install agent skills"`
+	Uninstall     UninstallCmd     `cmd:"" help:"Remove agent skills"`
+	ReviewStatus  ReviewStatusCmd  `cmd:"" name:"review-status" help:"Check for pending review feedback"`
+	GetFeedback   GetFeedbackCmd   `cmd:"" name:"get-feedback" help:"Retrieve review feedback"`
+	SubmitContent SubmitContentCmd `cmd:"" name:"submit-content" help:"Submit content for review"`
 }
 
 type StartCmd struct {
 	Agent string `help:"Agent type" default:"claude"`
-	Scope string `help:"Socket scope: repo (default) or cwd (for monorepos)" enum:"repo,cwd" default:"repo"`
 }
 
 type ResumeCmd struct {
@@ -41,7 +41,6 @@ type SessionsCmd struct {
 type InstallCmd struct {
 	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to install (auto, claude, codex, gemini, opencode)"`
 	Global bool     `help:"Install to global/user config instead of project" default:"false"`
-	Scope  string   `help:"Socket scope: repo (default) or cwd (for monorepos)" enum:"repo,cwd" default:"repo"`
 }
 
 type UninstallCmd struct {
@@ -49,17 +48,15 @@ type UninstallCmd struct {
 	Global bool     `help:"Remove from global/user config" default:"false"`
 }
 
-type HookCmd struct {
-	Event string `arg:"" help:"Hook event name"`
-	Agent string `help:"Agent name" default:"claude"`
-	Scope string `help:"Socket scope: repo or cwd" default:"repo" enum:"repo,cwd"`
+type ReviewStatusCmd struct{}
+
+type GetFeedbackCmd struct {
+	Wait bool `help:"Block until feedback is available" default:"false"`
 }
 
-type ReviewCmd struct {
-	File  string `arg:"" help:"File to review"`
-	ID    string `help:"Content item ID"`
-	Title string `help:"Content title"`
-	Type  string `help:"Content type" default:"text"`
+type SubmitContentCmd struct {
+	Title string `help:"Content title" required:""`
+	ID    string `help:"Content item ID (for updates)" default:""`
 }
 
 func main() {
@@ -74,11 +71,11 @@ func main() {
 }
 
 func (cmd *StartCmd) Run() error {
-	return runTUI(cmd.Agent, "", cmd.Scope)
+	return runTUI(cmd.Agent, "")
 }
 
 func (cmd *ResumeCmd) Run() error {
-	return runTUI("", cmd.SessionID, "")
+	return runTUI("", cmd.SessionID)
 }
 
 func (cmd *SessionsCmd) Run() error {
@@ -113,12 +110,7 @@ func (cmd *SessionsCmd) Run() error {
 }
 
 func (cmd *InstallCmd) Run() error {
-	cfg, err := core.LoadConfig()
-	if err != nil {
-		cfg = core.DefaultConfig()
-	}
-	scope := resolveScope(cmd.Scope, cfg.Hooks.Scope)
-	results := adapters.InstallAgents(cmd.Agents, cmd.Global, scope)
+	results := adapters.InstallAgents(cmd.Agents, cmd.Global)
 
 	if len(results) == 0 {
 		fmt.Println("No agents detected. Specify an agent explicitly: monocle install claude")
@@ -129,9 +121,9 @@ func (cmd *InstallCmd) Run() error {
 		if r.Err != nil {
 			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
 		} else if r.AlreadyDone {
-			fmt.Printf("  ✓ %s: already installed (%s)\n", r.Agent, r.ConfigPath)
+			fmt.Printf("  ✓ %s: already installed (%s)\n", r.Agent, r.SkillPath)
 		} else if r.Installed {
-			fmt.Printf("  ✓ %s: hooks installed → %s\n", r.Agent, r.ConfigPath)
+			fmt.Printf("  ✓ %s: skill installed → %s\n", r.Agent, r.SkillPath)
 		}
 	}
 
@@ -151,78 +143,125 @@ func (cmd *UninstallCmd) Run() error {
 		if r.Err != nil {
 			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
 		} else if r.AlreadyDone {
-			fmt.Printf("  ✓ %s: no hooks to remove\n", r.Agent)
+			fmt.Printf("  ✓ %s: no skill to remove\n", r.Agent)
 		} else if r.Installed {
-			fmt.Printf("  ✓ %s: hooks removed from %s\n", r.Agent, r.ConfigPath)
+			fmt.Printf("  ✓ %s: skill removed from %s\n", r.Agent, r.SkillPath)
 		}
 	}
 	return nil
 }
 
-func (cmd *HookCmd) Run() error {
-	// Read stdin completely.
-	raw, err := io.ReadAll(os.Stdin)
+func (cmd *ReviewStatusCmd) Run() error {
+	socketPath, err := resolveSocketPath()
 	if err != nil {
-		return nil // never block the agent
-	}
-
-	// Parse the input via the adapter.
-	adapter := adapters.GetAdapter(cmd.Agent)
-	msg, err := adapter.ParseHookInput(cmd.Event, raw)
-	if err != nil {
+		fmt.Println("No reviewer connected.")
 		return nil
 	}
 
-	// Get the socket path from the environment or compute deterministically.
-	socketPath := os.Getenv("MONOCLE_SOCKET")
-	if socketPath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil
-		}
-		dir := cwd
-		if cmd.Scope != "cwd" {
-			dir = adapters.FindRepoRoot(cwd)
-		}
-		socketPath = adapters.DefaultSocketPath(dir)
-	}
-
-	// Connect to the engine.
 	client, err := adapters.NewSocketClient(socketPath)
 	if err != nil {
+		fmt.Println("No reviewer connected.")
 		return nil
 	}
 	defer client.Close()
 
-	if protocol.IsBlocking(msg) {
-		// Send and wait for a response.
-		response, err := client.SendAndWait(msg)
-		if err != nil {
-			return nil
-		}
-
-		out := adapter.FormatHookOutput(response)
-		if len(out.Data) > 0 {
-			os.Stdout.Write(out.Data) //nolint:errcheck
-		}
-		if out.ExitCode != 0 {
-			os.Exit(out.ExitCode)
-		}
+	resp, err := client.SendAndWait(&protocol.GetReviewStatusMsg{
+		Type: protocol.TypeGetReviewStatus,
+	})
+	if err != nil {
+		fmt.Println("No reviewer connected.")
 		return nil
 	}
 
-	// Non-blocking: fire and forget.
-	_ = client.Send(msg)
+	status, ok := resp.(*protocol.GetReviewStatusResponse)
+	if !ok {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	fmt.Println(status.Summary)
 	return nil
 }
 
-func (cmd *ReviewCmd) Run() error {
-	// TODO: implement content review piping
-	fmt.Println("Review command not yet implemented")
+func (cmd *GetFeedbackCmd) Run() error {
+	socketPath, err := resolveSocketPath()
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	client, err := adapters.NewSocketClient(socketPath)
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+	defer client.Close()
+
+	resp, err := client.SendAndWait(&protocol.PollFeedbackMsg{
+		Type: protocol.TypePollFeedback,
+		Wait: cmd.Wait,
+	})
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	feedback, ok := resp.(*protocol.PollFeedbackResponse)
+	if !ok {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	if feedback.HasFeedback {
+		fmt.Print(feedback.Feedback)
+	} else {
+		fmt.Println("No feedback pending.")
+	}
 	return nil
 }
 
-func runTUI(agent, sessionID, cmdScope string) error {
+func (cmd *SubmitContentCmd) Run() error {
+	// Read content from stdin
+	content, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("read stdin: %w", err)
+	}
+
+	socketPath, err := resolveSocketPath()
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	client, err := adapters.NewSocketClient(socketPath)
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+	defer client.Close()
+
+	resp, err := client.SendAndWait(&protocol.SubmitContentMsg{
+		Type:    protocol.TypeSubmitContent,
+		ID:      cmd.ID,
+		Title:   cmd.Title,
+		Content: string(content),
+	})
+	if err != nil {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	submitResp, ok := resp.(*protocol.SubmitContentResponse)
+	if !ok {
+		fmt.Println("No reviewer connected.")
+		return nil
+	}
+
+	fmt.Println(submitResp.Message)
+	return nil
+}
+
+func runTUI(agent, sessionID string) error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
@@ -240,16 +279,12 @@ func runTUI(agent, sessionID, cmdScope string) error {
 	}
 	defer database.Close()
 
-	// Get repo root, resolving scope
+	// Get repo root
 	repoRoot, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get cwd: %w", err)
 	}
-
-	scope := resolveScope(cmdScope, cfg.Hooks.Scope)
-	if scope != "cwd" {
-		repoRoot = adapters.FindRepoRoot(repoRoot)
-	}
+	repoRoot = adapters.FindRepoRoot(repoRoot)
 
 	// Create engine
 	engine, err := core.NewEngine(cfg, database, repoRoot)
@@ -272,17 +307,11 @@ func runTUI(agent, sessionID, cmdScope string) error {
 		}
 	}
 
-	// Start hook server
-	socketPath := cfg.Hooks.SocketPath
-	if socketPath == "" {
-		socketPath = adapters.DefaultSocketPath(repoRoot)
+	// Start socket server
+	socketPath := adapters.DefaultSocketPath(repoRoot)
+	if err := engine.StartServer(socketPath); err != nil {
+		return fmt.Errorf("start server: %w", err)
 	}
-	if err := engine.StartHookServer(socketPath); err != nil {
-		return fmt.Errorf("start hook server: %w", err)
-	}
-
-	// Set env var for hook shim (child process inheritance)
-	os.Setenv("MONOCLE_SOCKET", socketPath) //nolint:errcheck
 
 	// Create TUI model
 	app := tui.NewApp(engine)
@@ -303,13 +332,12 @@ func runTUI(agent, sessionID, cmdScope string) error {
 	return nil
 }
 
-// resolveScope returns the effective scope: CLI flag > config > "repo" default.
-func resolveScope(flagScope, cfgScope string) string {
-	if flagScope == "cwd" {
-		return "cwd"
+// resolveSocketPath discovers the socket path for CLI subcommands.
+func resolveSocketPath() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
 	}
-	if cfgScope == "cwd" {
-		return "cwd"
-	}
-	return "repo"
+	dir := adapters.FindRepoRoot(cwd)
+	return adapters.DefaultSocketPath(dir), nil
 }

@@ -47,7 +47,9 @@ type contentItemMsg struct {
 	id string
 }
 
-type autoApprovedMsg struct{}
+type pauseChangedMsg struct {
+	status string
+}
 
 type refreshTickMsg struct{}
 
@@ -224,9 +226,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		return m, nil
 
-	case autoApprovedMsg:
+	case pauseChangedMsg:
 		m.statusBar.agentStatus = m.engine.GetAgentStatus()
-		m.statusBar.feedbackStatus = "auto-approved"
 		return m, nil
 
 	// Diff loading
@@ -362,6 +363,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "D":
 		return m, m.executeCommand("dismiss-outdated")
 
+	case "P":
+		// Toggle pause
+		return m, m.executeCommand("pause")
+
 	case "enter":
 		if m.focus == focusSidebar {
 			// In tree mode, enter on a directory toggles collapse
@@ -426,7 +431,7 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 
 // openReviewMsg carries the data needed to open the review summary overlay.
 type openReviewMsg struct {
-	summary     *types.ReviewSummary
+	summary      *types.ReviewSummary
 	agentStopped bool
 }
 
@@ -450,7 +455,7 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 				return agentStatusMsg{status: "approved"}
 			}
 			session := engine.GetSession()
-			agentStopped := session != nil && session.AgentStatus == types.AgentStatusStopped
+			agentStopped := session != nil && session.AgentStatus == types.AgentStatusPaused
 			return openReviewMsg{summary: summary, agentStopped: agentStopped}
 		}
 
@@ -468,6 +473,18 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			_ = engine.DismissOutdated()
 			return fileChangedMsg{}
 		}
+
+	case "pause":
+		return func() tea.Msg {
+			engine.RequestPause()
+			return pauseChangedMsg{status: "pause_requested"}
+		}
+
+	case "unpause":
+		return func() tea.Msg {
+			engine.CancelPause()
+			return pauseChangedMsg{status: "cancelled"}
+		}
 	}
 
 	return nil
@@ -481,7 +498,12 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			if err != nil || item == nil {
 				return loadDiffMsg{path: msg.contentID}
 			}
-			return loadDiffMsg{path: item.Title}
+			// Build content as a document view with line numbers
+			return loadContentMsg{
+				id:      item.ID,
+				title:   item.Title,
+				content: item.Content,
+			}
 		}
 	}
 	return func() tea.Msg {
@@ -607,6 +629,13 @@ type refreshResultMsg struct {
 	path     string
 	result   *types.DiffResult
 	comments []types.ReviewComment
+}
+
+// loadContentMsg carries content item data for rendering in the diff view.
+type loadContentMsg struct {
+	id      string
+	title   string
+	content string
 }
 
 // View renders the full TUI layout.
@@ -735,7 +764,7 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	engine.On(core.EventContentItemAdded, func(e core.EventPayload) {
 		p.Send(contentItemMsg{id: e.ItemID})
 	})
-	engine.On(core.EventAutoApproved, func(e core.EventPayload) {
-		p.Send(autoApprovedMsg{})
+	engine.On(core.EventPauseChanged, func(e core.EventPayload) {
+		p.Send(pauseChangedMsg{status: e.Status})
 	})
 }

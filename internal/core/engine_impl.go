@@ -18,7 +18,7 @@ type Engine struct {
 	cfg       *types.Config
 	database  *db.DB
 	git       *GitClient
-	hooks     *HookServer
+	server    *SocketServer
 	feedback  *FeedbackQueue
 	formatter *ReviewFormatter
 	sessions  *SessionManager
@@ -33,14 +33,14 @@ type Engine struct {
 // NewEngine constructs an Engine with all subsystems wired together.
 func NewEngine(cfg *types.Config, database *db.DB, repoRoot string) (*Engine, error) {
 	git := NewGitClient(repoRoot)
-	hooks := NewHookServer()
+	server := NewSocketServer()
 	feedback := NewFeedbackQueue()
 
 	e := &Engine{
 		cfg:         cfg,
 		database:    database,
 		git:         git,
-		hooks:       hooks,
+		server:      server,
 		feedback:    feedback,
 		sessions:    NewSessionManager(database, git),
 		subscribers: make(map[EventKind]map[int]EventCallback),
@@ -54,7 +54,7 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string) (*Engine, er
 		return extractLines(content, start, end)
 	})
 
-	hooks.SetEngine(e)
+	server.SetEngine(e)
 
 	return e, nil
 }
@@ -402,7 +402,6 @@ func (e *Engine) Submit() (*types.SubmitResult, error) {
 
 	formatted := e.formatter.Format(session, session.Comments)
 
-	waiting := e.feedback.GetStatus() == "none"
 	e.feedback.Submit(formatted)
 
 	// Save submission record
@@ -422,10 +421,9 @@ func (e *Engine) Submit() (*types.SubmitResult, error) {
 		Status: e.feedback.GetStatus(),
 	})
 
-	delivered := !waiting // if a stop handler was already waiting, it's delivered now
 	return &types.SubmitResult{
-		Delivered: delivered,
-		Queued:    !delivered,
+		Delivered: false,
+		Queued:    true,
 	}, nil
 }
 
@@ -438,8 +436,6 @@ func (e *Engine) Approve() (*types.SubmitResult, error) {
 		return nil, fmt.Errorf("no active session")
 	}
 
-	wasWaiting := e.feedback.GetStatus() == "none"
-	// Note: Approve is a no-op if agent isn't stopped, so check waiting state
 	e.feedback.Approve()
 
 	e.emit(EventFeedbackStatusChanged, EventPayload{
@@ -448,9 +444,152 @@ func (e *Engine) Approve() (*types.SubmitResult, error) {
 	})
 
 	return &types.SubmitResult{
-		Delivered: wasWaiting,
+		Delivered: false,
 		Queued:    false,
 	}, nil
+}
+
+// -- Server --
+
+// StartServer starts the Unix domain socket server at the given path.
+func (e *Engine) StartServer(socketPath string) error {
+	return e.server.Start(socketPath)
+}
+
+// -- Feedback (skills-based model) --
+
+// PollFeedback returns pending feedback without blocking.
+func (e *Engine) PollFeedback() *FormattedReview {
+	return e.feedback.Poll()
+}
+
+// WaitForFeedback blocks until the user submits feedback (pause flow).
+func (e *Engine) WaitForFeedback() *FormattedReview {
+	return e.feedback.WaitForFeedback()
+}
+
+// GetReviewStatusInfo returns the current review status for CLI queries.
+func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
+	if e.feedback.IsPauseRequested() {
+		return &ReviewStatusInfo{
+			Status:  "pause_requested",
+			Summary: "Your reviewer has requested a pause. Run `monocle get-feedback --wait` to receive feedback.",
+		}
+	}
+
+	if e.feedback.HasPending() {
+		e.mu.RLock()
+		commentCount := 0
+		if e.current != nil {
+			for _, c := range e.current.Comments {
+				if !c.Outdated {
+					commentCount++
+				}
+			}
+		}
+		e.mu.RUnlock()
+
+		return &ReviewStatusInfo{
+			Status:       "pending",
+			CommentCount: commentCount,
+			Summary:      fmt.Sprintf("%d comment(s) pending review. Run `monocle get-feedback` to retrieve.", commentCount),
+		}
+	}
+
+	return &ReviewStatusInfo{
+		Status:  "no_feedback",
+		Summary: "No feedback pending.",
+	}
+}
+
+// SubmitContentForReview adds or updates a content item (plan, doc) for review.
+func (e *Engine) SubmitContentForReview(id, title, content, contentType string) error {
+	e.mu.Lock()
+	if e.current == nil {
+		e.mu.Unlock()
+		return fmt.Errorf("no active session")
+	}
+	session := e.current
+
+	now := time.Now()
+	item := types.ContentItem{
+		ID:          id,
+		Title:       title,
+		Content:     content,
+		ContentType: contentType,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Upsert into session's content items
+	found := false
+	for i := range session.ContentItems {
+		if session.ContentItems[i].ID == id {
+			session.ContentItems[i].Title = title
+			session.ContentItems[i].Content = content
+			session.ContentItems[i].ContentType = contentType
+			session.ContentItems[i].UpdatedAt = now
+			item = session.ContentItems[i]
+			found = true
+			break
+		}
+	}
+	if !found {
+		session.ContentItems = append(session.ContentItems, item)
+	}
+	e.mu.Unlock()
+
+	// Persist to DB
+	_ = e.database.UpsertContentItem(session.ID, &item)
+
+	e.emit(EventContentItemAdded, EventPayload{
+		Kind:   EventContentItemAdded,
+		ItemID: id,
+	})
+
+	return nil
+}
+
+// RequestPause sets the pause flag so the agent sees "pause_requested" on next status check.
+func (e *Engine) RequestPause() {
+	e.feedback.SetPauseRequested(true)
+
+	e.mu.Lock()
+	if e.current != nil {
+		e.current.AgentStatus = types.AgentStatusPaused
+		_ = e.database.UpdateSession(e.current)
+	}
+	e.mu.Unlock()
+
+	e.emit(EventAgentStatusChanged, EventPayload{
+		Kind:   EventAgentStatusChanged,
+		Status: string(types.AgentStatusPaused),
+	})
+	e.emit(EventPauseChanged, EventPayload{
+		Kind:   EventPauseChanged,
+		Status: "pause_requested",
+	})
+}
+
+// CancelPause clears the pause flag.
+func (e *Engine) CancelPause() {
+	e.feedback.SetPauseRequested(false)
+
+	e.mu.Lock()
+	if e.current != nil {
+		e.current.AgentStatus = types.AgentStatusWorking
+		_ = e.database.UpdateSession(e.current)
+	}
+	e.mu.Unlock()
+
+	e.emit(EventAgentStatusChanged, EventPayload{
+		Kind:   EventAgentStatusChanged,
+		Status: string(types.AgentStatusWorking),
+	})
+	e.emit(EventPauseChanged, EventPayload{
+		Kind:   EventPauseChanged,
+		Status: "cancelled",
+	})
 }
 
 // -- Agent status --
@@ -504,224 +643,101 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 
 // -- Lifecycle --
 
-// StartHookServer starts the Unix domain socket server at the given path.
-func (e *Engine) StartHookServer(socketPath string) error {
-	return e.hooks.Start(socketPath)
-}
-
-// Shutdown stops the hook server and cleans up resources.
+// Shutdown stops the socket server and cleans up resources.
 func (e *Engine) Shutdown() {
-	_ = e.hooks.Shutdown()
+	_ = e.server.Shutdown()
 }
 
-// -- Hook handlers --
+// -- Socket message handlers (called by SocketServer) --
 
-// handlePostToolUse is called by the HookServer for PostToolUse messages.
-// It refreshes changed files, sets agent status to working, and emits events.
-func (e *Engine) handlePostToolUse(msg *protocol.PostToolUseMsg) {
-	e.mu.Lock()
-	if e.current == nil {
-		e.mu.Unlock()
-		return
+// handleGetReviewStatus returns the current review state.
+func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol.GetReviewStatusResponse {
+	info := e.GetReviewStatusInfo()
+	return &protocol.GetReviewStatusResponse{
+		Type:         protocol.TypeGetReviewStatusResponse,
+		Status:       info.Status,
+		CommentCount: info.CommentCount,
+		Summary:      info.Summary,
 	}
-	e.current.AgentStatus = types.AgentStatusWorking
-	session := e.current
-	e.mu.Unlock()
+}
 
-	// Refresh changed files in background; errors are non-fatal
-	files, err := e.sessions.RefreshChangedFiles(session)
-	if err == nil {
+// handlePollFeedback returns pending feedback, optionally blocking until available.
+func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg) *protocol.PollFeedbackResponse {
+	if msg.Wait {
+		review := e.WaitForFeedback()
+
+		// After feedback is delivered, advance the review round
 		e.mu.Lock()
-		if e.current != nil && e.current.ID == session.ID {
-			e.current.ChangedFiles = files
-		}
-		e.mu.Unlock()
-
-		for _, f := range files {
-			e.emit(EventFileChanged, EventPayload{
-				Kind: EventFileChanged,
-				Path: f.Path,
-			})
-		}
-	}
-
-	e.emit(EventAgentStatusChanged, EventPayload{
-		Kind:    EventAgentStatusChanged,
-		Status:  string(types.AgentStatusWorking),
-		Message: msg.Tool,
-	})
-}
-
-// shouldAutoApprove returns true when there is nothing for the user to review.
-// Must be called with e.mu held.
-func (e *Engine) shouldAutoApprove() bool {
-	if e.current == nil {
-		return true
-	}
-	if len(e.current.ChangedFiles) > 0 || len(e.current.ContentItems) > 0 {
-		return false
-	}
-	for _, c := range e.current.Comments {
-		if !c.Outdated {
-			return false
-		}
-	}
-	return !e.feedback.HasPending()
-}
-
-// handleStop is called by the HookServer for Stop messages.
-// It blocks until the user submits or approves, then returns the response.
-func (e *Engine) handleStop(msg *protocol.StopMsg) *protocol.StopResponse {
-	e.mu.Lock()
-	if e.current != nil {
-		e.current.AgentStatus = types.AgentStatusStopped
-		_ = e.database.UpdateSession(e.current)
-	}
-	e.mu.Unlock()
-
-	e.emit(EventAgentStatusChanged, EventPayload{
-		Kind:   EventAgentStatusChanged,
-		Status: string(types.AgentStatusStopped),
-	})
-
-	// If the stop carries review content (e.g., a plan), inject it as a content item.
-	// Uses a stable ID so repeated plan stops replace the previous plan.
-	if msg.ReviewContent != "" {
-		e.handleContentReview(&protocol.ContentReviewMsg{
-			Type:        protocol.TypeContentReview,
-			ID:          "plan",
-			Title:       msg.ReviewContentTitle,
-			Content:     msg.ReviewContent,
-			ContentType: msg.ReviewContentType,
-		})
-	}
-
-	// Refresh git state to ensure auto-approve decision is based on current state
-	e.mu.RLock()
-	session := e.current
-	e.mu.RUnlock()
-	if session != nil {
-		files, err := e.sessions.RefreshChangedFiles(session)
-		if err == nil {
-			e.mu.Lock()
-			if e.current != nil && e.current.ID == session.ID {
-				e.current.ChangedFiles = files
-			}
-			e.mu.Unlock()
-		}
-	}
-
-	// Check if there's nothing to review — auto-approve without blocking
-	e.mu.Lock()
-	if e.shouldAutoApprove() {
 		if e.current != nil {
-			e.current.AgentStatus = types.AgentStatusIdle
+			e.current.AgentStatus = types.AgentStatusWorking
+			_ = e.sessions.AdvanceRound(e.current)
 			_ = e.database.UpdateSession(e.current)
 		}
 		e.mu.Unlock()
 
-		e.emit(EventAutoApproved, EventPayload{
-			Kind: EventAutoApproved,
-		})
 		e.emit(EventAgentStatusChanged, EventPayload{
 			Kind:   EventAgentStatusChanged,
-			Status: string(types.AgentStatusIdle),
+			Status: string(types.AgentStatusWorking),
 		})
-		e.emit(EventFeedbackStatusChanged, EventPayload{
-			Kind:   EventFeedbackStatusChanged,
-			Status: "none",
+		e.emit(EventFileChanged, EventPayload{
+			Kind: EventFileChanged,
 		})
 
-		return &protocol.StopResponse{
-			Type:      protocol.TypeStopResponse,
-			RequestID: msg.RequestID,
-			Continue:  false,
+		return &protocol.PollFeedbackResponse{
+			Type:         protocol.TypePollFeedbackResponse,
+			HasFeedback:  true,
+			Feedback:     review.Formatted,
+			CommentCount: review.CommentCount,
 		}
 	}
-	e.mu.Unlock()
 
-	// Block until user acts
-	resp := e.feedback.OnStop(msg.RequestID)
+	// Non-blocking poll
+	review := e.PollFeedback()
+	if review == nil {
+		return &protocol.PollFeedbackResponse{
+			Type:        protocol.TypePollFeedbackResponse,
+			HasFeedback: false,
+		}
+	}
 
+	// After feedback is delivered, advance the review round
 	e.mu.Lock()
 	if e.current != nil {
-		e.current.AgentStatus = types.AgentStatusIdle
-		// Clear content items so they don't prevent auto-approve on the next stop
-		e.current.ContentItems = nil
-		_ = e.database.UpdateSession(e.current)
-
-		// Advance the round (reset baseRef to HEAD) on both submit and approve.
-		// This resets the diff baseline so the next round only shows new changes.
 		_ = e.sessions.AdvanceRound(e.current)
 	}
 	e.mu.Unlock()
 
-	e.emit(EventAgentStatusChanged, EventPayload{
-		Kind:   EventAgentStatusChanged,
-		Status: string(types.AgentStatusIdle),
-	})
-
-	// Emit file changed event so the TUI refreshes with the new (empty) file list
 	e.emit(EventFileChanged, EventPayload{
 		Kind: EventFileChanged,
 	})
 
-	return resp
-}
-
-// handlePromptSubmit is called by the HookServer for PromptSubmit messages.
-// Returns a placeholder response (no additional context injected).
-func (e *Engine) handlePromptSubmit(msg *protocol.PromptSubmitMsg) *protocol.PromptSubmitResponse {
-	return &protocol.PromptSubmitResponse{
-		Type:              protocol.TypePromptSubmitResponse,
-		RequestID:         msg.RequestID,
-		AdditionalContext: "",
+	return &protocol.PollFeedbackResponse{
+		Type:         protocol.TypePollFeedbackResponse,
+		HasFeedback:  true,
+		Feedback:     review.Formatted,
+		CommentCount: review.CommentCount,
 	}
 }
 
-// handleContentReview is called by the HookServer for ContentReview messages.
-// It upserts the content item into the session and emits an event.
-func (e *Engine) handleContentReview(msg *protocol.ContentReviewMsg) {
-	e.mu.Lock()
-	if e.current == nil {
-		e.mu.Unlock()
-		return
-	}
-	session := e.current
-
-	now := time.Now()
-	item := types.ContentItem{
-		ID:          msg.ID,
-		Title:       msg.Title,
-		Content:     msg.Content,
-		ContentType: msg.ContentType,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+// handleSubmitContent receives reviewable content (plans, docs) from the agent.
+func (e *Engine) handleSubmitContent(msg *protocol.SubmitContentMsg) *protocol.SubmitContentResponse {
+	id := msg.ID
+	if id == "" {
+		id = uuid.New().String()
 	}
 
-	// Upsert into session's content items
-	found := false
-	for i := range session.ContentItems {
-		if session.ContentItems[i].ID == msg.ID {
-			session.ContentItems[i].Title = msg.Title
-			session.ContentItems[i].Content = msg.Content
-			session.ContentItems[i].ContentType = msg.ContentType
-			session.ContentItems[i].UpdatedAt = now
-			item = session.ContentItems[i]
-			found = true
-			break
+	err := e.SubmitContentForReview(id, msg.Title, msg.Content, msg.ContentType)
+	if err != nil {
+		return &protocol.SubmitContentResponse{
+			Type:    protocol.TypeSubmitContentResponse,
+			Success: false,
+			Message: err.Error(),
 		}
 	}
-	if !found {
-		session.ContentItems = append(session.ContentItems, item)
+
+	return &protocol.SubmitContentResponse{
+		Type:    protocol.TypeSubmitContentResponse,
+		Success: true,
+		Message: fmt.Sprintf("Content submitted for review: %s", msg.Title),
 	}
-	e.mu.Unlock()
-
-	// Persist to DB
-	_ = e.database.UpsertContentItem(session.ID, &item)
-
-	e.emit(EventContentItemAdded, EventPayload{
-		Kind:   EventContentItemAdded,
-		ItemID: msg.ID,
-	})
 }

@@ -1,66 +1,58 @@
 package protocol
 
-// Inbound message types (from hook shim to engine)
+// Inbound message types (from CLI subcommands to engine via socket)
 const (
-	TypePostToolUse   = "post_tool_use"
-	TypeStop          = "stop"
-	TypePromptSubmit  = "prompt_submit"
-	TypeContentReview = "content_review"
+	TypeGetReviewStatus = "get_review_status"
+	TypePollFeedback    = "poll_feedback"
+	TypeSubmitContent   = "submit_content"
 )
 
-// Outbound message types (from engine to hook shim)
+// Outbound message types (from engine to CLI subcommands)
 const (
-	TypeStopResponse         = "stop_response"
-	TypePromptSubmitResponse = "prompt_submit_response"
+	TypeGetReviewStatusResponse = "get_review_status_response"
+	TypePollFeedbackResponse    = "poll_feedback_response"
+	TypeSubmitContentResponse   = "submit_content_response"
 )
 
-type PostToolUseMsg struct {
-	Type       string `json:"type"`
-	Agent      string `json:"agent"`
-	Tool       string `json:"tool"`
-	FilePath   string `json:"file_path,omitempty"`
-	ToolInput  string `json:"tool_input,omitempty"`
-	ToolOutput string `json:"tool_output,omitempty"`
+// GetReviewStatusMsg requests the current review state from the engine.
+type GetReviewStatusMsg struct {
+	Type string `json:"type"`
 }
 
-type StopMsg struct {
-	Type       string `json:"type"`
-	Agent      string `json:"agent"`
-	StopReason string `json:"stop_reason,omitempty"`
-	RequestID  string `json:"request_id"`
-
-	// Content to present for review when the agent stops (e.g., plans).
-	// Adapters populate these when the agent has reviewable non-file content.
-	ReviewContent      string `json:"review_content,omitempty"`
-	ReviewContentTitle string `json:"review_content_title,omitempty"`
-	ReviewContentType  string `json:"review_content_type,omitempty"`
+// GetReviewStatusResponse returns the current review state.
+type GetReviewStatusResponse struct {
+	Type         string `json:"type"`
+	Status       string `json:"status"` // "no_feedback" | "pending" | "pause_requested"
+	CommentCount int    `json:"comment_count,omitempty"`
+	Summary      string `json:"summary,omitempty"`
 }
 
-type PromptSubmitMsg struct {
-	Type      string `json:"type"`
-	Agent     string `json:"agent"`
-	Prompt    string `json:"prompt,omitempty"`
-	RequestID string `json:"request_id"`
+// PollFeedbackMsg requests pending feedback, optionally blocking until available.
+type PollFeedbackMsg struct {
+	Type string `json:"type"`
+	Wait bool   `json:"wait"`
 }
 
-type ContentReviewMsg struct {
+// PollFeedbackResponse returns feedback if available.
+type PollFeedbackResponse struct {
+	Type         string `json:"type"`
+	HasFeedback  bool   `json:"has_feedback"`
+	Feedback     string `json:"feedback,omitempty"`
+	CommentCount int    `json:"comment_count,omitempty"`
+}
+
+// SubmitContentMsg sends reviewable content (plans, docs) from the agent.
+type SubmitContentMsg struct {
 	Type        string `json:"type"`
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Content     string `json:"content"`
 	ContentType string `json:"content_type,omitempty"`
-	RequestID   string `json:"request_id,omitempty"`
 }
 
-type StopResponse struct {
-	Type          string `json:"type"`
-	RequestID     string `json:"request_id"`
-	Continue      bool   `json:"continue"`
-	SystemMessage string `json:"system_message,omitempty"`
-}
-
-type PromptSubmitResponse struct {
-	Type              string `json:"type"`
-	RequestID         string `json:"request_id"`
-	AdditionalContext string `json:"additional_context,omitempty"`
+// SubmitContentResponse acknowledges content submission.
+type SubmitContentResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
 }

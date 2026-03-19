@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // ReadJSONFile reads a JSON file into a map. Returns empty map if file doesn't exist.
@@ -50,57 +49,4 @@ func WriteJSONFile(path string, data map[string]any) error {
 		return fmt.Errorf("rename %s to %s: %w", tmp, path, err)
 	}
 	return nil
-}
-
-// GetNestedKey retrieves a value from a nested map using dot-separated keys.
-func GetNestedKey(m map[string]any, key string) (any, bool) {
-	parts := strings.Split(key, ".")
-	current := any(m)
-	for _, part := range parts {
-		cm, ok := current.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		current, ok = cm[part]
-		if !ok {
-			return nil, false
-		}
-	}
-	return current, true
-}
-
-// SetNestedKey sets a value in a nested map using dot-separated keys,
-// creating intermediate maps as needed.
-func SetNestedKey(m map[string]any, key string, value any) {
-	parts := strings.Split(key, ".")
-	current := m
-	for _, part := range parts[:len(parts)-1] {
-		next, ok := current[part].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			current[part] = next
-		}
-		current = next
-	}
-	current[parts[len(parts)-1]] = value
-}
-
-// DeleteNestedKey removes a key from a nested map using dot-separated keys.
-// Returns true if the key was found and deleted.
-func DeleteNestedKey(m map[string]any, key string) bool {
-	parts := strings.Split(key, ".")
-	current := m
-	for _, part := range parts[:len(parts)-1] {
-		next, ok := current[part].(map[string]any)
-		if !ok {
-			return false
-		}
-		current = next
-	}
-	last := parts[len(parts)-1]
-	if _, ok := current[last]; !ok {
-		return false
-	}
-	delete(current, last)
-	return true
 }

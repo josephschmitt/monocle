@@ -3,30 +3,62 @@ package core
 import (
 	"testing"
 	"time"
-
-	"github.com/anthropics/monocle/internal/protocol"
 )
 
-func TestSubmitWhileStopped(t *testing.T) {
+func TestPollNoFeedback(t *testing.T) {
 	fq := NewFeedbackQueue()
 
-	var resp *protocol.StopResponse
+	review := fq.Poll()
+	if review != nil {
+		t.Error("expected nil on empty queue")
+	}
+}
+
+func TestSubmitThenPoll(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	fq.Submit(&FormattedReview{
+		Formatted:    "## Review\nFix bug",
+		CommentCount: 1,
+		Action:       "request_changes",
+	})
+
+	if fq.GetStatus() != "queued" {
+		t.Errorf("expected status queued, got %q", fq.GetStatus())
+	}
+
+	review := fq.Poll()
+	if review == nil {
+		t.Fatal("expected review from Poll")
+	}
+	if review.Formatted != "## Review\nFix bug" {
+		t.Errorf("unexpected review: %q", review.Formatted)
+	}
+	if fq.GetStatus() != "delivered" {
+		t.Errorf("expected status delivered, got %q", fq.GetStatus())
+	}
+
+	// Second poll should return nil
+	if fq.Poll() != nil {
+		t.Error("expected nil after delivery")
+	}
+}
+
+func TestWaitForFeedback(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	var review *FormattedReview
 	done := make(chan struct{})
 
-	// Simulate agent stopping (blocks)
 	go func() {
-		resp = fq.OnStop("req-1")
+		review = fq.WaitForFeedback()
 		close(done)
 	}()
 
 	// Give goroutine time to block
 	time.Sleep(50 * time.Millisecond)
 
-	if fq.GetStatus() != "none" {
-		t.Errorf("expected status none, got %q", fq.GetStatus())
-	}
-
-	// User submits while agent is stopped
+	// Submit feedback
 	fq.Submit(&FormattedReview{
 		Formatted:    "## Review\nFix bug",
 		CommentCount: 1,
@@ -36,71 +68,59 @@ func TestSubmitWhileStopped(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("OnStop did not return")
+		t.Fatal("WaitForFeedback did not return")
 	}
 
-	if !resp.Continue {
-		t.Error("expected continue=true")
+	if review == nil {
+		t.Fatal("expected review")
 	}
-	if resp.SystemMessage != "## Review\nFix bug" {
-		t.Errorf("unexpected message: %q", resp.SystemMessage)
-	}
-	if fq.GetStatus() != "delivered" {
-		t.Errorf("expected status delivered, got %q", fq.GetStatus())
+	if review.Formatted != "## Review\nFix bug" {
+		t.Errorf("unexpected review: %q", review.Formatted)
 	}
 }
 
-func TestSubmitWhileWorking(t *testing.T) {
+func TestWaitForFeedbackWithPending(t *testing.T) {
 	fq := NewFeedbackQueue()
 
-	// User submits while agent is working (not stopped)
+	// Submit before waiting
 	fq.Submit(&FormattedReview{
 		Formatted:    "## Review\nLooks good",
+		CommentCount: 1,
+		Action:       "approve",
+	})
+
+	// WaitForFeedback should return immediately
+	review := fq.WaitForFeedback()
+	if review == nil {
+		t.Fatal("expected review")
+	}
+	if review.Formatted != "## Review\nLooks good" {
+		t.Errorf("unexpected review: %q", review.Formatted)
+	}
+}
+
+func TestPauseRequested(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	if fq.IsPauseRequested() {
+		t.Error("expected pause not requested initially")
+	}
+
+	fq.SetPauseRequested(true)
+
+	if !fq.IsPauseRequested() {
+		t.Error("expected pause requested after set")
+	}
+
+	// Submit should clear pause
+	fq.Submit(&FormattedReview{
+		Formatted:    "review",
 		CommentCount: 1,
 		Action:       "request_changes",
 	})
 
-	if fq.GetStatus() != "queued" {
-		t.Errorf("expected status queued, got %q", fq.GetStatus())
-	}
-
-	// Agent stops — should get queued review immediately
-	resp := fq.OnStop("req-2")
-
-	if !resp.Continue {
-		t.Error("expected continue=true")
-	}
-	if resp.SystemMessage != "## Review\nLooks good" {
-		t.Errorf("unexpected message: %q", resp.SystemMessage)
-	}
-}
-
-func TestApproveWhileStopped(t *testing.T) {
-	fq := NewFeedbackQueue()
-
-	var resp *protocol.StopResponse
-	done := make(chan struct{})
-
-	go func() {
-		resp = fq.OnStop("req-3")
-		close(done)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-
-	fq.Approve()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("OnStop did not return")
-	}
-
-	if resp.Continue {
-		t.Error("expected continue=false")
-	}
-	if resp.SystemMessage != "" {
-		t.Errorf("expected empty message, got %q", resp.SystemMessage)
+	if fq.IsPauseRequested() {
+		t.Error("expected pause cleared after Submit")
 	}
 }
 
@@ -121,20 +141,50 @@ func TestHasPending(t *testing.T) {
 		t.Error("expected HasPending=true after Submit")
 	}
 
-	// Drain the queued review via OnStop
-	_ = fq.OnStop("req-hp")
+	fq.Poll()
 
 	if fq.HasPending() {
-		t.Error("expected HasPending=false after delivery")
+		t.Error("expected HasPending=false after Poll")
 	}
 }
 
-func TestApproveWhileWorking(t *testing.T) {
+func TestApprove(t *testing.T) {
 	fq := NewFeedbackQueue()
 
-	// Approve while agent is working — should be no-op
+	fq.Submit(&FormattedReview{
+		Formatted:    "review",
+		CommentCount: 1,
+		Action:       "request_changes",
+	})
+
 	fq.Approve()
 
+	if fq.HasPending() {
+		t.Error("expected pending cleared after Approve")
+	}
+	if fq.GetStatus() != "none" {
+		t.Errorf("expected status none, got %q", fq.GetStatus())
+	}
+}
+
+func TestReset(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	fq.Submit(&FormattedReview{
+		Formatted:    "review",
+		CommentCount: 1,
+		Action:       "request_changes",
+	})
+	fq.SetPauseRequested(true)
+
+	fq.Reset()
+
+	if fq.HasPending() {
+		t.Error("expected no pending after Reset")
+	}
+	if fq.IsPauseRequested() {
+		t.Error("expected no pause after Reset")
+	}
 	if fq.GetStatus() != "none" {
 		t.Errorf("expected status none, got %q", fq.GetStatus())
 	}

@@ -25,18 +25,18 @@ func Decode(data []byte) (any, error) {
 
 	var msg any
 	switch envelope.Type {
-	case TypePostToolUse:
-		msg = &PostToolUseMsg{}
-	case TypeStop:
-		msg = &StopMsg{}
-	case TypePromptSubmit:
-		msg = &PromptSubmitMsg{}
-	case TypeContentReview:
-		msg = &ContentReviewMsg{}
-	case TypeStopResponse:
-		msg = &StopResponse{}
-	case TypePromptSubmitResponse:
-		msg = &PromptSubmitResponse{}
+	case TypeGetReviewStatus:
+		msg = &GetReviewStatusMsg{}
+	case TypePollFeedback:
+		msg = &PollFeedbackMsg{}
+	case TypeSubmitContent:
+		msg = &SubmitContentMsg{}
+	case TypeGetReviewStatusResponse:
+		msg = &GetReviewStatusResponse{}
+	case TypePollFeedbackResponse:
+		msg = &PollFeedbackResponse{}
+	case TypeSubmitContentResponse:
+		msg = &SubmitContentResponse{}
 	default:
 		return nil, fmt.Errorf("protocol decode: unknown type %q", envelope.Type)
 	}
@@ -45,14 +45,4 @@ func Decode(data []byte) (any, error) {
 		return nil, fmt.Errorf("protocol decode %s: %w", envelope.Type, err)
 	}
 	return msg, nil
-}
-
-// IsBlocking returns true for message types that require a response.
-func IsBlocking(msg any) bool {
-	switch msg.(type) {
-	case *StopMsg, *PromptSubmitMsg:
-		return true
-	default:
-		return false
-	}
 }

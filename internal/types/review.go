@@ -7,7 +7,7 @@ type AgentStatus string
 const (
 	AgentStatusIdle    AgentStatus = "idle"
 	AgentStatusWorking AgentStatus = "working"
-	AgentStatusStopped AgentStatus = "stopped"
+	AgentStatusPaused  AgentStatus = "paused"
 )
 
 type FileChangeStatus string

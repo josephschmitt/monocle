@@ -25,19 +25,13 @@ func NewSocketClient(socketPath string) (*SocketClient, error) {
 	return &SocketClient{conn: conn, scanner: scanner}, nil
 }
 
-// Send encodes and sends a message without waiting for a response.
-func (c *SocketClient) Send(msg any) error {
-	data, err := protocol.Encode(msg)
-	if err != nil {
-		return err
-	}
-	_, err = c.conn.Write(data)
-	return err
-}
-
 // SendAndWait sends a message and reads one response line.
 func (c *SocketClient) SendAndWait(msg any) (any, error) {
-	if err := c.Send(msg); err != nil {
+	data, err := protocol.Encode(msg)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.conn.Write(data); err != nil {
 		return nil, err
 	}
 	if !c.scanner.Scan() {

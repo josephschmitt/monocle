@@ -49,8 +49,8 @@ func (m statusBarModel) View() string {
 	case types.AgentStatusWorking:
 		statusStr = "WORKING"
 		statusStyle = m.theme.StatusWorking
-	case types.AgentStatusStopped:
-		statusStr = "STOPPED"
+	case types.AgentStatusPaused:
+		statusStr = "PAUSED"
 		statusStyle = m.theme.StatusStopped
 	default:
 		statusStr = "IDLE"
@@ -82,7 +82,7 @@ func (m statusBarModel) View() string {
 	}
 
 	// Key hints (right-aligned, collapse to ?:help when narrow)
-	fullHints := "c:comment  S:submit  D:dismiss  q:quit"
+	fullHints := "c:comment  S:submit  P:pause  D:dismiss  q:quit"
 	shortHints := "?:help"
 	left := strings.Join(parts, "  ")
 

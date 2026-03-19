@@ -1,6 +1,6 @@
 # Monocle
 
-Terminal-based code review companion for AI coding agents (Claude Code, Codex, Gemini CLI). Developers run it alongside their agent — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle injects that feedback back into the agent via hooks.
+Terminal-based code review companion for AI coding agents (Claude Code, Codex, Gemini CLI). Developers run it alongside their agent — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle delivers that feedback to the agent via skills.
 
 ## Quick Start
 
@@ -15,35 +15,55 @@ devbox run -- make lint               # Vet + build check
 
 ## Architecture
 
-Single binary with a hidden `hook` subcommand:
-- **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs, collects comments, delivers reviews.
-- **`monocle hook`** — Hidden subcommand invoked by agent hooks. Connects to monocle via Unix domain socket. Exits 0 on any error (never blocks the agent).
+Single binary with CLI subcommands for agent communication:
+- **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
+- **`monocle review-status`** — Check for pending feedback (invoked by agent via skill).
+- **`monocle get-feedback [--wait]`** — Retrieve review feedback (invoked by agent via skill).
+- **`monocle submit-content --title TITLE`** — Submit plans/docs for review (invoked by agent via skill).
+- **`monocle install`** — Install skill files for detected agents.
+
+### Integration Model: Skills
+
+Agents integrate with Monocle via **skills** (SKILL.md files), not hooks. The agent auto-invokes the skill at natural breakpoints, which instructs it to run `monocle` CLI subcommands. CLI subcommands communicate with the TUI via a Unix domain socket.
+
+**Key design:**
+- **Asynchronous by default** — agent polls for feedback, never blocked unless reviewer requests a pause
+- **User-initiated review** — reviewer works at their own pace, submits when ready
+- **Pause flow** — reviewer can request a pause; agent sees "pause_requested" on next status check and blocks on `get-feedback --wait`
 
 ### Package Layout
 
 ```
-cmd/monocle/          Main CLI entry point (Kong commands, including hidden hook subcommand)
+cmd/monocle/          Main CLI entry point (Kong commands)
 internal/
   types/              Domain types (ReviewSession, ChangedFile, ReviewComment, Config)
-  protocol/           NDJSON message types + marshal/unmarshal
+  protocol/           NDJSON message types + marshal/unmarshal (GetReviewStatus, PollFeedback, SubmitContent)
   db/                 SQLite layer (schema, migrations, typed queries)
-  core/               Engine, git client, feedback queue, formatter, session manager, hook server
-  adapters/           Agent-specific adapters (Claude, Gemini, Codex, OpenCode), installers, socket client
-  tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, modals, theme)
+  core/               Engine, git client, feedback queue, formatter, session manager, socket server
+  adapters/           Agent-specific skill installers (Claude, Gemini, Codex, OpenCode), socket client
+  tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, plan view, modals, theme)
 ```
 
 ### Key Interfaces
 
 - **`core.EngineAPI`** (`internal/core/engine.go`) — Contract between TUI and engine. TUI never imports engine internals.
-- **`adapters.AgentAdapter`** (`internal/adapters/adapter.go`) — Agent-specific hook parsing/formatting.
-- **`adapters.AgentInstaller`** (`internal/adapters/adapter.go`) — Agent-specific hook installation/uninstallation.
+- **`adapters.SkillInstaller`** (`internal/adapters/adapter.go`) — Agent-specific skill file installation/uninstallation.
 
 ### Data Flow
 
 ```
-Agent hook fires → monocle hook (subcommand) → Unix socket → HookServer → Engine
+Agent invokes skill → runs monocle CLI subcommand → Unix socket → SocketServer → Engine
 Engine → emits events → BridgeEngineEvents → tea.Program.Send() → TUI updates
-User submits review → Engine → FeedbackQueue → blocks until agent stops → delivers via socket response
+User submits review → Engine → FeedbackQueue → agent polls via CLI → gets formatted feedback
+```
+
+### Pause Flow
+
+```
+User presses P in TUI → Engine.RequestPause() → sets pause flag
+Agent runs `monocle review-status` → sees "pause_requested"
+Agent runs `monocle get-feedback --wait` → blocks until user submits
+User reviews, adds comments, submits → FeedbackQueue releases → agent gets feedback
 ```
 
 ## Tech Stack
@@ -54,7 +74,6 @@ User submits review → Engine → FeedbackQueue → blocks until agent stops �
 - **Bubbles v2** — UI components (key bindings)
 - **Kong** — CLI parsing (not Cobra)
 - **modernc.org/sqlite** — Pure Go SQLite (no CGo)
-- **BurntSushi/toml** — TOML parsing for Codex CLI config
 - **16-color ANSI** base theme for terminal compatibility, with true color for icons
 
 ## Bubble Tea v2 Gotchas
@@ -89,8 +108,8 @@ User submits review → Engine → FeedbackQueue → blocks until agent stops �
 3. Wire into `appModel` in `app.go` (add field, init in `NewApp`, handle messages in `Update`, render in `View`)
 
 ### Add a new agent adapter
-1. Create `internal/adapters/youragent.go` implementing `AgentAdapter` + `AgentInstaller`
-2. Register in `GetAdapter()` switch and `AllInstallers()` in `adapter.go`
+1. Create `internal/adapters/youragent.go` implementing `SkillInstaller`
+2. Register in `AllInstallers()` in `adapter.go`
 
 ### Add a new CLI command
 1. Add a struct to `cmd/monocle/main.go` with Kong tags
