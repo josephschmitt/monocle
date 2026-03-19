@@ -418,7 +418,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Toggle pause
 		return m, m.executeCommand("pause")
 
-	case "B":
+	case "b":
 		// Open ref picker
 		engine := m.engine
 		return m, func() tea.Msg {
