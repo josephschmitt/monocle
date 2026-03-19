@@ -221,6 +221,10 @@ func (m diffViewModel) View() string {
 			rendered = m.renderCommentLine(line, selected)
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
+		} else if m.contentMode {
+			gutterWidth := 6
+			contentWidth := m.width - gutterWidth
+			rendered = m.renderContentLine(line, gutterWidth, contentWidth, selected, inVisual)
 		} else {
 			gutterWidth := 10
 			contentWidth := m.width - gutterWidth
@@ -376,6 +380,23 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 		style = style.Reverse(true)
 	}
 	return style.Render(fmt.Sprintf("%-*s", m.width, line.content))
+}
+
+func (m diffViewModel) renderContentLine(line diffViewLine, gutterWidth, contentWidth int, selected, inVisual bool) string {
+	gutter := fmt.Sprintf("%4d ", line.newLineNum)
+
+	content := line.content
+	if len(content) > contentWidth {
+		content = content[:contentWidth-1] + "…"
+	}
+
+	full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
+
+	if (selected || inVisual) && m.focused {
+		return lipgloss.NewStyle().Reverse(true).Render(full)
+	}
+
+	return full
 }
 
 func (m diffViewModel) renderDiffLine(line diffViewLine, gutterWidth, contentWidth int, selected, inVisual bool) string {
