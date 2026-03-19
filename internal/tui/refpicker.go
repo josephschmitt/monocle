@@ -91,16 +91,20 @@ func (m refPickerModel) View() string {
 	if maxVisible > len(m.entries) {
 		maxVisible = len(m.entries)
 	}
+	hashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	for i := 0; i < maxVisible; i++ {
 		entry := m.entries[i]
-		line := fmt.Sprintf("  %s %s", entry.Hash, entry.Subject)
-		if len(line) > m.width-6 && m.width > 10 {
-			line = line[:m.width-9] + "..."
+		subject := entry.Subject
+		maxSubject := m.width - len(entry.Hash) - 10
+		if maxSubject > 0 && len(subject) > maxSubject {
+			subject = subject[:maxSubject-3] + "..."
 		}
 		if m.cursor == i+1 {
+			line := fmt.Sprintf("  %s %s", entry.Hash, subject)
 			b.WriteString(lipgloss.NewStyle().Reverse(true).Render(line))
 		} else {
-			b.WriteString(line)
+			b.WriteString("  " + hashStyle.Render(entry.Hash) + " " + subjectStyle.Render(subject))
 		}
 		b.WriteString("\n")
 	}

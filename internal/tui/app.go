@@ -230,8 +230,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contentItemMsg:
 		m.sidebar.contentItems = m.engine.GetContentItems()
-		// Auto-select if nothing is currently displayed
-		if m.diffView.path == "" && msg.id != "" {
+		// Auto-select only if nothing else is available (no files, no current view)
+		if m.diffView.path == "" && len(m.sidebar.files) == 0 && msg.id != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
 		}
 		return m, nil
