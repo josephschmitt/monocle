@@ -1,6 +1,9 @@
 package adapters
 
 // SkillContent is the SKILL.md content installed for all agents.
+// For Claude Code, the MCP channel is the primary integration — review feedback
+// arrives automatically. The CLI commands below serve as fallback for other agents
+// or if the channel is unavailable.
 const SkillContent = `---
 name: monocle-review
 description: Check for and receive code review feedback from your human reviewer who is watching your changes in real-time using Monocle. Invoke at the start of every new task AND after completing a logical unit of work.
@@ -10,7 +13,17 @@ allowed-tools: Bash(monocle *)
 Your reviewer is watching your code changes in real-time using Monocle. They may
 leave comments on specific files and lines, or on your plans.
 
-## Wait for review feedback
+## Channel integration (Claude Code)
+
+If the monocle MCP channel is active, review feedback arrives automatically as
+notifications. You can also use the MCP tools: review_status, get_feedback,
+and submit_plan.
+
+## CLI fallback
+
+If the channel is not available, use these CLI commands:
+
+### Wait for review feedback
 
 When your user asks you to wait for review, or when you want to check in with
 your reviewer after completing a logical unit of work, run:
@@ -23,7 +36,7 @@ This blocks until your reviewer submits their review. The reviewer will see your
 code changes and any plans you have submitted. Do not continue working until you
 receive the feedback. Address all issues before proceeding.
 
-## Quick status check
+### Quick status check
 
 To check if feedback is pending without blocking:
 
@@ -37,7 +50,7 @@ If feedback is pending, retrieve it with:
 monocle get-feedback
 ` + "```" + `
 
-## Submit a plan or content for review
+### Submit a plan or content for review
 
 When you produce a plan, architecture decision, or other content you want your
 reviewer to see:

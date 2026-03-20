@@ -49,6 +49,10 @@ func InstallAgents(agents []string, global bool) []InstallResult {
 			result.Err = fmt.Errorf("install %s: %w", inst.Name(), err)
 		} else {
 			result.Installed = true
+			// Collect additional details from adapters that support it
+			if detailer, ok := inst.(interface{ InstallDetails() []string }); ok {
+				result.Details = detailer.InstallDetails()
+			}
 		}
 		results = append(results, result)
 	}

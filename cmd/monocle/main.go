@@ -124,6 +124,9 @@ func (cmd *InstallCmd) Run() error {
 			fmt.Printf("  ✓ %s: already installed (%s)\n", r.Agent, r.SkillPath)
 		} else if r.Installed {
 			fmt.Printf("  ✓ %s: skill installed → %s\n", r.Agent, r.SkillPath)
+			for _, detail := range r.Details {
+				fmt.Printf("    %s\n", detail)
+			}
 		}
 	}
 

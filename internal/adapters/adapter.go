@@ -12,11 +12,12 @@ type SkillInstaller interface {
 
 // InstallResult reports what happened for a single agent.
 type InstallResult struct {
-	Agent     string
-	SkillPath string
+	Agent       string
+	SkillPath   string
 	Installed   bool
 	AlreadyDone bool
 	Err         error
+	Details     []string // additional installation info lines
 }
 
 // AllInstallers returns installers for all supported agents.
