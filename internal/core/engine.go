@@ -14,6 +14,7 @@ const (
 	EventContentItemAdded      EventKind = "content_item_added"
 	EventCommentsOutdated      EventKind = "comments_outdated"
 	EventPauseChanged          EventKind = "pause_changed"
+	EventFeedbackSubmitted     EventKind = "feedback_submitted"
 )
 
 // EventPayload carries data for an engine event.

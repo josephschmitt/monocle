@@ -5,6 +5,7 @@ const (
 	TypeGetReviewStatus = "get_review_status"
 	TypePollFeedback    = "poll_feedback"
 	TypeSubmitContent   = "submit_content"
+	TypeSubscribe       = "subscribe"
 )
 
 // Outbound message types (from engine to CLI subcommands)
@@ -12,6 +13,8 @@ const (
 	TypeGetReviewStatusResponse = "get_review_status_response"
 	TypePollFeedbackResponse    = "poll_feedback_response"
 	TypeSubmitContentResponse   = "submit_content_response"
+	TypeSubscribeResponse       = "subscribe_response"
+	TypeEventNotification       = "event_notification"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -55,4 +58,23 @@ type SubmitContentResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
+}
+
+// SubscribeMsg requests a persistent event subscription on this connection.
+type SubscribeMsg struct {
+	Type   string   `json:"type"`
+	Events []string `json:"events"`
+}
+
+// SubscribeResponse acknowledges a subscription request.
+type SubscribeResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+}
+
+// EventNotification pushes an engine event to a subscribed connection.
+type EventNotification struct {
+	Type    string         `json:"type"`
+	Event   string         `json:"event"`
+	Payload map[string]any `json:"payload"`
 }

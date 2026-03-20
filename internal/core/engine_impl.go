@@ -444,6 +444,12 @@ func (e *Engine) Submit() (*types.SubmitResult, error) {
 		Status: e.feedback.GetStatus(),
 	})
 
+	e.emit(EventFeedbackSubmitted, EventPayload{
+		Kind:    EventFeedbackSubmitted,
+		Message: formatted.Formatted,
+		Status:  formatted.Action,
+	})
+
 	return &types.SubmitResult{
 		Delivered: false,
 		Queued:    true,
@@ -464,6 +470,12 @@ func (e *Engine) Approve() (*types.SubmitResult, error) {
 	e.emit(EventFeedbackStatusChanged, EventPayload{
 		Kind:   EventFeedbackStatusChanged,
 		Status: e.feedback.GetStatus(),
+	})
+
+	e.emit(EventFeedbackSubmitted, EventPayload{
+		Kind:    EventFeedbackSubmitted,
+		Message: "## Code Review — Approved\n\nNo issues found. Code looks good!",
+		Status:  string(types.ActionApprove),
 	})
 
 	return &types.SubmitResult{
