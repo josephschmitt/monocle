@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/josephschmitt/monocle/compare/v0.2.0...v0.2.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* configure release-please to update README version strings ([b5f3a29](https://github.com/josephschmitt/monocle/commit/b5f3a298053e36cc10befb518930ef6fef3ce89c))
+
 ## [0.2.0](https://github.com/josephschmitt/monocle/compare/v0.1.0...v0.2.0) (2026-03-20)
 
 
