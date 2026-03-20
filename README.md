@@ -45,19 +45,21 @@ go install github.com/anthropics/monocle/cmd/monocle@latest
 
 ### Pre-built Binaries
 
-<!-- x-release-please-start-version -->
-
 Download from [GitHub Releases](https://github.com/josephschmitt/monocle/releases):
 
 **macOS:**
 ```bash
 # Apple Silicon
+# x-release-please-start-version
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_darwin_arm64.tar.gz
+# x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # Intel
+# x-release-please-start-version
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_darwin_amd64.tar.gz
+# x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 ```
@@ -65,17 +67,19 @@ sudo mv monocle /usr/local/bin/
 **Linux:**
 ```bash
 # x86_64
+# x-release-please-start-version
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_linux_amd64.tar.gz
+# x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # ARM64
+# x-release-please-start-version
 curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.1.0/monocle_0.1.0_linux_arm64.tar.gz
+# x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 ```
-
-<!-- x-release-please-end -->
 
 ### From Source
 
