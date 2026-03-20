@@ -3,15 +3,23 @@ package adapters
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
+func requireBun(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("bun"); err != nil {
+		t.Skip("bun not available, skipping channel install test")
+	}
+}
+
 func TestClaudeChannelInstall(t *testing.T) {
+	requireBun(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 
-	// Change to a temp dir so .mcp.json is created there
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +63,21 @@ func TestClaudeChannelInstall(t *testing.T) {
 		t.Fatal("channel.ts should not be empty")
 	}
 
+	// Verify package.json exists
+	channelDir := filepath.Dir(channelPath)
+	pkgData, err := os.ReadFile(filepath.Join(channelDir, "package.json"))
+	if err != nil {
+		t.Fatalf("read package.json: %v", err)
+	}
+	if len(pkgData) == 0 {
+		t.Fatal("package.json should not be empty")
+	}
+
+	// Verify node_modules was created (bun install ran)
+	if _, err := os.Stat(filepath.Join(channelDir, "node_modules")); err != nil {
+		t.Fatalf("node_modules should exist after install: %v", err)
+	}
+
 	// Verify .mcp.json exists with monocle entry
 	mcpData, err := os.ReadFile(filepath.Join(projDir, ".mcp.json"))
 	if err != nil {
@@ -74,6 +97,7 @@ func TestClaudeChannelInstall(t *testing.T) {
 }
 
 func TestClaudeChannelInstall_Idempotent(t *testing.T) {
+	requireBun(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 
@@ -98,6 +122,7 @@ func TestClaudeChannelInstall_Idempotent(t *testing.T) {
 }
 
 func TestClaudeChannelUninstall(t *testing.T) {
+	requireBun(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 
@@ -118,6 +143,12 @@ func TestClaudeChannelUninstall(t *testing.T) {
 	installed, _ := adapter.IsInstalled()
 	if installed {
 		t.Fatal("should not be installed after uninstall")
+	}
+
+	// Channel directory should be completely removed
+	channelPath := channelTSPath()
+	if _, err := os.Stat(filepath.Dir(channelPath)); !os.IsNotExist(err) {
+		t.Fatal("channel directory should be removed after uninstall")
 	}
 
 	// .mcp.json should be removed (was only entry)

@@ -38,14 +38,15 @@ func (a *ClaudeAdapter) Install() error {
 	return nil
 }
 
-// Uninstall removes channel.ts and unconfigures .mcp.json.
+// Uninstall removes channel.ts, deps, and unconfigures .mcp.json.
 func (a *ClaudeAdapter) Uninstall() error {
 	channelPath := channelTSPath()
 	if channelPath != "" {
-		if err := os.Remove(channelPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove channel.ts: %w", err)
+		dir := filepath.Dir(channelPath)
+		// Remove the entire channel directory (channel.ts, package.json, node_modules, bun.lock)
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("remove channel directory: %w", err)
 		}
-		os.Remove(filepath.Dir(channelPath)) // clean up empty parent dir
 	}
 
 	if err := a.unconfigureMCP(); err != nil {
@@ -86,7 +87,17 @@ func (a *ClaudeAdapter) InstallDetails() []string {
 	return details
 }
 
-// installChannel writes channel.ts to the XDG config directory.
+// packageJSON is the package.json for the channel's npm dependencies.
+const packageJSON = `{
+  "name": "monocle-channel",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  }
+}
+`
+
+// installChannel writes channel.ts, package.json, and installs deps.
 func (a *ClaudeAdapter) installChannel() error {
 	path := channelTSPath()
 	if path == "" {
@@ -96,7 +107,28 @@ func (a *ClaudeAdapter) installChannel() error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(ChannelContent), 0644)
+	if err := os.WriteFile(path, []byte(ChannelContent), 0644); err != nil {
+		return err
+	}
+
+	// Write package.json for channel dependencies
+	pkgPath := filepath.Join(dir, "package.json")
+	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
+		return fmt.Errorf("write package.json: %w", err)
+	}
+
+	// Run bun install to fetch dependencies
+	bunPath, err := exec.LookPath("bun")
+	if err != nil {
+		return fmt.Errorf("bun not found in PATH — install bun for MCP channel support")
+	}
+	cmd := exec.Command(bunPath, "install")
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("bun install failed: %w\n%s", err, output)
+	}
+
+	return nil
 }
 
 // configureMCP adds monocle to .mcp.json in the current project.
