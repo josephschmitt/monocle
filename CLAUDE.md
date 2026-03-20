@@ -1,6 +1,6 @@
 # Monocle
 
-Terminal-based code review companion for AI coding agents (Claude Code, Codex, Gemini CLI). Developers run it alongside their agent — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle delivers that feedback to the agent via skills.
+Terminal-based code review companion for Claude Code. Developers run it alongside Claude Code — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle delivers that feedback via an MCP channel.
 
 ## Quick Start
 
@@ -15,21 +15,19 @@ devbox run -- make lint               # Vet + build check
 
 ## Architecture
 
-Single binary with CLI subcommands for agent communication:
+Single binary with CLI subcommands:
 - **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
-- **`monocle review-status`** — Check for pending feedback (invoked by agent via skill).
-- **`monocle get-feedback [--wait]`** — Retrieve review feedback (invoked by agent via skill).
-- **`monocle submit-content --title TITLE`** — Submit plans/docs for review (invoked by agent via skill).
-- **`monocle install`** — Install skill files for detected agents.
+- **`monocle install`** — Install MCP channel for Claude Code (channel.ts + .mcp.json).
+- **`monocle uninstall`** — Remove MCP channel configuration.
 
-### Integration Model: Skills
+### Integration Model: MCP Channel
 
-Agents integrate with Monocle via **skills** (SKILL.md files), not hooks. The agent auto-invokes the skill at natural breakpoints, which instructs it to run `monocle` CLI subcommands. CLI subcommands communicate with the TUI via a Unix domain socket.
+Claude Code integrates with Monocle via an **MCP channel** — a stdio MCP server (`channel.ts`) that connects to Monocle's Unix domain socket. The channel exposes MCP tools (`review_status`, `get_feedback`, `submit_plan`) and pushes review feedback to Claude Code via notifications.
 
 **Key design:**
-- **Asynchronous by default** — agent polls for feedback, never blocked unless reviewer requests a pause
+- **Push-based** — Monocle pushes feedback to Claude Code via MCP notifications, no polling needed
 - **User-initiated review** — reviewer works at their own pace, submits when ready
-- **Pause flow** — reviewer can request a pause; agent sees "pause_requested" on next status check and blocks on `get-feedback --wait`
+- **Pause flow** — reviewer can request a pause; Claude Code receives a notification and blocks on `get_feedback`
 
 ### Package Layout
 
@@ -40,30 +38,29 @@ internal/
   protocol/           NDJSON message types + marshal/unmarshal (GetReviewStatus, PollFeedback, SubmitContent)
   db/                 SQLite layer (schema, migrations, typed queries)
   core/               Engine, git client, feedback queue, formatter, session manager, socket server
-  adapters/           Agent-specific skill installers (Claude, Gemini, Codex, OpenCode), socket client
+  adapters/           Claude Code MCP channel installer, repo/socket utilities
   tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, plan view, modals, theme)
 ```
 
 ### Key Interfaces
 
 - **`core.EngineAPI`** (`internal/core/engine.go`) — Contract between TUI and engine. TUI never imports engine internals.
-- **`adapters.SkillInstaller`** (`internal/adapters/adapter.go`) — Agent-specific skill file installation/uninstallation.
 
 ### Data Flow
 
 ```
-Agent invokes skill → runs monocle CLI subcommand → Unix socket → SocketServer → Engine
+Claude Code calls MCP tool → channel.ts → Unix socket → SocketServer → Engine
 Engine → emits events → BridgeEngineEvents → tea.Program.Send() → TUI updates
-User submits review → Engine → FeedbackQueue → agent polls via CLI → gets formatted feedback
+User submits review → Engine → FeedbackQueue → channel.ts sends MCP notification → Claude Code
 ```
 
 ### Pause Flow
 
 ```
 User presses P in TUI → Engine.RequestPause() → sets pause flag
-Agent runs `monocle review-status` → sees "pause_requested"
-Agent runs `monocle get-feedback --wait` → blocks until user submits
-User reviews, adds comments, submits → FeedbackQueue releases → agent gets feedback
+Claude Code calls review_status → sees "pause_requested"
+Claude Code calls get_feedback → blocks until user submits
+User reviews, adds comments, submits → FeedbackQueue releases → notification sent to Claude Code
 ```
 
 ## Tech Stack
@@ -106,10 +103,6 @@ User reviews, adds comments, submits → FeedbackQueue releases → agent gets f
 1. Create `internal/tui/yourcomponent.go` with a model struct + `Init`/`Update`/`View`
 2. Define message types for communication
 3. Wire into `appModel` in `app.go` (add field, init in `NewApp`, handle messages in `Update`, render in `View`)
-
-### Add a new agent adapter
-1. Create `internal/adapters/youragent.go` implementing `SkillInstaller`
-2. Register in `AllInstallers()` in `adapter.go`
 
 ### Add a new CLI command
 1. Add a struct to `cmd/monocle/main.go` with Kong tags

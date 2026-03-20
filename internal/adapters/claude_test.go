@@ -1,19 +1,30 @@
 package adapters
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestClaudeSkillInstall(t *testing.T) {
+func TestClaudeChannelInstall(t *testing.T) {
 	dir := t.TempDir()
-	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+
+	// Change to a temp dir so .mcp.json is created there
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
 
 	adapter := &ClaudeAdapter{}
 
 	// Not installed initially
-	installed, err := adapter.IsInstalled(skillPath)
+	installed, err := adapter.IsInstalled()
 	if err != nil {
 		t.Fatalf("IsInstalled error: %v", err)
 	}
@@ -22,12 +33,12 @@ func TestClaudeSkillInstall(t *testing.T) {
 	}
 
 	// Install
-	if err := adapter.Install(skillPath); err != nil {
+	if err := adapter.Install(); err != nil {
 		t.Fatalf("install failed: %v", err)
 	}
 
-	// Verify installed
-	installed, err = adapter.IsInstalled(skillPath)
+	// Verify channel.ts exists
+	installed, err = adapter.IsInstalled()
 	if err != nil {
 		t.Fatalf("IsInstalled error: %v", err)
 	}
@@ -35,44 +46,82 @@ func TestClaudeSkillInstall(t *testing.T) {
 		t.Fatal("should be installed after Install()")
 	}
 
-	// Verify content
-	data, err := os.ReadFile(skillPath)
+	channelPath := channelTSPath()
+	data, err := os.ReadFile(channelPath)
 	if err != nil {
-		t.Fatalf("read skill file: %v", err)
+		t.Fatalf("read channel.ts: %v", err)
 	}
 	if len(data) == 0 {
-		t.Fatal("skill file should not be empty")
+		t.Fatal("channel.ts should not be empty")
+	}
+
+	// Verify .mcp.json exists with monocle entry
+	mcpData, err := os.ReadFile(filepath.Join(projDir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read .mcp.json: %v", err)
+	}
+	var mcpConfig map[string]any
+	if err := json.Unmarshal(mcpData, &mcpConfig); err != nil {
+		t.Fatalf("parse .mcp.json: %v", err)
+	}
+	servers, ok := mcpConfig["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatal("mcpServers should exist in .mcp.json")
+	}
+	if _, ok := servers["monocle"]; !ok {
+		t.Fatal("monocle should be in mcpServers")
 	}
 }
 
-func TestClaudeSkillInstall_Idempotent(t *testing.T) {
+func TestClaudeChannelInstall_Idempotent(t *testing.T) {
 	dir := t.TempDir()
-	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
 
 	adapter := &ClaudeAdapter{}
-	if err := adapter.Install(skillPath); err != nil {
+	if err := adapter.Install(); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	if err := adapter.Install(skillPath); err != nil {
+	if err := adapter.Install(); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 
-	installed, _ := adapter.IsInstalled(skillPath)
+	installed, _ := adapter.IsInstalled()
 	if !installed {
 		t.Fatal("should be installed")
 	}
 }
 
-func TestClaudeSkillUninstall(t *testing.T) {
+func TestClaudeChannelUninstall(t *testing.T) {
 	dir := t.TempDir()
-	skillPath := filepath.Join(dir, ".claude", "skills", "monocle-review", "SKILL.md")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
 
 	adapter := &ClaudeAdapter{}
-	adapter.Install(skillPath)
-	adapter.Uninstall(skillPath)
+	if err := adapter.Install(); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if err := adapter.Uninstall(); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
 
-	installed, _ := adapter.IsInstalled(skillPath)
+	installed, _ := adapter.IsInstalled()
 	if installed {
 		t.Fatal("should not be installed after uninstall")
+	}
+
+	// .mcp.json should be removed (was only entry)
+	if _, err := os.Stat(filepath.Join(projDir, ".mcp.json")); !os.IsNotExist(err) {
+		t.Fatal(".mcp.json should be removed after uninstall")
 	}
 }

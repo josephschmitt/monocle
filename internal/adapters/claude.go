@@ -7,13 +7,12 @@ import (
 	"path/filepath"
 )
 
-// ClaudeAdapter handles Claude Code skill and channel installation.
+// ClaudeAdapter handles Claude Code MCP channel installation.
 type ClaudeAdapter struct{}
-
-var _ SkillInstaller = (*ClaudeAdapter)(nil)
 
 func (a *ClaudeAdapter) Name() string { return "claude" }
 
+// Detect returns true if Claude Code appears to be installed.
 func (a *ClaudeAdapter) Detect() bool {
 	if _, err := exec.LookPath("claude"); err == nil {
 		return true
@@ -28,19 +27,40 @@ func (a *ClaudeAdapter) Detect() bool {
 	return false
 }
 
-func (a *ClaudeAdapter) SkillPath(global bool) (string, bool) {
-	if global {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", false
-		}
-		return filepath.Join(home, ".claude", "skills", "monocle-review", "SKILL.md"), true
+// Install writes channel.ts and configures .mcp.json.
+func (a *ClaudeAdapter) Install() error {
+	if err := a.installChannel(); err != nil {
+		return fmt.Errorf("install channel: %w", err)
 	}
-	return filepath.Join(".claude", "skills", "monocle-review", "SKILL.md"), true
+	if err := a.configureMCP(); err != nil {
+		return fmt.Errorf("configure mcp: %w", err)
+	}
+	return nil
 }
 
-func (a *ClaudeAdapter) IsInstalled(skillPath string) (bool, error) {
-	_, err := os.Stat(skillPath)
+// Uninstall removes channel.ts and unconfigures .mcp.json.
+func (a *ClaudeAdapter) Uninstall() error {
+	channelPath := channelTSPath()
+	if channelPath != "" {
+		if err := os.Remove(channelPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove channel.ts: %w", err)
+		}
+		os.Remove(filepath.Dir(channelPath)) // clean up empty parent dir
+	}
+
+	if err := a.unconfigureMCP(); err != nil {
+		return fmt.Errorf("unconfigure mcp: %w", err)
+	}
+	return nil
+}
+
+// IsInstalled checks if the MCP channel is configured.
+func (a *ClaudeAdapter) IsInstalled() (bool, error) {
+	channelPath := channelTSPath()
+	if channelPath == "" {
+		return false, nil
+	}
+	_, err := os.Stat(channelPath)
 	if err == nil {
 		return true, nil
 	}
@@ -48,53 +68,6 @@ func (a *ClaudeAdapter) IsInstalled(skillPath string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-func (a *ClaudeAdapter) Install(skillPath string) error {
-	// Install SKILL.md
-	dir := filepath.Dir(skillPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(skillPath, []byte(SkillContent), 0644); err != nil {
-		return err
-	}
-
-	// Install channel.ts and configure .mcp.json
-	if err := a.installChannel(); err != nil {
-		return fmt.Errorf("install channel: %w", err)
-	}
-	if err := a.configureMCP(); err != nil {
-		return fmt.Errorf("configure mcp: %w", err)
-	}
-
-	return nil
-}
-
-func (a *ClaudeAdapter) Uninstall(skillPath string) error {
-	// Remove SKILL.md
-	if err := os.Remove(skillPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	dir := filepath.Dir(skillPath)
-	os.Remove(dir) // remove monocle-review dir if empty
-
-	// Remove channel.ts
-	channelPath := channelTSPath()
-	if channelPath != "" {
-		if err := os.Remove(channelPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove channel.ts: %w", err)
-		}
-		// Clean up empty parent dir
-		os.Remove(filepath.Dir(channelPath))
-	}
-
-	// Remove monocle from .mcp.json
-	if err := a.unconfigureMCP(); err != nil {
-		return fmt.Errorf("unconfigure mcp: %w", err)
-	}
-
-	return nil
 }
 
 // InstallDetails returns additional info about what was installed.
@@ -134,7 +107,6 @@ func (a *ClaudeAdapter) configureMCP() error {
 		return err
 	}
 
-	// Ensure mcpServers key exists
 	servers, ok := data["mcpServers"].(map[string]any)
 	if !ok {
 		servers = map[string]any{}
@@ -164,12 +136,11 @@ func (a *ClaudeAdapter) unconfigureMCP() error {
 
 	servers, ok := data["mcpServers"].(map[string]any)
 	if !ok {
-		return nil // nothing to remove
+		return nil
 	}
 
 	delete(servers, "monocle")
 
-	// If mcpServers is now empty, remove the file
 	if len(servers) == 0 {
 		return os.Remove(mcpPath)
 	}

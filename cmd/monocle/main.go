@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,19 +10,15 @@ import (
 	"github.com/anthropics/monocle/internal/adapters"
 	"github.com/anthropics/monocle/internal/core"
 	"github.com/anthropics/monocle/internal/db"
-	"github.com/anthropics/monocle/internal/protocol"
 	"github.com/anthropics/monocle/internal/tui"
 )
 
 type CLI struct {
-	Start         StartCmd         `cmd:"" default:"withargs" help:"Start a new review session"`
-	Resume        ResumeCmd        `cmd:"" help:"Resume an existing session"`
-	Sessions      SessionsCmd      `cmd:"" help:"List sessions"`
-	Install       InstallCmd       `cmd:"" help:"Install agent skills"`
-	Uninstall     UninstallCmd     `cmd:"" help:"Remove agent skills"`
-	ReviewStatus  ReviewStatusCmd  `cmd:"" name:"review-status" help:"Check for pending review feedback"`
-	GetFeedback   GetFeedbackCmd   `cmd:"" name:"get-feedback" help:"Retrieve review feedback"`
-	SubmitContent SubmitContentCmd `cmd:"" name:"submit-content" help:"Submit content for review"`
+	Start    StartCmd    `cmd:"" default:"withargs" help:"Start a new review session"`
+	Resume   ResumeCmd   `cmd:"" help:"Resume an existing session"`
+	Sessions SessionsCmd `cmd:"" help:"List sessions"`
+	Install  InstallCmd  `cmd:"" help:"Install MCP channel for Claude Code"`
+	Uninstall UninstallCmd `cmd:"" help:"Remove MCP channel for Claude Code"`
 }
 
 type StartCmd struct {
@@ -38,32 +33,15 @@ type SessionsCmd struct {
 	Repo string `help:"Filter by repo root" default:"."`
 }
 
-type InstallCmd struct {
-	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to install (auto, claude, codex, gemini, opencode)"`
-	Global bool     `help:"Install to global/user config instead of project" default:"false"`
-}
+type InstallCmd struct{}
 
-type UninstallCmd struct {
-	Agents []string `arg:"" optional:"" default:"auto" help:"Agents to uninstall (auto, claude, codex, gemini, opencode)"`
-	Global bool     `help:"Remove from global/user config" default:"false"`
-}
-
-type ReviewStatusCmd struct{}
-
-type GetFeedbackCmd struct {
-	Wait bool `help:"Block until feedback is available" default:"false"`
-}
-
-type SubmitContentCmd struct {
-	Title string `help:"Content title" required:""`
-	ID    string `help:"Content item ID (for updates)" default:""`
-}
+type UninstallCmd struct{}
 
 func main() {
 	cli := CLI{}
 	ctx := kong.Parse(&cli,
 		kong.Name("monocle"),
-		kong.Description("Terminal-based code review companion for AI coding agents"),
+		kong.Description("Terminal-based code review companion for Claude Code"),
 		kong.UsageOnError(),
 	)
 	err := ctx.Run()
@@ -110,24 +88,29 @@ func (cmd *SessionsCmd) Run() error {
 }
 
 func (cmd *InstallCmd) Run() error {
-	results := adapters.InstallAgents(cmd.Agents, cmd.Global)
+	adapter := &adapters.ClaudeAdapter{}
 
-	if len(results) == 0 {
-		fmt.Println("No agents detected. Specify an agent explicitly: monocle install claude")
+	if !adapter.Detect() {
+		fmt.Println("Claude Code not detected. Install Claude Code first.")
 		return nil
 	}
 
-	for _, r := range results {
-		if r.Err != nil {
-			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
-		} else if r.AlreadyDone {
-			fmt.Printf("  ✓ %s: already installed (%s)\n", r.Agent, r.SkillPath)
-		} else if r.Installed {
-			fmt.Printf("  ✓ %s: skill installed → %s\n", r.Agent, r.SkillPath)
-			for _, detail := range r.Details {
-				fmt.Printf("    %s\n", detail)
-			}
-		}
+	installed, err := adapter.IsInstalled()
+	if err != nil {
+		return fmt.Errorf("check install: %w", err)
+	}
+	if installed {
+		fmt.Println("  ✓ claude: already installed")
+		return nil
+	}
+
+	if err := adapter.Install(); err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+
+	fmt.Println("  ✓ claude: MCP channel installed")
+	for _, detail := range adapter.InstallDetails() {
+		fmt.Printf("    %s\n", detail)
 	}
 
 	fmt.Println("\nMake sure 'monocle' is in your PATH.")
@@ -135,136 +118,22 @@ func (cmd *InstallCmd) Run() error {
 }
 
 func (cmd *UninstallCmd) Run() error {
-	results := adapters.UninstallAgents(cmd.Agents, cmd.Global)
+	adapter := &adapters.ClaudeAdapter{}
 
-	if len(results) == 0 {
-		fmt.Println("No agents detected. Specify an agent explicitly: monocle uninstall claude")
-		return nil
-	}
-
-	for _, r := range results {
-		if r.Err != nil {
-			fmt.Printf("  ✗ %s: %s\n", r.Agent, r.Err)
-		} else if r.AlreadyDone {
-			fmt.Printf("  ✓ %s: no skill to remove\n", r.Agent)
-		} else if r.Installed {
-			fmt.Printf("  ✓ %s: skill removed from %s\n", r.Agent, r.SkillPath)
-		}
-	}
-	return nil
-}
-
-func (cmd *ReviewStatusCmd) Run() error {
-	socketPath, err := resolveSocketPath()
+	installed, err := adapter.IsInstalled()
 	if err != nil {
-		fmt.Println("No reviewer connected.")
+		return fmt.Errorf("check install: %w", err)
+	}
+	if !installed {
+		fmt.Println("  ✓ claude: nothing to remove")
 		return nil
 	}
 
-	client, err := adapters.NewSocketClient(socketPath)
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-	defer client.Close()
-
-	resp, err := client.SendAndWait(&protocol.GetReviewStatusMsg{
-		Type: protocol.TypeGetReviewStatus,
-	})
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
+	if err := adapter.Uninstall(); err != nil {
+		return fmt.Errorf("uninstall: %w", err)
 	}
 
-	status, ok := resp.(*protocol.GetReviewStatusResponse)
-	if !ok {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	fmt.Println(status.Summary)
-	return nil
-}
-
-func (cmd *GetFeedbackCmd) Run() error {
-	socketPath, err := resolveSocketPath()
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	client, err := adapters.NewSocketClient(socketPath)
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-	defer client.Close()
-
-	if cmd.Wait {
-		fmt.Fprintln(os.Stderr, "Waiting for reviewer to submit feedback...")
-	}
-
-	resp, err := client.SendAndWait(&protocol.PollFeedbackMsg{
-		Type: protocol.TypePollFeedback,
-		Wait: cmd.Wait,
-	})
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	feedback, ok := resp.(*protocol.PollFeedbackResponse)
-	if !ok {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	if feedback.HasFeedback {
-		fmt.Print(feedback.Feedback)
-	} else {
-		fmt.Println("No feedback pending.")
-	}
-	return nil
-}
-
-func (cmd *SubmitContentCmd) Run() error {
-	// Read content from stdin
-	content, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return fmt.Errorf("read stdin: %w", err)
-	}
-
-	socketPath, err := resolveSocketPath()
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	client, err := adapters.NewSocketClient(socketPath)
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-	defer client.Close()
-
-	resp, err := client.SendAndWait(&protocol.SubmitContentMsg{
-		Type:    protocol.TypeSubmitContent,
-		ID:      cmd.ID,
-		Title:   cmd.Title,
-		Content: string(content),
-	})
-	if err != nil {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	submitResp, ok := resp.(*protocol.SubmitContentResponse)
-	if !ok {
-		fmt.Println("No reviewer connected.")
-		return nil
-	}
-
-	fmt.Println(submitResp.Message)
+	fmt.Println("  ✓ claude: MCP channel removed")
 	return nil
 }
 
@@ -337,14 +206,4 @@ func runTUI(agent, sessionID string) error {
 	// Cleanup
 	engine.Shutdown()
 	return nil
-}
-
-// resolveSocketPath discovers the socket path for CLI subcommands.
-func resolveSocketPath() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	dir := adapters.FindRepoRoot(cwd)
-	return adapters.DefaultSocketPath(dir), nil
 }
