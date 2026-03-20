@@ -1,7 +1,6 @@
 package types
 
 type Config struct {
-	DefaultAgent   string            `json:"default_agent"`
 	IgnorePatterns []string          `json:"ignore_patterns"`
 	Keybindings    map[string]string `json:"keybindings"`
 	DiffStyle      string            `json:"diff_style"`

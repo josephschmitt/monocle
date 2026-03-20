@@ -11,7 +11,7 @@ type FormattedReview struct {
 	Action       string
 }
 
-// ReviewStatusInfo holds the current review status for CLI queries.
+// ReviewStatusInfo holds the current review status for MCP channel queries.
 type ReviewStatusInfo struct {
 	Status       string // "no_feedback" | "pending" | "pause_requested"
 	CommentCount int
@@ -19,7 +19,7 @@ type ReviewStatusInfo struct {
 }
 
 // FeedbackQueue manages the synchronization between user review actions
-// and agent feedback retrieval. Supports both polling (async) and blocking
+// and MCP channel feedback retrieval. Supports both non-blocking and blocking
 // wait (pause flow) models.
 type FeedbackQueue struct {
 	mu   sync.Mutex
@@ -43,8 +43,8 @@ func NewFeedbackQueue() *FeedbackQueue {
 }
 
 // Submit stores a review for delivery. If a wait handler is blocking,
-// it wakes it to deliver immediately. If the agent hasn't polled yet,
-// the review is queued for the next poll.
+// it wakes it to deliver immediately. If the channel hasn't requested it yet,
+// the review is queued for the next request.
 func (fq *FeedbackQueue) Submit(review *FormattedReview) {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
@@ -108,8 +108,8 @@ func (fq *FeedbackQueue) WaitForFeedback() *FormattedReview {
 	return review
 }
 
-// SetPauseRequested sets the pause flag. The next review-status check
-// from the agent will see "pause_requested".
+// SetPauseRequested sets the pause flag. The next review_status call
+// from Claude Code will see "pause_requested".
 func (fq *FeedbackQueue) SetPauseRequested(paused bool) {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()

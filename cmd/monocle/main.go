@@ -14,24 +14,12 @@ import (
 )
 
 type CLI struct {
-	Start    StartCmd    `cmd:"" default:"withargs" help:"Start a new review session"`
-	Resume   ResumeCmd   `cmd:"" help:"Resume an existing session"`
-	Sessions SessionsCmd `cmd:"" help:"List sessions"`
-	Install  InstallCmd  `cmd:"" help:"Install MCP channel for Claude Code"`
+	Run       RunCmd       `cmd:"" default:"withargs" help:"Start a review session"`
+	Install   InstallCmd   `cmd:"" help:"Install MCP channel for Claude Code"`
 	Uninstall UninstallCmd `cmd:"" help:"Remove MCP channel for Claude Code"`
 }
 
-type StartCmd struct {
-	Agent string `help:"Agent type" default:"claude"`
-}
-
-type ResumeCmd struct {
-	SessionID string `arg:"" help:"Session ID to resume"`
-}
-
-type SessionsCmd struct {
-	Repo string `help:"Filter by repo root" default:"."`
-}
+type RunCmd struct{}
 
 type InstallCmd struct{}
 
@@ -48,43 +36,8 @@ func main() {
 	ctx.FatalIfErrorf(err)
 }
 
-func (cmd *StartCmd) Run() error {
-	return runTUI(cmd.Agent, "")
-}
-
-func (cmd *ResumeCmd) Run() error {
-	return runTUI("", cmd.SessionID)
-}
-
-func (cmd *SessionsCmd) Run() error {
-	database, err := db.Open(db.DBPath())
-	if err != nil {
-		return fmt.Errorf("open db: %w", err)
-	}
-	defer database.Close()
-
-	cfg := core.DefaultConfig()
-	repoRoot, _ := os.Getwd()
-	engine, err := core.NewEngine(cfg, database, repoRoot)
-	if err != nil {
-		return fmt.Errorf("create engine: %w", err)
-	}
-
-	sessions, err := engine.ListSessions(core.ListSessionsOptions{RepoRoot: cmd.Repo})
-	if err != nil {
-		return fmt.Errorf("list sessions: %w", err)
-	}
-
-	if len(sessions) == 0 {
-		fmt.Println("No sessions found.")
-		return nil
-	}
-
-	for _, s := range sessions {
-		fmt.Printf("%s  %s  %s  %d files  %d comments  round %d  %s\n",
-			s.ID[:8], s.Agent, s.RepoRoot, s.FileCount, s.CommentCount, s.ReviewRound, s.UpdatedAt.Format("2006-01-02 15:04"))
-	}
-	return nil
+func (cmd *RunCmd) Run() error {
+	return runTUI()
 }
 
 func (cmd *InstallCmd) Run() error {
@@ -137,15 +90,11 @@ func (cmd *UninstallCmd) Run() error {
 	return nil
 }
 
-func runTUI(agent, sessionID string) error {
+func runTUI() error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
 		cfg = core.DefaultConfig()
-	}
-
-	if agent != "" {
-		cfg.DefaultAgent = agent
 	}
 
 	// Open database
@@ -168,19 +117,13 @@ func runTUI(agent, sessionID string) error {
 		return fmt.Errorf("create engine: %w", err)
 	}
 
-	// Start or resume session
-	if sessionID != "" {
-		if _, err := engine.ResumeSession(sessionID); err != nil {
-			return fmt.Errorf("resume session: %w", err)
-		}
-	} else {
-		opts := core.SessionOptions{
-			Agent:    cfg.DefaultAgent,
-			RepoRoot: repoRoot,
-		}
-		if _, err := engine.StartSession(opts); err != nil {
-			return fmt.Errorf("start session: %w", err)
-		}
+	// Start session
+	opts := core.SessionOptions{
+		Agent:    "claude",
+		RepoRoot: repoRoot,
+	}
+	if _, err := engine.StartSession(opts); err != nil {
+		return fmt.Errorf("start session: %w", err)
 	}
 
 	// Start socket server

@@ -536,7 +536,7 @@ func (e *Engine) StartServer(socketPath string) error {
 	return e.server.Start(socketPath)
 }
 
-// -- Feedback (skills-based model) --
+// -- Feedback (MCP channel) --
 
 // PollFeedback returns pending feedback without blocking.
 func (e *Engine) PollFeedback() *FormattedReview {
@@ -553,7 +553,7 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 	if e.feedback.IsPauseRequested() {
 		return &ReviewStatusInfo{
 			Status:  "pause_requested",
-			Summary: "Your reviewer has requested a pause. Run `monocle get-feedback --wait` to receive feedback.",
+			Summary: "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
 		}
 	}
 
@@ -572,7 +572,7 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 		return &ReviewStatusInfo{
 			Status:       "pending",
 			CommentCount: commentCount,
-			Summary:      fmt.Sprintf("%d comment(s) pending review. Run `monocle get-feedback` to retrieve.", commentCount),
+			Summary:      fmt.Sprintf("%d comment(s) pending review.", commentCount),
 		}
 	}
 

@@ -65,6 +65,7 @@ func (m helpModel) View() string {
 			{"Enter", "Focus diff pane / toggle dir"},
 			{"Tab", "Switch pane focus"},
 			{"1/2", "Jump to pane"},
+			{"b", "Change base ref"},
 			{"f", "Toggle flat/tree view"},
 			{"z/e", "Collapse/expand all (tree)"},
 		}},
@@ -73,6 +74,7 @@ func (m helpModel) View() string {
 			{"v", "Visual select mode"},
 			{"r", "Toggle file reviewed"},
 			{"S / :submit", "Submit review (approve if no comments)"},
+			{"P / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{"D / :dismiss-outdated", "Dismiss outdated comments"},
 		}},
 		{"General", []struct{ key, desc string }{

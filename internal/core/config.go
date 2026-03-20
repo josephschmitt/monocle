@@ -30,7 +30,6 @@ func LoadConfig() (*types.Config, error) {
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() *types.Config {
 	return &types.Config{
-		DefaultAgent:   "claude",
 		IgnorePatterns: []string{},
 		DiffStyle:      "unified",
 		SidebarStyle:   "flat",

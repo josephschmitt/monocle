@@ -92,10 +92,10 @@ type EngineAPI interface {
 	IsAutoAdvanceRef() bool
 	RecentCommits(n int) ([]LogEntry, error)
 
-	// Server (socket for CLI subcommands)
+	// Server (socket for MCP channel)
 	StartServer(socketPath string) error
 
-	// Feedback (skills-based model)
+	// Feedback (MCP channel)
 	PollFeedback() *FormattedReview
 	WaitForFeedback() *FormattedReview
 	GetReviewStatusInfo() *ReviewStatusInfo

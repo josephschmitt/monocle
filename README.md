@@ -4,9 +4,9 @@ A terminal-based code review tool purpose-built for the agentic coding era.
 
 As AI agents take over the act of writing code, the developer's role shifts from author to **reviewer and director**. But today's tools don't serve that role well. You either rubber-stamp everything the agent produces or interrupt it on every file change. There's no equivalent of "leave a thoughtful PR review and let the author address it."
 
-Monocle fills that gap. It runs alongside Claude Code, Codex CLI, Gemini CLI, or any AI coding agent and provides a structured, bidirectional code review workflow — like GitHub PR reviews, but between you and your agent, right in the terminal.
+Monocle fills that gap. It runs alongside Claude Code and provides a structured, bidirectional code review workflow — like GitHub PR reviews, but between you and your agent, right in the terminal.
 
-The agent writes code. You review diffs, leave structured feedback (issues, suggestions, notes). Monocle delivers that feedback directly back into the agent's context. The agent addresses your comments and re-presents its changes. No copy-pasting, no window switching, no breaking flow.
+The agent writes code. You review diffs, leave structured feedback (issues, suggestions, notes). Monocle delivers that feedback directly back into Claude Code via an MCP channel. The agent addresses your comments and re-presents its changes. No copy-pasting, no window switching, no breaking flow.
 
 ## Why Monocle?
 
@@ -16,7 +16,7 @@ Without Monocle, the agentic review loop is broken:
 - **Context switching** — You bounce between editor, terminal, git diff, and agent window
 - **No iteration** — There's no way to say "fix these issues and show me again"
 
-Monocle integrates with agents via their native hook systems to create a real review loop. When the agent stops, you see the diffs, leave line-level comments, and submit a formatted review — the agent receives it, addresses the issues, and re-presents its changes for another round.
+Monocle integrates with Claude Code via an MCP channel to create a real review loop. When you're ready, you see the diffs, leave line-level comments, and submit a formatted review — Claude Code receives it as a channel notification, addresses the issues, and re-presents its changes for another round.
 
 ## Features
 
@@ -24,9 +24,9 @@ Monocle integrates with agents via their native hook systems to create a real re
 - **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level precision
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
 - **Automatic refresh** — File list and diffs update live as the agent makes changes
-- **Feedback queue** — Submit reviews while the agent is working; they're delivered when it next stops
+- **Feedback queue** — Submit reviews while the agent is working; they're delivered when Claude Code next checks
 - **Session persistence** — Reviews survive restarts via SQLite
-- **Agent hooks** — Direct integration with Claude Code, Gemini CLI, Codex CLI, and OpenCode
+- **MCP channel** — Push-based integration with Claude Code
 - **Nerd Font icons** — File type icons with true color in the sidebar
 
 ## Installation
@@ -88,15 +88,13 @@ devbox run -- make build
 
 ## Quick Start
 
-### 1. Install hooks for your agent
+### 1. Install the MCP channel
 
 ```bash
-monocle install              # Auto-detect installed agents
-monocle install claude       # Install for Claude Code specifically
-monocle install --global     # Install to global/user config
+monocle install
 ```
 
-This writes the hook configuration directly into your agent's settings file.
+This writes `channel.ts` to `~/.config/monocle/` and adds the monocle MCP server to `.mcp.json` in your project.
 
 ### 2. Start a review session
 
@@ -105,7 +103,7 @@ In one terminal pane, start monocle:
 monocle
 ```
 
-In another pane, run your agent as usual. Monocle picks up file changes via hooks automatically.
+In another pane, run Claude Code as usual. The MCP channel connects Monocle and Claude Code automatically.
 
 ### 3. Review and comment
 
@@ -119,51 +117,48 @@ In another pane, run your agent as usual. Monocle picks up file changes via hook
 | `v` | Visual select mode |
 | `r` | Mark file as reviewed |
 | `t` | Toggle unified/split diff |
+| `b` | Change base ref |
 | `S` | Submit review |
-| `A` | Approve (release agent) |
+| `P` | Pause (ask Claude Code to wait) |
 | `D` | Dismiss outdated comments |
 | `?` | Show all keybindings |
 | `q` | Quit |
 
 ### 4. Submit feedback
 
-Press `S` to submit your review. If the agent is stopped, the review is delivered immediately. If it's still working, the review is queued and delivered when the agent next stops.
+Press `S` to submit your review. If Claude Code is waiting (paused), the review is delivered immediately. If it's still working, the review is queued and delivered when Claude Code next checks for feedback.
 
-Press `A` to approve and release the agent without feedback.
+Press `P` to request a pause — Claude Code receives a notification and waits for your review before continuing.
 
 ## How It Works
 
 ```
-┌─────────────┐     hooks      ┌───────────────┐    socket     ┌──────────┐
-│  AI Agent   │ ──────────────▸│ monocle hook  │ ─────────────▸│ monocle  │
-│ (Claude,etc)│                │  (subcommand) │               │  (TUI)   │
-└─────────────┘                └───────────────┘               └──────────┘
-       ▲                                                            │
-       │                     formatted review                       │
-       └────────────────────────────────────────────────────────────┘
+┌─────────────┐    stdio/MCP    ┌───────────────┐    socket     ┌──────────┐
+│ Claude Code │ ◂──────────────▸│  channel.ts   │ ◂───────────▸│ monocle  │
+│             │                 │  (MCP server)  │               │  (TUI)   │
+└─────────────┘                 └───────────────┘               └──────────┘
 ```
 
-1. Your AI agent fires hooks as it works (file edits, stop events)
-2. `monocle hook` (a hidden subcommand) forwards these to the running `monocle` instance via a Unix domain socket
-3. Monocle updates its diff view in real time
-4. When you submit a review, it's formatted as structured markdown and injected back into the agent's context
-5. The agent sees your feedback and can address the issues
+1. `monocle install` writes a `channel.ts` MCP server and registers it in `.mcp.json`
+2. Claude Code spawns `channel.ts` as a subprocess and communicates via stdio
+3. `channel.ts` connects to the running Monocle TUI via a Unix domain socket
+4. As the agent makes changes, Monocle updates its diff view in real time
+5. When you submit a review, `channel.ts` pushes a notification to Claude Code
+6. Claude Code sees the feedback and addresses the issues
 
 ## CLI Commands
 
 ```
-monocle                     Start a new review session (default)
-monocle start --agent X     Start with a specific agent type
-monocle resume <session-id> Resume a previous session
-monocle sessions            List past sessions
-monocle install [agents]    Install hooks (auto-detect, or specify agents)
-monocle uninstall [agents]  Remove hooks
+monocle                     Start a review session (default)
+monocle install             Install MCP channel for Claude Code
+monocle uninstall           Remove MCP channel
 ```
 
 ## Requirements
 
 - A terminal with 256-color or true color support
 - A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
+- [Bun](https://bun.sh) for the MCP channel server
 - Go 1.23+ (for building from source)
 
 ## License

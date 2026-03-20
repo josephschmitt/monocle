@@ -106,7 +106,7 @@ func (m reviewSummaryModel) View() string {
 	if m.agentStopped {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("Review will be sent immediately"))
 	} else {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("Review will be queued until agent stops"))
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("Review will be queued until Claude Code checks for feedback"))
 	}
 	b.WriteString("\n\n")
 
