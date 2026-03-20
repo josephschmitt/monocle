@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/anthropics/monocle/internal/protocol"
 )
@@ -82,26 +83,38 @@ func (s *SocketServer) acceptLoop() {
 	}
 }
 
-// handleConnection reads an NDJSON message from conn and routes it to the engine.
+// handleConnection reads the first NDJSON message to determine connection type.
+// If it's a SubscribeMsg, the connection becomes persistent (bidirectional).
+// Otherwise, it's a one-shot request/response as before.
 func (s *SocketServer) handleConnection(conn net.Conn) {
-	defer conn.Close()
-
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
 	if !scanner.Scan() {
+		conn.Close()
 		return
 	}
 
 	line := scanner.Bytes()
 	if len(line) == 0 {
+		conn.Close()
 		return
 	}
 
 	msg, err := protocol.Decode(line)
 	if err != nil {
+		conn.Close()
 		return
 	}
+
+	// If the first message is a subscribe request, handle as persistent connection
+	if sub, ok := msg.(*protocol.SubscribeMsg); ok {
+		s.handleSubscription(conn, scanner, sub)
+		return
+	}
+
+	// One-shot request/response (backward compatible with CLI subcommands)
+	defer conn.Close()
 
 	response := s.handleMessage(msg)
 	if response == nil {
@@ -113,6 +126,78 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		return
 	}
 	_, _ = conn.Write(data)
+}
+
+// handleSubscription manages a persistent subscription connection.
+// It subscribes to requested engine events and pushes notifications,
+// while also accepting request/response messages on the same connection.
+func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner, sub *protocol.SubscribeMsg) {
+	defer conn.Close()
+
+	// Mutex for serialized writes to the connection
+	var writeMu sync.Mutex
+	writeMsg := func(msg any) error {
+		data, err := protocol.Encode(msg)
+		if err != nil {
+			return err
+		}
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_, err = conn.Write(data)
+		return err
+	}
+
+	// Send ack
+	if err := writeMsg(&protocol.SubscribeResponse{
+		Type:    protocol.TypeSubscribeResponse,
+		Success: true,
+	}); err != nil {
+		return
+	}
+
+	// Subscribe to requested events
+	var unsubs []UnsubscribeFunc
+	for _, eventName := range sub.Events {
+		kind := EventKind(eventName)
+		unsub := s.engine.On(kind, func(payload EventPayload) {
+			_ = writeMsg(&protocol.EventNotification{
+				Type:  protocol.TypeEventNotification,
+				Event: string(payload.Kind),
+				Payload: map[string]any{
+					"message": payload.Message,
+					"status":  payload.Status,
+					"path":    payload.Path,
+					"item_id": payload.ItemID,
+				},
+			})
+		})
+		unsubs = append(unsubs, unsub)
+	}
+
+	// Clean up subscriptions on exit
+	defer func() {
+		for _, unsub := range unsubs {
+			unsub()
+		}
+	}()
+
+	// Read loop: incoming messages are request/response (tool calls)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		msg, err := protocol.Decode(line)
+		if err != nil {
+			continue
+		}
+
+		response := s.handleMessage(msg)
+		if response != nil {
+			_ = writeMsg(response)
+		}
+	}
 }
 
 // handleMessage routes a decoded message to the appropriate engine handler.
