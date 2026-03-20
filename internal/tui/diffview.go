@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +29,9 @@ type diffViewLine struct {
 	isComment  bool
 	comment    *types.ReviewComment
 
+	// Paired line content for intra-line diff highlighting (unified mode)
+	pairContent string
+
 	// Split diff: right side
 	isSplit      bool
 	rightKind    types.DiffLineKind
@@ -48,6 +52,8 @@ type diffViewModel struct {
 	height    int
 	focused   bool
 	style     diffStyle
+	theme     *Theme
+	hl        *highlighter
 
 	// Visual mode
 	visualMode  bool
@@ -59,8 +65,11 @@ type diffViewModel struct {
 	contentTitle string
 }
 
-func newDiffViewModel() diffViewModel {
-	return diffViewModel{}
+func newDiffViewModel(theme *Theme) diffViewModel {
+	return diffViewModel{
+		theme: theme,
+		hl:    newHighlighter(),
+	}
 }
 
 type loadDiffMsg struct {
@@ -277,6 +286,8 @@ func (m *diffViewModel) buildLines() {
 			}
 		}
 	}
+
+	m.pairLines()
 }
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
@@ -365,6 +376,50 @@ func (m *diffViewModel) buildSplitLines() {
 	}
 }
 
+// pairLines pairs consecutive removed/added line runs for intra-line diff highlighting.
+func (m *diffViewModel) pairLines() {
+	i := 0
+	for i < len(m.lines) {
+		if m.lines[i].isHunk || m.lines[i].isComment {
+			i++
+			continue
+		}
+
+		// Find run of removed lines
+		removeStart := i
+		for i < len(m.lines) && m.lines[i].kind == types.DiffLineRemoved &&
+			!m.lines[i].isHunk && !m.lines[i].isComment {
+			i++
+		}
+		removeEnd := i
+
+		// Find run of added lines immediately after
+		addStart := i
+		for i < len(m.lines) && m.lines[i].kind == types.DiffLineAdded &&
+			!m.lines[i].isHunk && !m.lines[i].isComment {
+			i++
+		}
+		addEnd := i
+
+		// Pair them up
+		removeCount := removeEnd - removeStart
+		addCount := addEnd - addStart
+		pairCount := removeCount
+		if addCount < pairCount {
+			pairCount = addCount
+		}
+		for j := 0; j < pairCount; j++ {
+			m.lines[removeStart+j].pairContent = m.lines[addStart+j].content
+			m.lines[addStart+j].pairContent = m.lines[removeStart+j].content
+		}
+
+		// If we didn't advance past any removed/added, skip forward
+		if removeStart == removeEnd && addStart == addEnd {
+			i++
+		}
+	}
+}
+
 func (m diffViewModel) renderHunkHeader(line diffViewLine, selected bool) string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true)
 	content := style.Render(line.content)
@@ -382,7 +437,8 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 	return style.Render(fmt.Sprintf("%-*s", m.width, line.content))
 }
 
-func (m diffViewModel) renderContentLine(line diffViewLine, gutterWidth, contentWidth int, selected, inVisual bool) string {
+func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
+	gutterWidth := 4
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
 
 	content := line.content
@@ -390,16 +446,27 @@ func (m diffViewModel) renderContentLine(line diffViewLine, gutterWidth, content
 		content = content[:contentWidth-1] + "…"
 	}
 
-	full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
-
 	if (selected || inVisual) && m.focused {
+		full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
 		return lipgloss.NewStyle().Reverse(true).Render(full)
 	}
 
-	return full
+	// Render gutter
+	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if len(gutter) < gutterWidth {
+		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
+	}
+	renderedGutter := gutterStyle.Render(gutter)
+
+	// Render content with syntax highlighting (no diff background for content mode)
+	renderedContent := m.hl.highlightLine(m.path, content, nil, nil, nil, contentWidth)
+
+	return renderedGutter + renderedContent
 }
 
-func (m diffViewModel) renderDiffLine(line diffViewLine, gutterWidth, contentWidth int, selected, inVisual bool) string {
+func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
+	gutterWidth := 10
+
 	// Gutter
 	var gutter string
 	switch line.kind {
@@ -411,27 +478,59 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, gutterWidth, contentWid
 		gutter = fmt.Sprintf("%4d      ", line.oldLineNum)
 	}
 
-	// Content
+	// Truncate content
 	content := line.content
+	truncatedAt := -1
 	if len(content) > contentWidth {
-		content = content[:contentWidth-1] + "…"
+		truncatedAt = contentWidth - 1
+		content = content[:truncatedAt] + "…"
 	}
 
-	full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
-
+	// Selected: reverse the full plain line
 	if (selected || inVisual) && m.focused {
+		full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
 		return lipgloss.NewStyle().Reverse(true).Render(full)
 	}
 
-	// Color by diff type
+	// Determine backgrounds
+	var lineBg, changeBg color.Color
 	switch line.kind {
 	case types.DiffLineAdded:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(full)
+		lineBg = m.theme.AddedBg
+		changeBg = m.theme.AddedChangeBg
 	case types.DiffLineRemoved:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(full)
-	default:
-		return full
+		lineBg = m.theme.RemovedBg
+		changeBg = m.theme.RemovedChangeBg
 	}
+
+	// Render gutter
+	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if lineBg != nil {
+		gutterStyle = gutterStyle.Background(lineBg)
+	}
+	// Pad gutter to exact width
+	if len(gutter) < gutterWidth {
+		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
+	}
+	renderedGutter := gutterStyle.Render(gutter)
+
+	// Compute intra-line change ranges
+	var changes []changeRange
+	if line.pairContent != "" {
+		if line.kind == types.DiffLineRemoved {
+			changes, _ = computeChangeRanges(line.content, line.pairContent)
+		} else if line.kind == types.DiffLineAdded {
+			_, changes = computeChangeRanges(line.pairContent, line.content)
+		}
+		if truncatedAt >= 0 {
+			changes = clipChangeRanges(changes, truncatedAt)
+		}
+	}
+
+	// Render content with syntax highlighting
+	renderedContent := m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentWidth)
+
+	return renderedGutter + renderedContent
 }
 
 func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual bool) string {
@@ -442,70 +541,105 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 		contentW = 1
 	}
 
-	// Left side
-	var leftGutter, leftContent string
+	// Prepare left side raw content
+	var leftGutter, leftRawContent string
+	leftTruncatedAt := -1
 	if line.leftEmpty {
 		leftGutter = strings.Repeat(" ", gutterW)
-		leftContent = strings.Repeat(" ", contentW)
+		leftRawContent = ""
 	} else {
 		if line.oldLineNum > 0 {
 			leftGutter = fmt.Sprintf("%4d ", line.oldLineNum)
 		} else {
 			leftGutter = strings.Repeat(" ", gutterW)
 		}
-		lc := line.content
-		if len(lc) > contentW {
-			lc = lc[:contentW-1] + "…"
+		leftRawContent = line.content
+		if len(leftRawContent) > contentW {
+			leftTruncatedAt = contentW - 1
+			leftRawContent = leftRawContent[:leftTruncatedAt] + "…"
 		}
-		leftContent = fmt.Sprintf("%-*s", contentW, lc)
 	}
 
-	// Right side
-	var rightGutter, rightContent string
+	// Prepare right side raw content
+	var rightGutter, rightRawContent string
+	rightTruncatedAt := -1
 	if line.rightEmpty {
 		rightGutter = strings.Repeat(" ", gutterW)
-		rightContent = strings.Repeat(" ", contentW)
+		rightRawContent = ""
 	} else {
 		if line.rightLineNum > 0 {
 			rightGutter = fmt.Sprintf("%4d ", line.rightLineNum)
 		} else {
 			rightGutter = strings.Repeat(" ", gutterW)
 		}
-		rc := line.rightContent
-		if len(rc) > contentW {
-			rc = rc[:contentW-1] + "…"
+		rightRawContent = line.rightContent
+		if len(rightRawContent) > contentW {
+			rightTruncatedAt = contentW - 1
+			rightRawContent = rightRawContent[:rightTruncatedAt] + "…"
 		}
-		rightContent = fmt.Sprintf("%-*s", contentW, rc)
 	}
 
-	leftFull := leftGutter + leftContent
-	rightFull := rightGutter + rightContent
 	divider := "│"
 
+	// Selected: reverse the full plain line
 	if (selected || inVisual) && m.focused {
+		leftFull := leftGutter + fmt.Sprintf("%-*s", contentW, leftRawContent)
+		rightFull := rightGutter + fmt.Sprintf("%-*s", contentW, rightRawContent)
 		return lipgloss.NewStyle().Reverse(true).Render(leftFull + divider + rightFull)
 	}
 
-	// Color each side
-	leftStyled := m.colorSide(leftFull, line.kind, line.leftEmpty)
-	rightStyled := m.colorSide(rightFull, line.rightKind, line.rightEmpty)
+	// Compute intra-line change ranges for paired sides
+	var leftChanges, rightChanges []changeRange
+	if !line.leftEmpty && !line.rightEmpty &&
+		line.kind == types.DiffLineRemoved && line.rightKind == types.DiffLineAdded {
+		leftChanges, rightChanges = computeChangeRanges(line.content, line.rightContent)
+		if leftTruncatedAt >= 0 {
+			leftChanges = clipChangeRanges(leftChanges, leftTruncatedAt)
+		}
+		if rightTruncatedAt >= 0 {
+			rightChanges = clipChangeRanges(rightChanges, rightTruncatedAt)
+		}
+	}
+
+	// Render each side
+	leftStyled := m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW)
+	rightStyled := m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
 }
 
-func (m diffViewModel) colorSide(text string, kind types.DiffLineKind, empty bool) string {
+func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int) string {
 	if empty {
-		return lipgloss.NewStyle().Faint(true).Render(text)
+		full := strings.Repeat(" ", gutterW) + strings.Repeat(" ", contentW)
+		return lipgloss.NewStyle().Faint(true).Render(full)
 	}
+
+	// Determine backgrounds
+	var lineBg, changeBg color.Color
 	switch kind {
 	case types.DiffLineAdded:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(text)
+		lineBg = m.theme.AddedBg
+		changeBg = m.theme.AddedChangeBg
 	case types.DiffLineRemoved:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(text)
-	default:
-		return text
+		lineBg = m.theme.RemovedBg
+		changeBg = m.theme.RemovedChangeBg
 	}
+
+	// Render gutter
+	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if lineBg != nil {
+		gutterStyle = gutterStyle.Background(lineBg)
+	}
+	if len(gutter) < gutterW {
+		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
+	}
+	renderedGutter := gutterStyle.Render(gutter)
+
+	// Render content with syntax highlighting
+	renderedContent := m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentW)
+
+	return renderedGutter + renderedContent
 }
 
 func (m *diffViewModel) ensureVisible() {

@@ -1,6 +1,10 @@
 package tui
 
-import "charm.land/lipgloss/v2"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Theme holds all styles for the TUI.
 type Theme struct {
@@ -16,6 +20,12 @@ type Theme struct {
 	Context        lipgloss.Style
 	HunkHeader     lipgloss.Style
 	LineNumber     lipgloss.Style
+
+	// Diff backgrounds (true color for syntax highlighting overlay)
+	AddedBg         color.Color
+	RemovedBg       color.Color
+	AddedChangeBg   color.Color
+	RemovedChangeBg color.Color
 
 	// Comment styles
 	CommentBorder  lipgloss.Style
@@ -62,5 +72,10 @@ func DefaultTheme() Theme {
 
 		ModalOverlay:   lipgloss.NewStyle().Background(lipgloss.Color("0")),
 		ModalBorder:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
+
+		AddedBg:         lipgloss.Color("#132a13"),
+		RemovedBg:       lipgloss.Color("#2a1313"),
+		AddedChangeBg:   lipgloss.Color("#1f4a1f"),
+		RemovedChangeBg: lipgloss.Color("#4a1f1f"),
 	}
 }

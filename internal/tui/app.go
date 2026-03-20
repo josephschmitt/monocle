@@ -93,7 +93,7 @@ func NewApp(engine core.EngineAPI) appModel {
 	return appModel{
 		engine:        engine,
 		sidebar:       sidebar,
-		diffView:      newDiffViewModel(),
+		diffView:      newDiffViewModel(&theme),
 		statusBar:     newStatusBarModel(theme),
 		commentEditor: newCommentEditorModel(theme),
 		reviewSummary: newReviewSummaryModel(theme),
