@@ -129,7 +129,15 @@ In one terminal, start Monocle:
 monocle
 ```
 
-In another, run Claude Code as usual. The MCP channel connects them automatically — Claude Code gets three new tools (`review_status`, `get_feedback`, `submit_plan`) and starts receiving your review feedback as channel notifications.
+In another, start Claude Code with the development channels flag (required during the [channels research preview](https://code.claude.com/docs/en/channels)):
+
+```bash
+claude --dangerously-load-development-channels server:monocle
+```
+
+This tells Claude Code to load the monocle MCP server as a channel. Claude Code gets three new tools (`review_status`, `get_feedback`, `submit_plan`) and starts receiving your review feedback as push notifications.
+
+> **Note:** The `--dangerously-load-development-channels` flag is only needed during the channels research preview. Once channels are generally available, `monocle install` will be all you need.
 
 ### 3. The review loop
 
@@ -157,7 +165,7 @@ monocle uninstall [--global] Remove MCP channel
 
 ## Requirements
 
-- [Claude Code](https://claude.com/claude-code) v2.1.80+
+- [Claude Code](https://claude.com/claude-code) v2.1.80+ (channels require claude.ai login, not API keys)
 - [Bun](https://bun.sh) (runtime for the MCP channel server)
 - A terminal with 256-color or true color support
 - A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
