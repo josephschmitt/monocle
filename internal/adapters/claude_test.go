@@ -41,7 +41,7 @@ func TestClaudeChannelInstall(t *testing.T) {
 	}
 
 	// Install
-	if err := adapter.Install(); err != nil {
+	if err := adapter.Install(false); err != nil {
 		t.Fatalf("install failed: %v", err)
 	}
 
@@ -108,10 +108,10 @@ func TestClaudeChannelInstall_Idempotent(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	adapter := &ClaudeAdapter{}
-	if err := adapter.Install(); err != nil {
+	if err := adapter.Install(false); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	if err := adapter.Install(); err != nil {
+	if err := adapter.Install(false); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 
@@ -133,10 +133,10 @@ func TestClaudeChannelUninstall(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	adapter := &ClaudeAdapter{}
-	if err := adapter.Install(); err != nil {
+	if err := adapter.Install(false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if err := adapter.Uninstall(); err != nil {
+	if err := adapter.Uninstall(false); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 

@@ -28,18 +28,20 @@ func (a *ClaudeAdapter) Detect() bool {
 }
 
 // Install writes channel.ts and configures .mcp.json.
-func (a *ClaudeAdapter) Install() error {
+// If global is true, .mcp.json is written to ~/.mcp.json instead of the project.
+func (a *ClaudeAdapter) Install(global bool) error {
 	if err := a.installChannel(); err != nil {
 		return fmt.Errorf("install channel: %w", err)
 	}
-	if err := a.configureMCP(); err != nil {
+	if err := a.configureMCP(global); err != nil {
 		return fmt.Errorf("configure mcp: %w", err)
 	}
 	return nil
 }
 
 // Uninstall removes channel.ts, deps, and unconfigures .mcp.json.
-func (a *ClaudeAdapter) Uninstall() error {
+// If global is true, removes from ~/.mcp.json instead of the project.
+func (a *ClaudeAdapter) Uninstall(global bool) error {
 	channelPath := channelTSPath()
 	if channelPath != "" {
 		dir := filepath.Dir(channelPath)
@@ -49,7 +51,7 @@ func (a *ClaudeAdapter) Uninstall() error {
 		}
 	}
 
-	if err := a.unconfigureMCP(); err != nil {
+	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
 	}
 	return nil
@@ -72,13 +74,13 @@ func (a *ClaudeAdapter) IsInstalled() (bool, error) {
 }
 
 // InstallDetails returns additional info about what was installed.
-func (a *ClaudeAdapter) InstallDetails() []string {
+func (a *ClaudeAdapter) InstallDetails(global bool) []string {
 	var details []string
 	channelPath := channelTSPath()
 	if channelPath != "" {
 		details = append(details, fmt.Sprintf("channel → %s", channelPath))
 	}
-	details = append(details, "mcp → .mcp.json")
+	details = append(details, fmt.Sprintf("mcp → %s", mcpJSONPath(global)))
 
 	if _, err := exec.LookPath("bun"); err != nil {
 		details = append(details, "⚠ bun not found in PATH — install bun for MCP channel support")
@@ -131,9 +133,10 @@ func (a *ClaudeAdapter) installChannel() error {
 	return nil
 }
 
-// configureMCP adds monocle to .mcp.json in the current project.
-func (a *ClaudeAdapter) configureMCP() error {
-	mcpPath := ".mcp.json"
+// configureMCP adds monocle to .mcp.json.
+// If global is true, writes to ~/.mcp.json; otherwise to ./.mcp.json.
+func (a *ClaudeAdapter) configureMCP(global bool) error {
+	mcpPath := mcpJSONPath(global)
 	data, err := ReadJSONFile(mcpPath)
 	if err != nil {
 		return err
@@ -159,8 +162,9 @@ func (a *ClaudeAdapter) configureMCP() error {
 }
 
 // unconfigureMCP removes monocle from .mcp.json.
-func (a *ClaudeAdapter) unconfigureMCP() error {
-	mcpPath := ".mcp.json"
+// If global is true, operates on ~/.mcp.json; otherwise ./.mcp.json.
+func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
+	mcpPath := mcpJSONPath(global)
 	data, err := ReadJSONFile(mcpPath)
 	if err != nil {
 		return err
@@ -178,6 +182,19 @@ func (a *ClaudeAdapter) unconfigureMCP() error {
 	}
 
 	return WriteJSONFile(mcpPath, data)
+}
+
+// mcpJSONPath returns the path for .mcp.json.
+// If global is true, returns ~/.mcp.json; otherwise ./.mcp.json.
+func mcpJSONPath(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ".mcp.json"
+		}
+		return filepath.Join(home, ".mcp.json")
+	}
+	return ".mcp.json"
 }
 
 // channelTSPath returns the path for channel.ts in the XDG config directory.

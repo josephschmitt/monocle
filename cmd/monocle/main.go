@@ -21,9 +21,13 @@ type CLI struct {
 
 type RunCmd struct{}
 
-type InstallCmd struct{}
+type InstallCmd struct {
+	Global bool `help:"Install to user-level ~/.mcp.json instead of project" default:"false"`
+}
 
-type UninstallCmd struct{}
+type UninstallCmd struct {
+	Global bool `help:"Remove from user-level ~/.mcp.json instead of project" default:"false"`
+}
 
 func main() {
 	cli := CLI{}
@@ -57,12 +61,12 @@ func (cmd *InstallCmd) Run() error {
 		return nil
 	}
 
-	if err := adapter.Install(); err != nil {
+	if err := adapter.Install(cmd.Global); err != nil {
 		return fmt.Errorf("install: %w", err)
 	}
 
 	fmt.Println("  ✓ claude: MCP channel installed")
-	for _, detail := range adapter.InstallDetails() {
+	for _, detail := range adapter.InstallDetails(cmd.Global) {
 		fmt.Printf("    %s\n", detail)
 	}
 
@@ -82,7 +86,7 @@ func (cmd *UninstallCmd) Run() error {
 		return nil
 	}
 
-	if err := adapter.Uninstall(); err != nil {
+	if err := adapter.Uninstall(cmd.Global); err != nil {
 		return fmt.Errorf("uninstall: %w", err)
 	}
 
