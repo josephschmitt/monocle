@@ -19,6 +19,16 @@ const (
 	focusMain
 )
 
+// layoutMode determines whether panes are arranged horizontally or stacked vertically.
+type layoutMode int
+
+const (
+	layoutHorizontal layoutMode = iota
+	layoutStacked
+)
+
+const layoutBreakpoint = 80
+
 // overlayKind identifies which (if any) overlay is shown.
 type overlayKind int
 
@@ -74,6 +84,7 @@ type appModel struct {
 
 	focus   focusTarget
 	overlay overlayKind
+	layout  layoutMode
 
 	commandMode   bool
 	commandBuffer string
@@ -138,28 +149,53 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		const statusBarHeight = 1
 		const chrome = titleHeight + statusBarHeight + borderH
 
-		// Sidebar gets 1/3 of width (lazygit-style), clamped to [30, 50]
-		sidebarContentW := m.width / 3
-		if sidebarContentW < 30 {
-			sidebarContentW = 30
-		}
-		if sidebarContentW > 50 {
-			sidebarContentW = 50
-		}
-
-		sidebarOuter := sidebarContentW + borderW
-		mainOuter := m.width - sidebarOuter
-		if mainOuter < 0 {
-			mainOuter = 0
-		}
 		contentHeight := m.height - chrome
 		if contentHeight < 0 {
 			contentHeight = 0
 		}
-		m.sidebar.width = sidebarContentW
-		m.sidebar.height = contentHeight
-		m.diffView.width = mainOuter - borderW
-		m.diffView.height = contentHeight
+
+		if m.width < layoutBreakpoint {
+			m.layout = layoutStacked
+
+			contentW := m.width - borderW
+			if contentW < 0 {
+				contentW = 0
+			}
+
+			sidebarH := stackedSidebarHeight(contentHeight, len(m.sidebar.files), len(m.sidebar.contentItems))
+			diffH := contentHeight - sidebarH - borderH // account for sidebar border
+			if diffH < 0 {
+				diffH = 0
+			}
+
+			m.sidebar.width = contentW
+			m.sidebar.height = sidebarH
+			m.diffView.width = contentW
+			m.diffView.height = diffH
+		} else {
+			m.layout = layoutHorizontal
+
+			// Sidebar gets 1/3 of width (lazygit-style), clamped to [30, 50]
+			sidebarContentW := m.width / 3
+			if sidebarContentW < 30 {
+				sidebarContentW = 30
+			}
+			if sidebarContentW > 50 {
+				sidebarContentW = 50
+			}
+
+			sidebarOuter := sidebarContentW + borderW
+			mainOuter := m.width - sidebarOuter
+			if mainOuter < 0 {
+				mainOuter = 0
+			}
+
+			m.sidebar.width = sidebarContentW
+			m.sidebar.height = contentHeight
+			m.diffView.width = mainOuter - borderW
+			m.diffView.height = contentHeight
+		}
+
 		m.statusBar.width = m.width
 		m.commentEditor.width = m.width
 		m.commentEditor.height = m.height
@@ -585,6 +621,28 @@ type baseRefChangedMsg struct {
 	err string
 }
 
+// stackedSidebarHeight returns a compact height for the sidebar in stacked mode.
+// It accounts for the header line plus one line per file/content item, clamped
+// to [4, 10] rows and at most 40% of totalHeight.
+func stackedSidebarHeight(totalHeight, fileCount, contentItemCount int) int {
+	// 1 header line + 1 per item
+	h := 1 + fileCount + contentItemCount
+	if h < 4 {
+		h = 4
+	}
+	if h > 10 {
+		h = 10
+	}
+	maxH := totalHeight * 40 / 100
+	if maxH < 4 {
+		maxH = 4
+	}
+	if h > maxH {
+		h = maxH
+	}
+	return h
+}
+
 // diffViewShowsValidFile returns true if the diff view is showing a file
 // that's still in the current file list (not stale or a content item).
 func (m appModel) diffViewShowsValidFile() bool {
@@ -766,25 +824,41 @@ func (m appModel) View() tea.View {
 		mainStyle = m.theme.MainPaneFocused
 	}
 
-	sidebarView := sidebarStyle.
-		Width(m.sidebar.width).
-		Height(m.sidebar.height).
-		Render(m.sidebar.View())
+	var body string
 
-	// Measure actual rendered sidebar width and give diff view the rest
-	sidebarRenderedW := lipgloss.Width(sidebarView)
-	diffContentW := m.width - sidebarRenderedW - 2 // 2 = main pane border
-	if diffContentW < 0 {
-		diffContentW = 0
+	if m.layout == layoutStacked {
+		sidebarView := sidebarStyle.
+			Width(m.sidebar.width).
+			Height(m.sidebar.height).
+			Render(m.sidebar.View())
+
+		mainView := mainStyle.
+			Width(m.diffView.width).
+			Height(m.diffView.height).
+			Render(m.diffView.View())
+
+		body = lipgloss.JoinVertical(lipgloss.Left, sidebarView, mainView)
+	} else {
+		sidebarView := sidebarStyle.
+			Width(m.sidebar.width).
+			Height(m.sidebar.height).
+			Render(m.sidebar.View())
+
+		// Measure actual rendered sidebar width and give diff view the rest
+		sidebarRenderedW := lipgloss.Width(sidebarView)
+		diffContentW := m.width - sidebarRenderedW - 2 // 2 = main pane border
+		if diffContentW < 0 {
+			diffContentW = 0
+		}
+		m.diffView.width = diffContentW
+
+		mainView := mainStyle.
+			Width(diffContentW).
+			Height(m.diffView.height).
+			Render(m.diffView.View())
+
+		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	}
-	m.diffView.width = diffContentW
-
-	mainView := mainStyle.
-		Width(diffContentW).
-		Height(m.diffView.height).
-		Render(m.diffView.View())
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	m.statusBar.width = m.width
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
