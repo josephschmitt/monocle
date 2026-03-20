@@ -21,6 +21,8 @@ type KeyMap struct {
 	TreeMode   key.Binding
 	Collapse   key.Binding
 	ExpandAll  key.Binding
+	ScrollMainDown key.Binding
+	ScrollMainUp   key.Binding
 	FocusSwap key.Binding
 	Quit      key.Binding
 }
@@ -45,6 +47,8 @@ func DefaultKeyMap() KeyMap {
 		TreeMode:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "tree mode")),
 		Collapse:   key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "collapse all")),
 		ExpandAll:  key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expand all")),
+		ScrollMainDown: key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "scroll diff down")),
+		ScrollMainUp:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "scroll diff up")),
 		FocusSwap: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
 		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}

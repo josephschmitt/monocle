@@ -14,6 +14,7 @@ type sidebarModel struct {
 	files        []types.ChangedFile
 	contentItems []types.ContentItem
 	cursor       int
+	offset       int // scroll offset for viewport
 	width        int
 	height       int
 	focused      bool
@@ -58,18 +59,22 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			if m.cursor < m.totalItems()-1 {
 				m.cursor++
 			}
+			m.ensureVisible()
 			return m, m.selectCurrent()
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			m.ensureVisible()
 			return m, m.selectCurrent()
 		case "g":
 			m.cursor = 0
+			m.ensureVisible()
 		case "G":
 			if total := m.totalItems(); total > 0 {
 				m.cursor = total - 1
 			}
+			m.ensureVisible()
 		case "enter":
 			if m.treeMode {
 				idx := m.cursor
@@ -85,6 +90,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 					if total := m.totalItems(); total > 0 && m.cursor >= total {
 						m.cursor = total - 1
 					}
+					m.ensureVisible()
 					return m, nil
 				}
 			}
@@ -93,11 +99,13 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			if m.cursor < m.totalItems()-1 {
 				m.cursor++
 			}
+			m.ensureVisible()
 			return m, m.selectCurrent()
 		case "[":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			m.ensureVisible()
 			return m, m.selectCurrent()
 		case "f":
 			currentPath := ""
@@ -114,6 +122,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			if total := m.totalItems(); total > 0 && m.cursor >= total {
 				m.cursor = total - 1
 			}
+			m.ensureVisible()
 			return m, m.selectCurrent()
 		case "z":
 			if m.treeMode {
@@ -127,6 +136,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 				if total := m.totalItems(); total > 0 && m.cursor >= total {
 					m.cursor = total - 1
 				}
+				m.ensureVisible()
 				return m, m.selectCurrent()
 			}
 		}
@@ -141,7 +151,7 @@ func (m sidebarModel) View() string {
 
 	var b strings.Builder
 
-	// Header
+	// Header (always visible, not scrollable)
 	fileCount := len(m.files)
 	reviewedCount := 0
 	for _, f := range m.files {
@@ -158,42 +168,48 @@ func (m sidebarModel) View() string {
 	b.WriteString(headerStyle.Render(header))
 	b.WriteString("\n")
 
-	// File list
-	idx := 0
-	if m.treeMode {
-		for _, item := range m.visibleItems {
-			var line string
-			if item.isDir {
-				line = m.renderDirItem(item, idx == m.cursor)
-			} else {
-				line = m.renderTreeFileItem(item, idx == m.cursor)
+	// Render only items within the viewport [offset, offset+viewportHeight)
+	fileItemCt := m.fileItemCount()
+	totalItems := m.totalItems()
+	availableLines := m.viewportHeight()
+
+	linesUsed := 0
+	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
+		// Content section divider (when crossing from files to content items)
+		if idx == fileItemCt && len(m.contentItems) > 0 {
+			if linesUsed+2 > availableLines {
+				break
 			}
-			b.WriteString(line)
 			b.WriteString("\n")
-			idx++
-		}
-	} else {
-		for _, f := range m.files {
-			line := m.renderFileItem(f, idx == m.cursor)
-			b.WriteString(line)
+			divider := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Width(m.width)
+			b.WriteString(divider.Render(" Review Items"))
 			b.WriteString("\n")
-			idx++
+			linesUsed += 2
+			if linesUsed >= availableLines {
+				break
+			}
 		}
-	}
 
-	// Content items section
-	if len(m.contentItems) > 0 {
-		b.WriteString("\n")
-		divider := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Width(m.width)
-		b.WriteString(divider.Render(" Review Items"))
-		b.WriteString("\n")
-
-		for _, item := range m.contentItems {
-			line := m.renderContentItem(item, idx == m.cursor)
-			b.WriteString(line)
-			b.WriteString("\n")
-			idx++
+		var line string
+		if idx < fileItemCt {
+			if m.treeMode {
+				item := m.visibleItems[idx]
+				if item.isDir {
+					line = m.renderDirItem(item, idx == m.cursor)
+				} else {
+					line = m.renderTreeFileItem(item, idx == m.cursor)
+				}
+			} else {
+				line = m.renderFileItem(m.files[idx], idx == m.cursor)
+			}
+		} else {
+			contentIdx := idx - fileItemCt
+			line = m.renderContentItem(m.contentItems[contentIdx], idx == m.cursor)
 		}
+
+		b.WriteString(line)
+		b.WriteString("\n")
+		linesUsed++
 	}
 
 	return b.String()
@@ -497,6 +513,49 @@ func (m *sidebarModel) collapseAll() {
 	}
 	if total := m.totalItems(); total > 0 && m.cursor >= total {
 		m.cursor = total - 1
+	}
+	m.ensureVisible()
+}
+
+// ensureVisible adjusts the scroll offset so the cursor stays within the
+// visible viewport, mirroring diffViewModel.ensureVisible.
+func (m *sidebarModel) ensureVisible() {
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	vh := m.viewportHeight()
+	if vh > 0 && m.cursor >= m.offset+vh {
+		m.offset = m.cursor - vh + 1
+	}
+}
+
+// viewportHeight returns how many item lines fit in the sidebar viewport.
+// The header always takes 1 line; remaining space is for scrollable items.
+func (m sidebarModel) viewportHeight() int {
+	h := m.height - 1 // header line
+	if h < 0 {
+		h = 0
+	}
+	return h
+}
+
+// clampOffset ensures offset and cursor are within valid bounds after the
+// item list changes externally.
+func (m *sidebarModel) clampOffset() {
+	total := m.totalItems()
+	if total == 0 {
+		m.cursor = 0
+		m.offset = 0
+		return
+	}
+	if m.cursor >= total {
+		m.cursor = total - 1
+	}
+	if m.offset >= total {
+		m.offset = total - 1
+	}
+	if m.offset < 0 {
+		m.offset = 0
 	}
 }
 

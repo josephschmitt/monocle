@@ -209,6 +209,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = msg.files
 		m.sidebar.contentItems = msg.items
 		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
 		// Sync status bar file count
 		session := m.engine.GetSession()
 		if session != nil {
@@ -234,6 +235,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshResultMsg:
 		m.sidebar.files = msg.files
 		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
 		m.statusBar.fileCount = len(msg.files)
 		if msg.path != "" && msg.result != nil {
 			m.diffView, _ = m.diffView.Update(loadDiffMsg{
@@ -252,6 +254,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileChangedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
 		m.statusBar.fileCount = len(m.sidebar.files)
 		session := m.engine.GetSession()
 		if session != nil {
@@ -274,6 +277,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contentItemMsg:
 		m.sidebar.contentItems = m.engine.GetContentItems()
+		m.sidebar.clampOffset()
 		// Auto-select only if nothing else is available (no files, no current view)
 		if m.diffView.path == "" && len(m.sidebar.files) == 0 && msg.id != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
@@ -475,6 +479,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				autoActive: engine.IsAutoAdvanceRef(),
 			}
 		}
+
+	case "J":
+		// Scroll diff view down regardless of focus
+		m.diffView.ScrollDown()
+		return m, nil
+
+	case "K":
+		// Scroll diff view up regardless of focus
+		m.diffView.ScrollUp()
+		return m, nil
 
 	case "enter":
 		if m.focus == focusSidebar {

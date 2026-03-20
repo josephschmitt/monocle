@@ -642,6 +642,32 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	return renderedGutter + renderedContent
 }
 
+// ScrollDown scrolls the diff viewport down by one line.
+func (m *diffViewModel) ScrollDown() {
+	maxOffset := len(m.lines) - m.height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.offset < maxOffset {
+		m.offset++
+		// Keep cursor within visible viewport
+		if m.cursor < m.offset {
+			m.cursor = m.nearestSelectable(m.offset, 1)
+		}
+	}
+}
+
+// ScrollUp scrolls the diff viewport up by one line.
+func (m *diffViewModel) ScrollUp() {
+	if m.offset > 0 {
+		m.offset--
+		// Keep cursor within visible viewport
+		if m.cursor >= m.offset+m.height {
+			m.cursor = m.nearestSelectable(m.offset+m.height-1, -1)
+		}
+	}
+}
+
 func (m *diffViewModel) ensureVisible() {
 	if m.cursor < m.offset {
 		m.offset = m.cursor
