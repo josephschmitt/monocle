@@ -1,4 +1,4 @@
-# Monocle
+# o_(◉) monocle
 
 A terminal-based code review tool that creates a real feedback loop between you and Claude Code.
 
