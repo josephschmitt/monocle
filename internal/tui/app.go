@@ -846,7 +846,7 @@ type loadContentMsg struct {
 // View renders the full TUI layout.
 func (m appModel) View() tea.View {
 	// Title bar
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4")).Render(" monocle")
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4")).Render(" o_(◉) monocle")
 	titleBar := lipgloss.NewStyle().Width(m.width).Render(title)
 
 	sidebarStyle := m.theme.SidebarBorder
