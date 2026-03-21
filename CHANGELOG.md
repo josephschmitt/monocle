@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/josephschmitt/monocle/compare/v0.7.0...v0.8.0) (2026-03-21)
+
+
+### Features
+
+* add config settings for layout, diff style, wrap, tab size, and context lines ([f10848e](https://github.com/josephschmitt/monocle/commit/f10848e616cccb75d67819e94305da5f433f9a7e))
+
 ## [0.7.0](https://github.com/josephschmitt/monocle/compare/v0.6.0...v0.7.0) (2026-03-21)
 
 
