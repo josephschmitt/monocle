@@ -55,6 +55,9 @@ type diffViewModel struct {
 	theme     *Theme
 	hl        *highlighter
 
+	hOffset int  // horizontal scroll offset (runes)
+	wrap    bool // soft-wrap long lines
+
 	// Visual mode
 	visualMode  bool
 	visualStart int
@@ -105,6 +108,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		} else {
 			m.cursor = m.nearestSelectable(0, 1)
 			m.offset = 0
+			m.hOffset = 0
 			m.visualMode = false
 		}
 		return m, nil
@@ -119,6 +123,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.buildContentLines(msg.content)
 		m.cursor = m.nearestSelectable(0, 1)
 		m.offset = 0
+		m.hOffset = 0
 		m.visualMode = false
 		return m, nil
 
@@ -164,6 +169,18 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			}
 		case "esc":
 			m.visualMode = false
+		case "h", "left":
+			m.ScrollLeft()
+		case "l", "right":
+			m.ScrollRight()
+		case "0":
+			m.hOffset = 0
+		case "w":
+			m.wrap = !m.wrap
+			if m.wrap {
+				m.hOffset = 0
+			}
+			m.ensureVisible()
 		case "t":
 			// Toggle diff style
 			if m.style == diffStyleUnified {
@@ -211,14 +228,9 @@ func (m diffViewModel) View() string {
 	}
 
 	var b strings.Builder
+	screenUsed := 0
 
-	visibleLines := m.height
-	end := m.offset + visibleLines
-	if end > len(m.lines) {
-		end = len(m.lines)
-	}
-
-	for i := m.offset; i < end; i++ {
+	for i := m.offset; i < len(m.lines) && screenUsed < m.height; i++ {
 		line := m.lines[i]
 		selected := i == m.cursor
 		inVisual := m.visualMode && m.inVisualRange(i)
@@ -240,9 +252,17 @@ func (m diffViewModel) View() string {
 			rendered = m.renderDiffLine(line, gutterWidth, contentWidth, selected, inVisual)
 		}
 
-		b.WriteString(rendered)
-		if i < end-1 {
-			b.WriteString("\n")
+		// rendered may contain multiple lines in wrap mode
+		renderedLines := strings.Split(rendered, "\n")
+		for _, rl := range renderedLines {
+			if screenUsed >= m.height {
+				break
+			}
+			if screenUsed > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(rl)
+			screenUsed++
 		}
 	}
 
@@ -441,14 +461,25 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	gutterWidth := 4
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
 
+	// Wrap mode
+	if m.wrap {
+		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
+			nil, nil, selected || inVisual)
+	}
+
+	// Scroll mode: apply horizontal offset, then clip
 	content := line.content
-	if len(content) > contentWidth {
-		content = content[:contentWidth-1] + "…"
+	if m.hOffset > 0 {
+		content, _ = applyHOffset(content, m.hOffset)
+	}
+	contentRunes := []rune(content)
+	if len(contentRunes) > contentWidth {
+		content = string(contentRunes[:contentWidth])
 	}
 
 	if (selected || inVisual) && m.focused {
-		full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
-		return lipgloss.NewStyle().Reverse(true).Render(full)
+		padded := gutter + padToWidth(content, contentWidth)
+		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
 	// Render gutter
@@ -457,8 +488,6 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
 	renderedGutter := gutterStyle.Render(gutter)
-
-	// Render content with syntax highlighting (no diff background for content mode)
 	renderedContent := m.hl.highlightLine(m.path, content, nil, nil, nil, contentWidth)
 
 	return renderedGutter + renderedContent
@@ -478,20 +507,6 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		gutter = fmt.Sprintf("%4d      ", line.oldLineNum)
 	}
 
-	// Truncate content
-	content := line.content
-	truncatedAt := -1
-	if len(content) > contentWidth {
-		truncatedAt = contentWidth - 1
-		content = content[:truncatedAt] + "…"
-	}
-
-	// Selected: reverse the full plain line
-	if (selected || inVisual) && m.focused {
-		full := gutter + fmt.Sprintf("%-*s", contentWidth, content)
-		return lipgloss.NewStyle().Reverse(true).Render(full)
-	}
-
 	// Determine backgrounds
 	var lineBg, changeBg color.Color
 	switch line.kind {
@@ -503,12 +518,33 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		changeBg = m.theme.RemovedChangeBg
 	}
 
+	// Wrap mode: render line as multiple screen lines
+	if m.wrap {
+		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
+			lineBg, changeBg, selected || inVisual)
+	}
+
+	// Scroll mode: apply horizontal offset, then clip
+	content := line.content
+	if m.hOffset > 0 {
+		content, _ = applyHOffset(content, m.hOffset)
+	}
+	contentRunes := []rune(content)
+	if len(contentRunes) > contentWidth {
+		content = string(contentRunes[:contentWidth])
+	}
+
+	// Selected: reverse the full plain line
+	if (selected || inVisual) && m.focused {
+		padded := gutter + padToWidth(content, contentWidth)
+		return lipgloss.NewStyle().Reverse(true).Render(padded)
+	}
+
 	// Render gutter
 	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	if lineBg != nil {
 		gutterStyle = gutterStyle.Background(lineBg)
 	}
-	// Pad gutter to exact width
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
@@ -522,12 +558,12 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		} else if line.kind == types.DiffLineAdded {
 			_, changes = computeChangeRanges(line.pairContent, line.content)
 		}
-		if truncatedAt >= 0 {
-			changes = clipChangeRanges(changes, truncatedAt)
+		if m.hOffset > 0 {
+			changes = shiftChangeRanges(changes, m.hOffset)
 		}
+		changes = clipChangeRanges(changes, contentWidth)
 	}
 
-	// Render content with syntax highlighting
 	renderedContent := m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentWidth)
 
 	return renderedGutter + renderedContent
@@ -554,9 +590,13 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 			leftGutter = strings.Repeat(" ", gutterW)
 		}
 		leftRawContent = line.content
-		if len(leftRawContent) > contentW {
-			leftTruncatedAt = contentW - 1
-			leftRawContent = leftRawContent[:leftTruncatedAt] + "…"
+		if m.hOffset > 0 {
+			leftRawContent, _ = applyHOffset(leftRawContent, m.hOffset)
+		}
+		leftRunes := []rune(leftRawContent)
+		if len(leftRunes) > contentW {
+			leftTruncatedAt = contentW
+			leftRawContent = string(leftRunes[:contentW])
 		}
 	}
 
@@ -573,9 +613,13 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 			rightGutter = strings.Repeat(" ", gutterW)
 		}
 		rightRawContent = line.rightContent
-		if len(rightRawContent) > contentW {
-			rightTruncatedAt = contentW - 1
-			rightRawContent = rightRawContent[:rightTruncatedAt] + "…"
+		if m.hOffset > 0 {
+			rightRawContent, _ = applyHOffset(rightRawContent, m.hOffset)
+		}
+		rightRunes := []rune(rightRawContent)
+		if len(rightRunes) > contentW {
+			rightTruncatedAt = contentW
+			rightRawContent = string(rightRunes[:contentW])
 		}
 	}
 
@@ -583,8 +627,8 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 
 	// Selected: reverse the full plain line
 	if (selected || inVisual) && m.focused {
-		leftFull := leftGutter + fmt.Sprintf("%-*s", contentW, leftRawContent)
-		rightFull := rightGutter + fmt.Sprintf("%-*s", contentW, rightRawContent)
+		leftFull := leftGutter + padToWidth(leftRawContent, contentW)
+		rightFull := rightGutter + padToWidth(rightRawContent, contentW)
 		return lipgloss.NewStyle().Reverse(true).Render(leftFull + divider + rightFull)
 	}
 
@@ -593,6 +637,10 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	if !line.leftEmpty && !line.rightEmpty &&
 		line.kind == types.DiffLineRemoved && line.rightKind == types.DiffLineAdded {
 		leftChanges, rightChanges = computeChangeRanges(line.content, line.rightContent)
+		if m.hOffset > 0 {
+			leftChanges = shiftChangeRanges(leftChanges, m.hOffset)
+			rightChanges = shiftChangeRanges(rightChanges, m.hOffset)
+		}
 		if leftTruncatedAt >= 0 {
 			leftChanges = clipChangeRanges(leftChanges, leftTruncatedAt)
 		}
@@ -642,15 +690,185 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	return renderedGutter + renderedContent
 }
 
+// padToWidth pads a string with spaces to reach the target visual width,
+// using lipgloss.Width for correct measurement of multi-byte characters.
+func padToWidth(s string, width int) string {
+	visWidth := lipgloss.Width(s)
+	if visWidth >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-visWidth)
+}
+
+// renderWrappedLine renders a single logical line wrapped across multiple screen lines.
+// Used by both renderDiffLine and renderContentLine in wrap mode.
+func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, contentWidth int,
+	lineBg, changeBg color.Color, highlight bool) string {
+
+	chunks := wrapContent(content, contentWidth)
+	blankGutter := strings.Repeat(" ", gutterWidth)
+
+	var parts []string
+	for ci, chunk := range chunks {
+		chunkGutter := gutter
+		if ci > 0 {
+			chunkGutter = blankGutter
+		}
+
+		if highlight && m.focused {
+			full := chunkGutter + fmt.Sprintf("%-*s", contentWidth, chunk)
+			parts = append(parts, lipgloss.NewStyle().Reverse(true).Render(full))
+			continue
+		}
+
+		// Render gutter
+		gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		if lineBg != nil {
+			gutterStyle = gutterStyle.Background(lineBg)
+		}
+		if len(chunkGutter) < gutterWidth {
+			chunkGutter = fmt.Sprintf("%-*s", gutterWidth, chunkGutter)
+		}
+		renderedGutter := gutterStyle.Render(chunkGutter)
+
+		// Highlight each chunk independently (change ranges not mapped across chunks)
+		renderedContent := m.hl.highlightLine(m.path, chunk, lineBg, changeBg, nil, contentWidth)
+
+		parts = append(parts, renderedGutter+renderedContent)
+	}
+	return strings.Join(parts, "\n")
+}
+
+// ScrollRight scrolls the diff content right by a tab stop.
+func (m *diffViewModel) ScrollRight() {
+	if m.wrap {
+		return
+	}
+	m.hOffset += 4
+}
+
+// ScrollLeft scrolls the diff content left by a tab stop.
+func (m *diffViewModel) ScrollLeft() {
+	if m.wrap {
+		return
+	}
+	m.hOffset -= 4
+	if m.hOffset < 0 {
+		m.hOffset = 0
+	}
+}
+
+// contentWidthFor returns the available content width (excluding gutter) for a line.
+func (m diffViewModel) contentWidthFor(line diffViewLine) int {
+	if line.isSplit {
+		return m.width/2 - 5 - 1 // gutterW=5, divider=1
+	}
+	if m.contentMode {
+		return m.width - 4 // gutterWidth=4
+	}
+	return m.width - 10 // gutterWidth=10
+}
+
+// screenLinesFor returns how many screen lines a logical line occupies.
+// In non-wrap mode or for split/hunk/comment lines, this is always 1.
+func (m diffViewModel) screenLinesFor(idx int) int {
+	if !m.wrap {
+		return 1
+	}
+	if idx < 0 || idx >= len(m.lines) {
+		return 1
+	}
+	line := m.lines[idx]
+	if line.isHunk || line.isComment || line.isSplit {
+		return 1
+	}
+	cw := m.contentWidthFor(line)
+	if cw <= 0 {
+		return 1
+	}
+	contentLen := len([]rune(line.content))
+	if contentLen <= cw {
+		return 1
+	}
+	return (contentLen + cw - 1) / cw
+}
+
+// applyHOffset slices content at the horizontal offset (rune-aware).
+// Returns the sliced content and whether there is hidden content to the left.
+func applyHOffset(content string, hOffset int) (string, bool) {
+	if hOffset <= 0 {
+		return content, false
+	}
+	runes := []rune(content)
+	if hOffset >= len(runes) {
+		return "", true
+	}
+	return string(runes[hOffset:]), true
+}
+
+// shiftChangeRanges adjusts byte-offset change ranges by a rune offset.
+// This is approximate since rune offset != byte offset for multi-byte chars,
+// but works correctly for ASCII content (the common case for code).
+func shiftChangeRanges(changes []changeRange, runeOffset int) []changeRange {
+	if runeOffset <= 0 || len(changes) == 0 {
+		return changes
+	}
+	var result []changeRange
+	for _, cr := range changes {
+		shifted := changeRange{start: cr.start - runeOffset, end: cr.end - runeOffset}
+		if shifted.end <= 0 {
+			continue
+		}
+		if shifted.start < 0 {
+			shifted.start = 0
+		}
+		result = append(result, shifted)
+	}
+	return result
+}
+
+// wrapContent splits content into chunks of at most width runes.
+func wrapContent(content string, width int) []string {
+	if width <= 0 {
+		return []string{content}
+	}
+	runes := []rune(content)
+	if len(runes) <= width {
+		return []string{content}
+	}
+	var chunks []string
+	for len(runes) > 0 {
+		end := width
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[:end]))
+		runes = runes[end:]
+	}
+	return chunks
+}
+
 // ScrollDown scrolls the diff viewport down by one line.
 func (m *diffViewModel) ScrollDown() {
+	// In wrap mode, compute max offset accounting for wrapped lines
+	if m.wrap {
+		// Check if there's content below to scroll to
+		screenLines := 0
+		for i := m.offset; i < len(m.lines); i++ {
+			screenLines += m.screenLinesFor(i)
+			if screenLines > m.height {
+				m.offset++
+				return
+			}
+		}
+		return
+	}
 	maxOffset := len(m.lines) - m.height
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
 	if m.offset < maxOffset {
 		m.offset++
-		// Keep cursor within visible viewport
 		if m.cursor < m.offset {
 			m.cursor = m.nearestSelectable(m.offset, 1)
 		}
@@ -661,8 +879,7 @@ func (m *diffViewModel) ScrollDown() {
 func (m *diffViewModel) ScrollUp() {
 	if m.offset > 0 {
 		m.offset--
-		// Keep cursor within visible viewport
-		if m.cursor >= m.offset+m.height {
+		if !m.wrap && m.cursor >= m.offset+m.height {
 			m.cursor = m.nearestSelectable(m.offset+m.height-1, -1)
 		}
 	}
@@ -672,8 +889,20 @@ func (m *diffViewModel) ensureVisible() {
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}
-	if m.cursor >= m.offset+m.height {
-		m.offset = m.cursor - m.height + 1
+	if !m.wrap {
+		if m.cursor >= m.offset+m.height {
+			m.offset = m.cursor - m.height + 1
+		}
+		return
+	}
+	// Wrap mode: count screen lines from offset to cursor
+	screenLines := 0
+	for i := m.offset; i <= m.cursor && i < len(m.lines); i++ {
+		screenLines += m.screenLinesFor(i)
+	}
+	for screenLines > m.height && m.offset < m.cursor {
+		screenLines -= m.screenLinesFor(m.offset)
+		m.offset++
 	}
 }
 

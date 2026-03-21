@@ -97,6 +97,13 @@ User reviews, adds comments, submits → FeedbackQueue releases → notification
   - `feat!: ...` or `BREAKING CHANGE:` in body — Breaking change (major version bump)
   - Scope is optional: `feat(tui): ...`, `fix(db): ...`
 
+## Monocle Integration
+
+When in plan mode and the Monocle MCP channel is connected:
+- After writing or updating the plan file, also call the `submit_plan` MCP tool with the plan title and content
+- Use the plan filename as the `id` parameter so updates replace the previous version
+- This makes the plan visible in Monocle's TUI for real-time reviewer feedback
+
 ## Common Tasks
 
 ### Add a new TUI component

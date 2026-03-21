@@ -490,6 +490,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView.ScrollUp()
 		return m, nil
 
+	case "H":
+		// Scroll diff view left regardless of focus
+		m.diffView.ScrollLeft()
+		return m, nil
+
+	case "L":
+		// Scroll diff view right regardless of focus
+		m.diffView.ScrollRight()
+		return m, nil
+
 	case "enter":
 		if m.focus == focusSidebar {
 			// In tree mode, enter on a directory toggles collapse
@@ -840,35 +850,42 @@ func (m appModel) View() tea.View {
 
 	var body string
 
+	// lipgloss v2: Width/Height set the OUTER dimensions (including border).
+	// Our content dimensions (sidebar.width, diffView.width, etc.) are the
+	// inner content size, so we add borderW/borderH to get the outer size.
+	const bw = 2 // border left + right
+	const bh = 2 // border top + bottom
+
 	if m.layout == layoutStacked {
 		sidebarView := sidebarStyle.
-			Width(m.sidebar.width).
-			Height(m.sidebar.height).
+			Width(m.sidebar.width + bw).
+			Height(m.sidebar.height + bh).
 			Render(m.sidebar.View())
 
 		mainView := mainStyle.
-			Width(m.diffView.width).
-			Height(m.diffView.height).
+			Width(m.diffView.width + bw).
+			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
 		body = lipgloss.JoinVertical(lipgloss.Left, sidebarView, mainView)
 	} else {
 		sidebarView := sidebarStyle.
-			Width(m.sidebar.width).
-			Height(m.sidebar.height).
+			Width(m.sidebar.width + bw).
+			Height(m.sidebar.height + bh).
 			Render(m.sidebar.View())
 
 		// Measure actual rendered sidebar width and give diff view the rest
 		sidebarRenderedW := lipgloss.Width(sidebarView)
-		diffContentW := m.width - sidebarRenderedW - 2 // 2 = main pane border
+		diffOuterW := m.width - sidebarRenderedW
+		diffContentW := diffOuterW - bw
 		if diffContentW < 0 {
 			diffContentW = 0
 		}
 		m.diffView.width = diffContentW
 
 		mainView := mainStyle.
-			Width(diffContentW).
-			Height(m.diffView.height).
+			Width(diffOuterW).
+			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
 		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
