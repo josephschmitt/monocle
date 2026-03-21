@@ -15,8 +15,8 @@ func TestLayoutModeBreakpoint(t *testing.T) {
 		want  layoutMode
 	}{
 		{"wide terminal selects horizontal", 120, layoutHorizontal},
-		{"exactly at breakpoint selects horizontal", 80, layoutHorizontal},
-		{"narrow terminal selects stacked", 79, layoutStacked},
+		{"exactly at breakpoint selects horizontal", 110, layoutHorizontal},
+		{"narrow terminal selects stacked", 109, layoutStacked},
 		{"very narrow terminal selects stacked", 40, layoutStacked},
 	}
 	for _, tt := range tests {
@@ -71,11 +71,14 @@ func TestWidthAllocationHorizontal(t *testing.T) {
 		t.Errorf("sidebar.width = %d, want [30, 50]", app.sidebar.width)
 	}
 
-	// Diff view should get the remaining space
+	// Diff view should get the remaining space, with at least 80 chars
 	sidebarOuter := app.sidebar.width + 2 // border
 	expectedDiffW := 120 - sidebarOuter - 2
 	if app.diffView.width != expectedDiffW {
 		t.Errorf("diffView.width = %d, want %d", app.diffView.width, expectedDiffW)
+	}
+	if app.diffView.width < 80 {
+		t.Errorf("diffView.width = %d, want >= 80", app.diffView.width)
 	}
 }
 
@@ -115,10 +118,10 @@ func TestLayoutTransitionOnResize(t *testing.T) {
 	}
 
 	// Resize wide again → horizontal
-	updated, _ = app.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	updated, _ = app.Update(tea.WindowSizeMsg{Width: 110, Height: 40})
 	app = updated.(appModel)
 	if app.layout != layoutHorizontal {
-		t.Fatal("expected horizontal at width 100")
+		t.Fatal("expected horizontal at width 110")
 	}
 }
 

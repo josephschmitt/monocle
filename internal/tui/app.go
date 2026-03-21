@@ -28,7 +28,7 @@ const (
 	layoutStacked
 )
 
-const layoutBreakpoint = 80
+const layoutBreakpoint = 110
 
 // overlayKind identifies which (if any) overlay is shown.
 type overlayKind int
@@ -176,8 +176,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.layout = layoutHorizontal
 
-			// Sidebar gets 1/3 of width (lazygit-style), clamped to [30, 50]
+			// Prioritize diff area: guarantee 80 chars for diff content,
+			// then let sidebar grow up to 1/3 of width (clamped to [30, 50]).
+			const minDiffContent = 80
+			maxSidebarForDiff := m.width - minDiffContent - 2*borderW // room left after diff + both borders
 			sidebarContentW := m.width / 3
+			if sidebarContentW > maxSidebarForDiff {
+				sidebarContentW = maxSidebarForDiff
+			}
 			if sidebarContentW < 30 {
 				sidebarContentW = 30
 			}
