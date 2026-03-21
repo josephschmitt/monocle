@@ -213,12 +213,12 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 func (m diffViewModel) View() string {
 	if m.width == 0 || len(m.lines) == 0 {
 		if m.path == "" {
-			return centerText("Select a file to view diff", m.width, m.height)
+			return renderSplash(m.width, m.height)
 		}
 		if m.contentMode {
-			return centerText("Empty content", m.width, m.height)
+			return centerBlock([]string{"Empty content"}, m.width, m.height)
 		}
-		return centerText("No changes", m.width, m.height)
+		return centerBlock([]string{"No changes"}, m.width, m.height)
 	}
 
 	var b strings.Builder
@@ -1168,19 +1168,3 @@ func formatInlineComment(c *types.ReviewComment) string {
 		fmt.Sprintf("  └───%s", strings.Repeat("─", 25))
 }
 
-func centerText(text string, width, height int) string {
-	if width == 0 || height == 0 {
-		return text
-	}
-	var b strings.Builder
-	padTop := height / 3
-	for i := 0; i < padTop; i++ {
-		b.WriteString("\n")
-	}
-	padLeft := (width - len(text)) / 2
-	if padLeft < 0 {
-		padLeft = 0
-	}
-	b.WriteString(strings.Repeat(" ", padLeft) + text)
-	return b.String()
-}
