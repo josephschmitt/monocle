@@ -305,7 +305,7 @@ func (m *diffViewModel) buildLines() {
 			content:    fmt.Sprintf("@@ -%d,%d +%d,%d @@ %s", hunk.OldStart, hunk.OldCount, hunk.NewStart, hunk.NewCount, hunk.Header),
 		})
 
-		// Diff lines
+		// Diff lines with inline comments inserted after target line
 		for _, dl := range hunk.Lines {
 			m.lines = append(m.lines, diffViewLine{
 				kind:       dl.Kind,
@@ -313,16 +313,17 @@ func (m *diffViewModel) buildLines() {
 				newLineNum: dl.NewLineNum,
 				content:    expandTabs(dl.Content),
 			})
-		}
 
-		// Inline comments for this hunk
-		for _, c := range m.comments {
-			if c.TargetRef == m.path && c.LineStart >= hunk.NewStart && c.LineStart <= hunk.NewStart+hunk.NewCount {
-				m.lines = append(m.lines, diffViewLine{
-					isComment: true,
-					comment:   &c,
-					content:   formatInlineComment(&c),
-				})
+			// Insert comments targeting this new-file line
+			for i := range m.comments {
+				c := &m.comments[i]
+				if c.TargetRef == m.path && c.LineStart == dl.NewLineNum && dl.NewLineNum > 0 {
+					m.lines = append(m.lines, diffViewLine{
+						isComment: true,
+						comment:   c,
+						content:   formatInlineComment(c),
+					})
+				}
 			}
 		}
 	}
@@ -416,16 +417,8 @@ func (m *diffViewModel) buildSplitLines() {
 		}
 		flushPairs()
 
-		// Inline comments
-		for _, c := range m.comments {
-			if c.TargetRef == m.path && c.LineStart >= hunk.NewStart && c.LineStart <= hunk.NewStart+hunk.NewCount {
-				m.lines = append(m.lines, diffViewLine{
-					isComment: true,
-					comment:   &c,
-					content:   formatInlineComment(&c),
-				})
-			}
-		}
+		// Insert inline comments after their target lines
+		m.insertInlineComments(hunk)
 	}
 }
 
@@ -483,11 +476,40 @@ func (m diffViewModel) renderHunkHeader(line diffViewLine, selected bool) string
 }
 
 func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	// Pick color based on comment type
+	var clr color.Color
+	if line.comment != nil {
+		switch line.comment.Type {
+		case types.CommentIssue:
+			clr = lipgloss.Color("1")
+		case types.CommentSuggestion:
+			clr = lipgloss.Color("3")
+		case types.CommentNote:
+			clr = lipgloss.Color("4")
+		case types.CommentPraise:
+			clr = lipgloss.Color("2")
+		default:
+			clr = lipgloss.Color("3")
+		}
+	} else {
+		clr = lipgloss.Color("3")
+	}
+
+	style := lipgloss.NewStyle().Foreground(clr)
 	if selected {
 		style = style.Reverse(true)
 	}
-	return style.Render(fmt.Sprintf("%-*s", m.width, line.content))
+
+	// Render each sub-line individually to preserve multi-line box structure
+	subLines := strings.Split(line.content, "\n")
+	var b strings.Builder
+	for i, sl := range subLines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(style.Render(fmt.Sprintf("%-*s", m.width, sl)))
+	}
+	return b.String()
 }
 
 func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
@@ -1016,10 +1038,9 @@ func (m diffViewModel) lineNumAt(idx int) int {
 		return 0
 	}
 	line := m.lines[idx]
-	if line.newLineNum > 0 {
-		return line.newLineNum
-	}
-	return line.oldLineNum
+	// Only return new-file line numbers — comments reference lines that
+	// exist in the current working tree so the agent can act on them.
+	return line.newLineNum
 }
 
 func (m diffViewModel) currentDiffLine() int {
@@ -1043,6 +1064,48 @@ func openFileCommentCmd(path string, targetType types.TargetType) tea.Cmd {
 	return func() tea.Msg {
 		return openCommentMsg{path: path, lineStart: 0, lineEnd: 0, targetType: targetType}
 	}
+}
+
+// insertInlineComments inserts comment lines after the diff line they target.
+// It walks the existing lines (from the current hunk) in reverse-insertion order.
+func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
+	// Collect comments for this hunk
+	var hunkComments []*types.ReviewComment
+	for i := range m.comments {
+		c := &m.comments[i]
+		if c.TargetRef == m.path && c.LineStart >= hunk.NewStart && c.LineStart <= hunk.NewStart+hunk.NewCount {
+			hunkComments = append(hunkComments, c)
+		}
+	}
+	if len(hunkComments) == 0 {
+		return
+	}
+
+	// Walk lines and insert comments after matching lines
+	var result []diffViewLine
+	for _, line := range m.lines {
+		result = append(result, line)
+
+		// Match on new-file line number (rightLineNum in split mode)
+		lineNum := line.rightLineNum
+		if lineNum == 0 {
+			lineNum = line.newLineNum
+		}
+		if lineNum == 0 {
+			continue
+		}
+
+		for _, c := range hunkComments {
+			if c.LineStart == lineNum {
+				result = append(result, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
+		}
+	}
+	m.lines = result
 }
 
 func formatInlineComment(c *types.ReviewComment) string {
