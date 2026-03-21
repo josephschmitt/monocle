@@ -57,6 +57,7 @@ type diffViewModel struct {
 
 	hOffset int  // horizontal scroll offset (runes)
 	wrap    bool // soft-wrap long lines
+	tabSize int  // spaces per tab character
 
 	// Visual mode
 	visualMode  bool
@@ -297,7 +298,7 @@ func (m *diffViewModel) buildLines() {
 				kind:       dl.Kind,
 				oldLineNum: dl.OldLineNum,
 				newLineNum: dl.NewLineNum,
-				content:    expandTabs(dl.Content),
+				content:    m.expandTabs(dl.Content),
 			})
 
 			// Insert comments targeting this new-file line
@@ -325,7 +326,7 @@ func (m *diffViewModel) buildContentLines(content string) {
 		m.lines = append(m.lines, diffViewLine{
 			kind:       types.DiffLineContext,
 			newLineNum: i + 1,
-			content:    expandTabs(line),
+			content:    m.expandTabs(line),
 		})
 	}
 }
@@ -362,7 +363,7 @@ func (m *diffViewModel) buildSplitLines() {
 				if i < len(removed) {
 					sl.kind = types.DiffLineRemoved
 					sl.oldLineNum = removed[i].OldLineNum
-					sl.content = expandTabs(removed[i].Content)
+					sl.content = m.expandTabs(removed[i].Content)
 				} else {
 					sl.leftEmpty = true
 					sl.kind = types.DiffLineContext
@@ -370,7 +371,7 @@ func (m *diffViewModel) buildSplitLines() {
 				if i < len(added) {
 					sl.rightKind = types.DiffLineAdded
 					sl.rightLineNum = added[i].NewLineNum
-					sl.rightContent = expandTabs(added[i].Content)
+					sl.rightContent = m.expandTabs(added[i].Content)
 				} else {
 					sl.rightEmpty = true
 					sl.rightKind = types.DiffLineContext
@@ -389,7 +390,7 @@ func (m *diffViewModel) buildSplitLines() {
 				added = append(added, dl)
 			case types.DiffLineContext:
 				flushPairs()
-				expanded := expandTabs(dl.Content)
+				expanded := m.expandTabs(dl.Content)
 				m.lines = append(m.lines, diffViewLine{
 					isSplit:      true,
 					kind:         types.DiffLineContext,
@@ -871,8 +872,12 @@ func shiftChangeRanges(changes []changeRange, runeOffset int) []changeRange {
 // expandTabs replaces tab characters with spaces for consistent width calculation.
 // Tabs are 1 rune but render as multiple visual columns in the terminal, which
 // breaks rune-based width truncation in the diff view.
-func expandTabs(s string) string {
-	return strings.ReplaceAll(s, "\t", "    ")
+func (m *diffViewModel) expandTabs(s string) string {
+	tabSize := m.tabSize
+	if tabSize <= 0 {
+		tabSize = 4
+	}
+	return strings.ReplaceAll(s, "\t", strings.Repeat(" ", tabSize))
 }
 
 // wrapContent splits content into chunks of at most width runes.

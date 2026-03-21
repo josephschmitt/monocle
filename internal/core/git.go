@@ -67,8 +67,15 @@ func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 }
 
 // FileDiff returns the parsed diff for a single file.
-func (g *GitClient) FileDiff(baseRef, path string) (*types.DiffResult, error) {
-	out, err := g.run("diff", baseRef, "--", path)
+// contextLines controls the number of unchanged lines around each hunk (-U flag).
+// A value of 0 or less uses git's default (3).
+func (g *GitClient) FileDiff(baseRef, path string, contextLines int) (*types.DiffResult, error) {
+	args := []string{"diff"}
+	if contextLines > 0 {
+		args = append(args, fmt.Sprintf("-U%d", contextLines))
+	}
+	args = append(args, baseRef, "--", path)
+	out, err := g.run(args...)
 	if err != nil {
 		// diff returns exit 1 when there are differences, which is expected
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {

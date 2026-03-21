@@ -40,10 +40,6 @@ type sidebarSelectMsg struct {
 	contentID string
 }
 
-type sidebarStyleChangedMsg struct {
-	style string
-}
-
 type recentFadeMsg struct {
 	path string
 }
@@ -115,13 +111,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 				m.cursor = total - 1
 			}
 			m.ensureVisible()
-			style := "flat"
-			if m.treeMode {
-				style = "tree"
-			}
-			return m, tea.Batch(m.selectCurrent(), func() tea.Msg {
-				return sidebarStyleChangedMsg{style: style}
-			})
+			return m, m.selectCurrent()
 		case "z":
 			if m.treeMode {
 				m.collapseAll()

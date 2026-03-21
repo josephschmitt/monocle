@@ -81,7 +81,7 @@ func TestGitFileDiff(t *testing.T) {
 	dir, baseRef := setupTestRepo(t)
 	g := NewGitClient(dir)
 
-	result, err := g.FileDiff(baseRef, "hello.go")
+	result, err := g.FileDiff(baseRef, "hello.go", 0)
 	if err != nil {
 		t.Fatalf("FileDiff: %v", err)
 	}

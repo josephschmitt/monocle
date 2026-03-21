@@ -202,7 +202,7 @@ func (e *Engine) GetFileDiff(path string) (*types.DiffResult, error) {
 	if session == nil {
 		return nil, fmt.Errorf("no active session")
 	}
-	return e.git.FileDiff(session.BaseRef, path)
+	return e.git.FileDiff(session.BaseRef, path, e.cfg.ContextLines)
 }
 
 func (e *Engine) GetFileContent(path string) (string, error) {

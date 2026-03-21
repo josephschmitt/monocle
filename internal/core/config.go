@@ -34,7 +34,10 @@ func DefaultConfig() *types.Config {
 		IgnorePatterns: []string{},
 		DiffStyle:      "unified",
 		SidebarStyle:   "flat",
+		Layout:         "auto",
 		Theme:          "default",
+		TabSize:        4,
+		ContextLines:   3,
 		ReviewFormat: types.ReviewFormatConfig{
 			IncludeSnippets: true,
 			MaxSnippetLines: 10,

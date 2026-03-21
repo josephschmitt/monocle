@@ -125,6 +125,52 @@ func TestLayoutTransitionOnResize(t *testing.T) {
 	}
 }
 
+func TestLayoutConfigForceSideBySide(t *testing.T) {
+	m := NewApp(nil)
+	m.layoutConfig = "side-by-side"
+
+	// Even at a narrow width (below breakpoint), should be horizontal
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
+	app := updated.(appModel)
+	if app.layout != layoutHorizontal {
+		t.Errorf("side-by-side config at width 60: layout = %d, want %d (horizontal)", app.layout, layoutHorizontal)
+	}
+}
+
+func TestLayoutConfigForceStacked(t *testing.T) {
+	m := NewApp(nil)
+	m.layoutConfig = "stacked"
+
+	// Even at a wide width (above breakpoint), should be stacked
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app := updated.(appModel)
+	if app.layout != layoutStacked {
+		t.Errorf("stacked config at width 120: layout = %d, want %d (stacked)", app.layout, layoutStacked)
+	}
+}
+
+func TestLayoutConfigAutoDefault(t *testing.T) {
+	// Empty string (no config) should behave like "auto"
+	m := NewApp(nil)
+	if m.layoutConfig != "" {
+		t.Fatalf("expected empty layoutConfig from NewApp(nil), got %q", m.layoutConfig)
+	}
+
+	// Wide → horizontal
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app := updated.(appModel)
+	if app.layout != layoutHorizontal {
+		t.Errorf("auto at width 120: want horizontal, got %d", app.layout)
+	}
+
+	// Narrow → stacked
+	updated, _ = app.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
+	app = updated.(appModel)
+	if app.layout != layoutStacked {
+		t.Errorf("auto at width 60: want stacked, got %d", app.layout)
+	}
+}
+
 func TestOverlayOn(t *testing.T) {
 	t.Run("preserves base content on both sides", func(t *testing.T) {
 		// Build a base tall enough for the min topPad of 5

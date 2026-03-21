@@ -98,9 +98,10 @@ type appModel struct {
 	refPicker     refPickerModel
 	confirm       confirmModel
 
-	focus   focusTarget
-	overlay overlayKind
-	layout  layoutMode
+	focus        focusTarget
+	overlay      overlayKind
+	layout       layoutMode
+	layoutConfig string
 
 	commandMode   bool
 	commandBuffer string
@@ -117,15 +118,33 @@ func NewApp(engine core.EngineAPI) appModel {
 	theme := DefaultTheme()
 	sidebar := newSidebarModel()
 	sidebar.focused = true
+	dv := newDiffViewModel(&theme)
+	var layoutCfg string
+
 	if engine != nil {
-		if cfg := engine.GetConfig(); cfg != nil && cfg.SidebarStyle == "tree" {
-			sidebar.treeMode = true
+		if cfg := engine.GetConfig(); cfg != nil {
+			if cfg.SidebarStyle == "tree" {
+				sidebar.treeMode = true
+			}
+			if cfg.DiffStyle == "split" {
+				dv.style = diffStyleSplit
+			}
+			if cfg.Layout != "" {
+				layoutCfg = cfg.Layout
+			}
+			if cfg.Wrap {
+				dv.wrap = true
+			}
+			if cfg.TabSize > 0 {
+				dv.tabSize = cfg.TabSize
+			}
 		}
 	}
+
 	return appModel{
 		engine:        engine,
 		sidebar:       sidebar,
-		diffView:      newDiffViewModel(&theme),
+		diffView:      dv,
 		statusBar:     newStatusBarModel(theme),
 		commentEditor: newCommentEditorModel(theme),
 		reviewSummary: newReviewSummaryModel(theme),
@@ -134,6 +153,7 @@ func NewApp(engine core.EngineAPI) appModel {
 		confirm:       newConfirmModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
+		layoutConfig:  layoutCfg,
 		theme:         theme,
 		keys:          DefaultKeyMap(),
 	}
@@ -176,9 +196,20 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			contentHeight = 0
 		}
 
-		if m.width < layoutBreakpoint {
+		switch m.layoutConfig {
+		case "side-by-side":
+			m.layout = layoutHorizontal
+		case "stacked":
 			m.layout = layoutStacked
+		default: // "auto" or ""
+			if m.width < layoutBreakpoint {
+				m.layout = layoutStacked
+			} else {
+				m.layout = layoutHorizontal
+			}
+		}
 
+		if m.layout == layoutStacked {
 			contentW := m.width - borderW
 			if contentW < 0 {
 				contentW = 0
@@ -195,8 +226,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffView.width = contentW
 			m.diffView.height = diffH
 		} else {
-			m.layout = layoutHorizontal
-
 			// Prioritize diff area: guarantee 80 chars for diff content,
 			// then let sidebar grow up to 1/3 of width (clamped to [30, 50]).
 			const minDiffContent = 80
@@ -465,13 +494,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case sidebarStyleChangedMsg:
-		cfg := m.engine.GetConfig()
-		if cfg != nil {
-			cfg.SidebarStyle = msg.style
-			_ = m.engine.SaveConfig()
-		}
-		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -582,6 +604,20 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "P":
 		// Toggle pause
 		return m, m.executeCommand("pause")
+
+	case "T":
+		// Cycle layout: auto → side-by-side → stacked → auto
+		switch m.layoutConfig {
+		case "", "auto":
+			m.layoutConfig = "side-by-side"
+		case "side-by-side":
+			m.layoutConfig = "stacked"
+		default:
+			m.layoutConfig = "auto"
+		}
+		return m, func() tea.Msg {
+			return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+		}
 
 	case "b":
 		// Open ref picker
