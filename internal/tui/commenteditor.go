@@ -110,13 +110,7 @@ func (m commentEditorModel) View() string {
 		return ""
 	}
 
-	modalWidth := m.width * 2 / 3
-	if modalWidth < 40 {
-		modalWidth = 40
-	}
-	if modalWidth > m.width-4 {
-		modalWidth = m.width - 4
-	}
+	modalWidth := calcModalWidth(m.width, 0)
 
 	var b strings.Builder
 

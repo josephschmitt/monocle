@@ -40,12 +40,15 @@ func (m helpModel) View() string {
 		return ""
 	}
 
-	modalWidth := m.width * 2 / 3
-	if modalWidth < 40 {
-		modalWidth = 40
-	}
-	if modalWidth > 60 {
-		modalWidth = 60
+	modalWidth := calcModalWidth(m.width, 0)
+
+	// Inner content width: modalWidth minus border (2) and padding (4)
+	const keyCol = 20
+	const indent = 2
+	const borderPad = 6 // 2 border + 4 padding
+	descW := modalWidth - borderPad - indent - keyCol
+	if descW < 10 {
+		descW = 10
 	}
 
 	var b strings.Builder
@@ -89,15 +92,21 @@ func (m helpModel) View() string {
 		}},
 	}
 
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true).Width(20)
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+	indentStyle := lipgloss.NewStyle().Width(indent)
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true).Width(keyCol)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Width(descW)
 	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
 
 	for i, section := range sections {
 		b.WriteString(sectionStyle.Render(section.title))
 		b.WriteString("\n")
 		for _, k := range section.keys {
-			b.WriteString("  " + keyStyle.Render(k.key) + descStyle.Render(k.desc) + "\n")
+			row := lipgloss.JoinHorizontal(lipgloss.Top,
+				indentStyle.Render(""),
+				keyStyle.Render(k.key),
+				descStyle.Render(k.desc),
+			)
+			b.WriteString(row + "\n")
 		}
 		if i < len(sections)-1 {
 			b.WriteString("\n")

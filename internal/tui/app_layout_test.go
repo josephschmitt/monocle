@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestLayoutModeBreakpoint(t *testing.T) {
@@ -117,5 +119,133 @@ func TestLayoutTransitionOnResize(t *testing.T) {
 	app = updated.(appModel)
 	if app.layout != layoutHorizontal {
 		t.Fatal("expected horizontal at width 100")
+	}
+}
+
+func TestOverlayOn(t *testing.T) {
+	t.Run("preserves base content on both sides", func(t *testing.T) {
+		// Build a base tall enough for the min topPad of 5
+		row := "LLLLLLLLLLLLLLLLLLLLRRRRRRRRRRRRRRRRRRRR" // 40 chars
+		var rows []string
+		for i := 0; i < 20; i++ {
+			rows = append(rows, row)
+		}
+		base := strings.Join(rows, "\n")
+		overlay := "MMMMMMMMMM" // 10 chars wide, 1 line tall
+
+		result := overlayOn(base, overlay, 40, 20)
+		lines := strings.Split(result, "\n")
+
+		// Find the overlay line
+		overlayIdx := -1
+		for i, l := range lines {
+			if strings.Contains(l, "MMMMMMMMMM") {
+				overlayIdx = i
+				break
+			}
+		}
+		if overlayIdx < 0 {
+			t.Fatal("overlay not found in any line")
+		}
+
+		targetLine := lines[overlayIdx]
+
+		// Left side should have L's preserved
+		if !strings.HasPrefix(targetLine, "LLLLLLLLLLLLLLL") {
+			t.Errorf("left side not preserved: %q", targetLine)
+		}
+		// Right side should have R's preserved
+		if !strings.HasSuffix(targetLine, "RRRRRRRRRRRRRRR") {
+			t.Errorf("right side not preserved: %q", targetLine)
+		}
+
+		// Non-overlay lines should be unchanged
+		if lines[0] != row {
+			t.Errorf("non-overlay line changed: %q", lines[0])
+		}
+	})
+
+	t.Run("pads short base lines", func(t *testing.T) {
+		var rows []string
+		for i := 0; i < 20; i++ {
+			rows = append(rows, "short")
+		}
+		base := strings.Join(rows, "\n")
+		overlay := "OVR"
+
+		result := overlayOn(base, overlay, 20, 20)
+		lines := strings.Split(result, "\n")
+
+		// Find the overlay line
+		overlayIdx := -1
+		for i, l := range lines {
+			if strings.Contains(l, "OVR") {
+				overlayIdx = i
+				break
+			}
+		}
+		if overlayIdx < 0 {
+			t.Fatal("overlay not found in any line")
+		}
+		// Left padding should exist even though base is short
+		ovrPos := strings.Index(lines[overlayIdx], "OVR")
+		leftW := lipgloss.Width(lines[overlayIdx][:ovrPos])
+		if leftW < 8 {
+			t.Errorf("left padding too short: got %d, want >= 8", leftW)
+		}
+	})
+
+	t.Run("multi-line overlay", func(t *testing.T) {
+		base := strings.Repeat("AAAAAAAAAAAAAAAAAAAAAAAAA\n", 19) + "AAAAAAAAAAAAAAAAAAAAAAAAA"
+		overlay := strings.Join([]string{
+			"┌──────┐",
+			"│ test │",
+			"└──────┘",
+		}, "\n")
+
+		result := overlayOn(base, overlay, 25, 20)
+		lines := strings.Split(result, "\n")
+
+		// All three overlay lines should be present
+		found := 0
+		for _, l := range lines {
+			if strings.Contains(l, "test") {
+				found++
+			}
+		}
+		if found != 1 {
+			t.Errorf("expected 1 line with 'test', found %d", found)
+		}
+
+		// Non-overlay lines should still be all A's
+		if lines[0] != "AAAAAAAAAAAAAAAAAAAAAAAAA" {
+			t.Errorf("first line changed: %q", lines[0])
+		}
+	})
+}
+
+func TestCalcModalWidth(t *testing.T) {
+	tests := []struct {
+		name        string
+		screenWidth int
+		maxWidth    int
+		want        int
+	}{
+		{"wide screen uses 2/3", 120, 0, 80},
+		{"medium screen uses 2/3", 99, 0, 66},
+		{"min 65 kicks in", 90, 0, 65},
+		{"narrow screen clamps to screen-10", 70, 0, 60},
+		{"very narrow clamps to screen-10", 40, 0, 30},
+		{"maxWidth caps result", 120, 60, 60},
+		{"narrow with maxWidth", 70, 80, 60},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calcModalWidth(tt.screenWidth, tt.maxWidth)
+			if got != tt.want {
+				t.Errorf("calcModalWidth(%d, %d) = %d, want %d",
+					tt.screenWidth, tt.maxWidth, got, tt.want)
+			}
+		})
 	}
 }

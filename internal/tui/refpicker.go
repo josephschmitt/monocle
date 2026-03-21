@@ -112,13 +112,7 @@ func (m refPickerModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render("  enter:select  esc:cancel"))
 
-	boxW := m.width - 20
-	if boxW < 40 {
-		boxW = 40
-	}
-	if boxW > 80 {
-		boxW = 80
-	}
+	boxW := calcModalWidth(m.width, 80)
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

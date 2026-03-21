@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/anthropics/monocle/internal/core"
 	"github.com/anthropics/monocle/internal/types"
@@ -931,7 +932,8 @@ func (m appModel) View() tea.View {
 	return v
 }
 
-// overlayOn centers overlayContent over baseContent.
+// overlayOn centers overlay content over base content, preserving base content
+// (including borders and styling) on both sides of the overlay.
 func overlayOn(base, overlay string, width, height int) string {
 	overlayLines := strings.Split(overlay, "\n")
 	overlayH := len(overlayLines)
@@ -943,41 +945,57 @@ func overlayOn(base, overlay string, width, height int) string {
 	}
 
 	topPad := (height - overlayH) / 2
-	if topPad < 0 {
-		topPad = 0
+	if topPad < 5 {
+		topPad = 5
 	}
 	leftPad := (width - overlayW) / 2
 	if leftPad < 0 {
 		leftPad = 0
 	}
 
-	padLeft := strings.Repeat(" ", leftPad)
-	var overlayBlock strings.Builder
-	for i := 0; i < topPad; i++ {
-		overlayBlock.WriteString("\n")
-	}
-	for i, line := range overlayLines {
-		overlayBlock.WriteString(padLeft + line)
-		if i < len(overlayLines)-1 {
-			overlayBlock.WriteString("\n")
-		}
-	}
-
-	// Overlay the text on top of base by rebuilding line by line.
 	baseLines := strings.Split(base, "\n")
-	oLines := strings.Split(overlayBlock.String(), "\n")
-
 	result := make([]string, len(baseLines))
 	copy(result, baseLines)
-	for i, ol := range oLines {
-		if i >= len(result) {
+
+	for i, oLine := range overlayLines {
+		baseIdx := topPad + i
+		if baseIdx >= len(result) {
 			break
 		}
-		if strings.TrimSpace(ol) != "" {
-			result[i] = ol
+
+		baseLine := result[baseIdx]
+
+		// Left: preserve base content before overlay
+		leftPart := ansi.Cut(baseLine, 0, leftPad)
+		if leftW := lipgloss.Width(leftPart); leftW < leftPad {
+			leftPart += strings.Repeat(" ", leftPad-leftW)
 		}
+
+		// Right: preserve base content after overlay
+		rightPart := ansi.TruncateLeft(baseLine, leftPad+overlayW, "")
+
+		result[baseIdx] = leftPart + oLine + rightPart
 	}
 	return strings.Join(result, "\n")
+}
+
+// calcModalWidth computes modal width as max(screenWidth*2/3, 65), capped by
+// maxWidth (pass 0 for no cap) and screen bounds (screenWidth-10 for margin).
+func calcModalWidth(screenWidth, maxWidth int) int {
+	w := screenWidth * 2 / 3
+	if w < 65 {
+		w = 65
+	}
+	if maxWidth > 0 && w > maxWidth {
+		w = maxWidth
+	}
+	if w > screenWidth-10 {
+		w = screenWidth - 10
+	}
+	if w < 0 {
+		w = 0
+	}
+	return w
 }
 
 // BridgeEngineEvents subscribes to engine events and forwards them to the
