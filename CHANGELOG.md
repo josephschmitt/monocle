@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/josephschmitt/monocle/compare/v0.5.0...v0.6.0) (2026-03-21)
+
+
+### Features
+
+* **adapters:** auto-detect JavaScript runtime for MCP channel ([b34028f](https://github.com/josephschmitt/monocle/commit/b34028f2ca35cd620ff9a36769733b8d4043b61a))
+
+
+### Bug Fixes
+
+* **docs:** use ASCII arrows in flow diagram for consistent rendering ([49ed5c9](https://github.com/josephschmitt/monocle/commit/49ed5c943145dfedbf26e37b610b0239777e2371))
+
 ## [0.5.0](https://github.com/josephschmitt/monocle/compare/v0.4.0...v0.5.0) (2026-03-21)
 
 
