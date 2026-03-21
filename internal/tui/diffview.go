@@ -311,7 +311,7 @@ func (m *diffViewModel) buildLines() {
 				kind:       dl.Kind,
 				oldLineNum: dl.OldLineNum,
 				newLineNum: dl.NewLineNum,
-				content:    dl.Content,
+				content:    expandTabs(dl.Content),
 			})
 		}
 
@@ -338,7 +338,7 @@ func (m *diffViewModel) buildContentLines(content string) {
 		m.lines = append(m.lines, diffViewLine{
 			kind:       types.DiffLineContext,
 			newLineNum: i + 1,
-			content:    line,
+			content:    expandTabs(line),
 		})
 	}
 }
@@ -375,7 +375,7 @@ func (m *diffViewModel) buildSplitLines() {
 				if i < len(removed) {
 					sl.kind = types.DiffLineRemoved
 					sl.oldLineNum = removed[i].OldLineNum
-					sl.content = removed[i].Content
+					sl.content = expandTabs(removed[i].Content)
 				} else {
 					sl.leftEmpty = true
 					sl.kind = types.DiffLineContext
@@ -383,7 +383,7 @@ func (m *diffViewModel) buildSplitLines() {
 				if i < len(added) {
 					sl.rightKind = types.DiffLineAdded
 					sl.rightLineNum = added[i].NewLineNum
-					sl.rightContent = added[i].Content
+					sl.rightContent = expandTabs(added[i].Content)
 				} else {
 					sl.rightEmpty = true
 					sl.rightKind = types.DiffLineContext
@@ -402,14 +402,15 @@ func (m *diffViewModel) buildSplitLines() {
 				added = append(added, dl)
 			case types.DiffLineContext:
 				flushPairs()
+				expanded := expandTabs(dl.Content)
 				m.lines = append(m.lines, diffViewLine{
 					isSplit:      true,
 					kind:         types.DiffLineContext,
 					oldLineNum:   dl.OldLineNum,
-					content:      dl.Content,
+					content:      expanded,
 					rightKind:    types.DiffLineContext,
 					rightLineNum: dl.NewLineNum,
-					rightContent: dl.Content,
+					rightContent: expanded,
 				})
 			}
 		}
@@ -602,9 +603,9 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 }
 
 func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual bool) string {
-	halfW := m.width / 2
-	gutterW := 5 // "NNNN "
-	contentW := halfW - gutterW - 1 // -1 for divider
+	halfW := (m.width - 1) / 2 // subtract divider, then halve
+	gutterW := 5               // "NNNN "
+	contentW := halfW - gutterW
 	if contentW < 1 {
 		contentW = 1
 	}
@@ -793,7 +794,7 @@ func (m *diffViewModel) ScrollLeft() {
 // contentWidthFor returns the available content width (excluding gutter) for a line.
 func (m diffViewModel) contentWidthFor(line diffViewLine) int {
 	if line.isSplit {
-		return m.width/2 - 5 - 1 // gutterW=5, divider=1
+		return (m.width-1)/2 - 5 // subtract divider, then halve, minus gutter
 	}
 	if m.contentMode {
 		return m.width - 4 // gutterWidth=4
@@ -857,6 +858,13 @@ func shiftChangeRanges(changes []changeRange, runeOffset int) []changeRange {
 		result = append(result, shifted)
 	}
 	return result
+}
+
+// expandTabs replaces tab characters with spaces for consistent width calculation.
+// Tabs are 1 rune but render as multiple visual columns in the terminal, which
+// breaks rune-based width truncation in the diff view.
+func expandTabs(s string) string {
+	return strings.ReplaceAll(s, "\t", "    ")
 }
 
 // wrapContent splits content into chunks of at most width runes.
