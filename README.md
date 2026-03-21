@@ -1,6 +1,7 @@
 # o_(◉) monocle
 
 A terminal-based code review tool that creates a real feedback loop between you and Claude Code.
+![image](https://github.com/user-attachments/assets/30580911-35ee-4d82-9eb0-5dde13663741)
 
 Monocle uses an [MCP channel](https://code.claude.com/docs/en/channels-reference) to push your review feedback directly into Claude Code's context — no copy-pasting, no polling, no window switching. You review diffs and leave structured comments. Claude Code receives them as they happen and addresses the issues. It's PR reviews, but between you and your agent, in real time.
 
