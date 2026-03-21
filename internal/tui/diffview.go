@@ -974,7 +974,14 @@ func (m diffViewModel) isSelectable(idx int) bool {
 		return false
 	}
 	line := m.lines[idx]
-	return !line.isHunk && !line.isComment
+	if line.isHunk || line.isComment {
+		return false
+	}
+	// Skip removed lines — they have no new-file line number and can't be commented on
+	if line.kind == types.DiffLineRemoved && line.newLineNum == 0 {
+		return false
+	}
+	return true
 }
 
 // nextSelectable moves from current position by dir (+1 or -1), skipping non-selectable lines.
