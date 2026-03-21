@@ -39,6 +39,7 @@ const (
 	overlayReview
 	overlayHelp
 	overlayRefPicker
+	overlayConfirm
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -63,6 +64,19 @@ type pauseChangedMsg struct {
 	status string
 }
 
+type submitSuccessMsg struct{}
+
+type commentsClearedMsg struct {
+	reloadPath string
+	isContent  bool
+}
+
+type openConfirmMsg struct {
+	title   string
+	message string
+	action  confirmAction
+}
+
 type refreshTickMsg struct{}
 
 func refreshTick() tea.Cmd {
@@ -82,6 +96,7 @@ type appModel struct {
 	reviewSummary reviewSummaryModel
 	help          helpModel
 	refPicker     refPickerModel
+	confirm       confirmModel
 
 	focus   focusTarget
 	overlay overlayKind
@@ -111,6 +126,7 @@ func NewApp(engine core.EngineAPI) appModel {
 		reviewSummary: newReviewSummaryModel(theme),
 		help:          newHelpModel(theme),
 		refPicker:     newRefPickerModel(theme),
+		confirm:       newConfirmModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		theme:         theme,
@@ -210,6 +226,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reviewSummary.height = m.height
 		m.help.width = m.width
 		m.help.height = m.height
+		m.confirm.width = m.width
+		m.confirm.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -361,25 +379,85 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Review summary overlay open
 	case openReviewMsg:
-		m.reviewSummary.summary = msg.summary
-		m.reviewSummary.active = true
-		m.reviewSummary.agentStopped = msg.agentStopped
+		m.reviewSummary.open(msg.summary, msg.agentStopped)
 		m.overlay = overlayReview
 		return m, nil
 
-	// Review summary overlay
+	// Review summary → submit with user-chosen action and body
 	case confirmSubmitMsg:
 		m.overlay = overlayNone
+		action := msg.action
+		body := msg.body
 		return m, func() tea.Msg {
-			_, err := m.engine.Submit()
+			_, err := m.engine.Submit(action, body)
 			if err != nil {
 				return agentStatusMsg{status: "submit_error"}
 			}
-			return agentStatusMsg{status: "submitted"}
+			return submitSuccessMsg{}
 		}
 
 	case cancelSubmitMsg:
 		m.overlay = overlayNone
+		return m, nil
+
+	// Post-submit: offer to clear comments
+	case submitSuccessMsg:
+		m.statusBar.feedbackStatus = m.engine.GetFeedbackStatus()
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.commentCount = len(session.Comments)
+		}
+		// Only ask to clear if there are active comments
+		hasActive := false
+		if session != nil {
+			for _, c := range session.Comments {
+				if !c.Outdated {
+					hasActive = true
+					break
+				}
+			}
+		}
+		if hasActive {
+			m.confirm.open("Review Submitted", "Clear all comments from this review?", confirmClearAfterSubmit)
+			m.overlay = overlayConfirm
+		}
+		return m, nil
+
+	// Confirm overlay actions
+	case confirmActionMsg:
+		m.overlay = overlayNone
+		engine := m.engine
+		currentPath := m.diffView.path
+		isContent := m.diffView.contentMode
+		return m, func() tea.Msg {
+			_ = engine.ClearComments()
+			return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+		}
+
+	case openConfirmMsg:
+		m.confirm.open(msg.title, msg.message, msg.action)
+		m.overlay = overlayConfirm
+		return m, nil
+
+	case cancelConfirmMsg:
+		m.overlay = overlayNone
+		return m, nil
+
+	// After comments are cleared, refresh sidebar + diff
+	case commentsClearedMsg:
+		m.sidebar.files = m.engine.GetChangedFiles()
+		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
+		m.statusBar.fileCount = len(m.sidebar.files)
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.baseRef = session.BaseRef
+			m.statusBar.commentCount = len(session.Comments)
+		}
+		// Reload current diff to remove inline comment markers
+		if msg.reloadPath != "" && !msg.isContent {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath})
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -410,6 +488,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayRefPicker {
 		var cmd tea.Cmd
 		m.refPicker, cmd = m.refPicker.Update(msg)
+		return m, cmd
+	}
+	if m.overlay == overlayConfirm {
+		var cmd tea.Cmd
+		m.confirm, cmd = m.confirm.Update(msg)
 		return m, cmd
 	}
 
@@ -596,17 +679,14 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	case "submit":
 		return func() tea.Msg {
 			summary, err := engine.GetReviewSummary()
-			if err != nil || summary == nil {
+			if err != nil {
 				return cancelSubmitMsg{}
 			}
-			hasComments := summary.IssueCt+summary.SuggestionCt+summary.NoteCt+summary.PraiseCt > 0
-			if !hasComments {
-				// No comments — approve and release the agent
-				_, err := engine.Approve()
-				if err != nil {
-					return agentStatusMsg{status: "approve_error"}
+			if summary == nil {
+				summary = &types.ReviewSummary{
+					FileComments:    map[string][]types.ReviewComment{},
+					ContentComments: map[string][]types.ReviewComment{},
 				}
-				return agentStatusMsg{status: "approved"}
 			}
 			session := engine.GetSession()
 			agentStopped := session != nil && session.AgentStatus == types.AgentStatusPaused
@@ -615,11 +695,39 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 
 	case "submit!":
 		return func() tea.Msg {
-			_, err := engine.Submit()
+			// Auto-detect action: request_changes if issues, approve otherwise
+			action := types.ActionApprove
+			summary, _ := engine.GetReviewSummary()
+			if summary != nil && summary.IssueCt > 0 {
+				action = types.ActionRequestChanges
+			}
+			_, err := engine.Submit(action, "")
 			if err != nil {
 				return agentStatusMsg{status: "submit_error"}
 			}
-			return agentStatusMsg{status: "submitted"}
+			return submitSuccessMsg{}
+		}
+
+	case "discard":
+		return func() tea.Msg {
+			session := engine.GetSession()
+			hasActive := false
+			if session != nil {
+				for _, c := range session.Comments {
+					if !c.Outdated {
+						hasActive = true
+						break
+					}
+				}
+			}
+			if !hasActive {
+				return nil
+			}
+			return openConfirmMsg{
+				title:   "Discard Review",
+				message: "Discard all pending comments? This cannot be undone.",
+				action:  confirmDiscard,
+			}
 		}
 
 	case "dismiss-outdated":
@@ -929,6 +1037,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayRefPicker {
 		overlayContent := m.refPicker.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayConfirm {
+		overlayContent := m.confirm.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

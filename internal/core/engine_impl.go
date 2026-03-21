@@ -324,6 +324,30 @@ func (e *Engine) DismissOutdated() error {
 	return nil
 }
 
+func (e *Engine) ClearComments() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.current == nil {
+		return fmt.Errorf("no active session")
+	}
+
+	if err := e.database.ClearActiveComments(e.current.ID); err != nil {
+		return fmt.Errorf("clear comments: %w", err)
+	}
+
+	// Keep only outdated comments in memory
+	outdated := e.current.Comments[:0]
+	for _, c := range e.current.Comments {
+		if c.Outdated {
+			outdated = append(outdated, c)
+		}
+	}
+	e.current.Comments = outdated
+
+	return nil
+}
+
 // -- Review status --
 
 func (e *Engine) MarkReviewed(path string) error {
@@ -414,7 +438,7 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 	return summary, nil
 }
 
-func (e *Engine) Submit() (*types.SubmitResult, error) {
+func (e *Engine) Submit(action types.SubmitAction, body string) (*types.SubmitResult, error) {
 	e.mu.RLock()
 	session := e.current
 	e.mu.RUnlock()
@@ -423,7 +447,7 @@ func (e *Engine) Submit() (*types.SubmitResult, error) {
 		return nil, fmt.Errorf("no active session")
 	}
 
-	formatted := e.formatter.Format(session, session.Comments)
+	formatted := e.formatter.Format(session, session.Comments, action, body)
 
 	e.feedback.Submit(formatted)
 
@@ -453,34 +477,6 @@ func (e *Engine) Submit() (*types.SubmitResult, error) {
 	return &types.SubmitResult{
 		Delivered: false,
 		Queued:    true,
-	}, nil
-}
-
-func (e *Engine) Approve() (*types.SubmitResult, error) {
-	e.mu.RLock()
-	session := e.current
-	e.mu.RUnlock()
-
-	if session == nil {
-		return nil, fmt.Errorf("no active session")
-	}
-
-	e.feedback.Approve()
-
-	e.emit(EventFeedbackStatusChanged, EventPayload{
-		Kind:   EventFeedbackStatusChanged,
-		Status: e.feedback.GetStatus(),
-	})
-
-	e.emit(EventFeedbackSubmitted, EventPayload{
-		Kind:    EventFeedbackSubmitted,
-		Message: "## Code Review — Approved\n\nNo issues found. Code looks good!",
-		Status:  string(types.ActionApprove),
-	})
-
-	return &types.SubmitResult{
-		Delivered: false,
-		Queued:    false,
 	}, nil
 }
 

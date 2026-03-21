@@ -252,6 +252,12 @@ func (d *DB) DismissOutdated(sessionID string) error {
 	return err
 }
 
+// ClearActiveComments deletes all non-outdated comments in the session.
+func (d *DB) ClearActiveComments(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM comments WHERE session_id = ? AND outdated = 0`, sessionID)
+	return err
+}
+
 // CreateSubmission inserts a review submission record.
 func (d *DB) CreateSubmission(sessionID string, sub *types.ReviewSubmission) error {
 	_, err := d.Exec(

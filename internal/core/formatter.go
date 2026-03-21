@@ -30,24 +30,46 @@ func (rf *ReviewFormatter) SetContentItemProvider(provider ContentItemProvider) 
 }
 
 // Format produces a FormattedReview from a session and its comments.
-func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types.ReviewComment) *FormattedReview {
-	if len(comments) == 0 {
+// The action is explicitly provided by the caller (user-selected status).
+// The body is an optional general review comment included at the top.
+func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types.ReviewComment, action types.SubmitAction, body string) *FormattedReview {
+	hasComments := false
+	for _, c := range comments {
+		if !c.Outdated {
+			hasComments = true
+			break
+		}
+	}
+
+	if !hasComments && strings.TrimSpace(body) == "" {
+		header := "## Code Review — Approved\n\nNo issues found. Code looks good!"
+		if action == types.ActionRequestChanges {
+			header = "## Code Review — Changes Requested\n\nNo specific comments."
+		}
 		return &FormattedReview{
-			Formatted:    "## Code Review — Approved\n\nNo issues found. Code looks good!",
+			Formatted:    header,
 			CommentCount: 0,
-			Action:       string(types.ActionApprove),
+			Action:       string(action),
 		}
 	}
 
 	var b strings.Builder
-	action := determineAction(comments)
 
 	// Header
 	switch action {
-	case string(types.ActionRequestChanges):
+	case types.ActionRequestChanges:
 		b.WriteString("## Code Review — Changes Requested\n\n")
 	default:
 		b.WriteString("## Code Review — Feedback\n\n")
+	}
+
+	// General review body
+	if trimmed := strings.TrimSpace(body); trimmed != "" {
+		b.WriteString(trimmed)
+		b.WriteString("\n\n")
+		if hasComments {
+			b.WriteString("---\n\n")
+		}
 	}
 
 	// Count by type
@@ -184,42 +206,35 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 		}
 	}
 
-	// Summary
-	b.WriteString("**Summary:** ")
-	parts := []string{}
-	if issueCt > 0 {
-		parts = append(parts, fmt.Sprintf("%d issue(s) to fix", issueCt))
-	}
-	if suggestionCt > 0 {
-		parts = append(parts, fmt.Sprintf("%d suggestion(s) to consider", suggestionCt))
-	}
-	if noteCt > 0 {
-		parts = append(parts, fmt.Sprintf("%d note(s)", noteCt))
-	}
-	if praiseCt > 0 {
-		parts = append(parts, fmt.Sprintf("%d praise", praiseCt))
-	}
-	b.WriteString(strings.Join(parts, ", "))
-	b.WriteString(".\n")
+	// Summary (only if there are inline comments)
+	if hasComments {
+		b.WriteString("**Summary:** ")
+		parts := []string{}
+		if issueCt > 0 {
+			parts = append(parts, fmt.Sprintf("%d issue(s) to fix", issueCt))
+		}
+		if suggestionCt > 0 {
+			parts = append(parts, fmt.Sprintf("%d suggestion(s) to consider", suggestionCt))
+		}
+		if noteCt > 0 {
+			parts = append(parts, fmt.Sprintf("%d note(s)", noteCt))
+		}
+		if praiseCt > 0 {
+			parts = append(parts, fmt.Sprintf("%d praise", praiseCt))
+		}
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString(".\n")
 
-	if issueCt > 0 {
-		b.WriteString("Please address the issues and re-present your changes.\n")
+		if issueCt > 0 {
+			b.WriteString("Please address the issues and re-present your changes.\n")
+		}
 	}
 
 	return &FormattedReview{
 		Formatted:    b.String(),
 		CommentCount: len(comments),
-		Action:       action,
+		Action:       string(action),
 	}
-}
-
-func determineAction(comments []types.ReviewComment) string {
-	for _, c := range comments {
-		if c.Type == types.CommentIssue && !c.Outdated {
-			return string(types.ActionRequestChanges)
-		}
-	}
-	return string(types.ActionApprove)
 }
 
 func countByType(comments []types.ReviewComment) (issue, suggestion, note, praise int) {

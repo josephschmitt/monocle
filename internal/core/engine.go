@@ -76,6 +76,7 @@ type EngineAPI interface {
 	EditComment(commentID string, body string) (*types.ReviewComment, error)
 	DeleteComment(commentID string) error
 	DismissOutdated() error
+	ClearComments() error
 
 	// Review status
 	MarkReviewed(path string) error
@@ -83,8 +84,7 @@ type EngineAPI interface {
 
 	// Submission
 	GetReviewSummary() (*types.ReviewSummary, error)
-	Submit() (*types.SubmitResult, error)
-	Approve() (*types.SubmitResult, error)
+	Submit(action types.SubmitAction, body string) (*types.SubmitResult, error)
 
 	// Base ref management
 	SetBaseRef(ref string) error

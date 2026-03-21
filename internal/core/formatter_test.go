@@ -9,7 +9,7 @@ import (
 
 func TestFormatNoComments(t *testing.T) {
 	f := NewReviewFormatter(nil)
-	result := f.Format(&types.ReviewSession{}, nil)
+	result := f.Format(&types.ReviewSession{}, nil, types.ActionApprove, "")
 
 	if result.CommentCount != 0 {
 		t.Errorf("expected 0 comments, got %d", result.CommentCount)
@@ -35,7 +35,7 @@ func TestFormatWithIssue(t *testing.T) {
 		},
 	}
 
-	result := f.Format(&types.ReviewSession{}, comments)
+	result := f.Format(&types.ReviewSession{}, comments, types.ActionRequestChanges, "")
 
 	if result.Action != string(types.ActionRequestChanges) {
 		t.Errorf("expected request_changes, got %q", result.Action)
@@ -85,7 +85,7 @@ func TestFormatMixedTypes(t *testing.T) {
 		},
 	}
 
-	result := f.Format(&types.ReviewSession{}, comments)
+	result := f.Format(&types.ReviewSession{}, comments, types.ActionRequestChanges, "")
 
 	if result.CommentCount != 3 {
 		t.Errorf("expected 3 comments, got %d", result.CommentCount)
@@ -124,7 +124,7 @@ func TestFormatOutdatedSkipped(t *testing.T) {
 		},
 	}
 
-	result := f.Format(&types.ReviewSession{}, comments)
+	result := f.Format(&types.ReviewSession{}, comments, types.ActionApprove, "")
 
 	if strings.Contains(result.Formatted, "Old bug") {
 		t.Error("outdated comment should be skipped")

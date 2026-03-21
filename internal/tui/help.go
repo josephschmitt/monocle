@@ -106,9 +106,10 @@ func (m helpModel) View() string {
 			{"C", "Add file comment"},
 			{"v", "Visual select mode"},
 			{"r", "Toggle file reviewed"},
-			{"S / :submit", "Submit review (approve if no comments)"},
+			{"S / :submit", "Submit review"},
 			{"P / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{"D / :dismiss-outdated", "Dismiss outdated comments"},
+			{":discard", "Discard all pending comments"},
 		}},
 		{"General", []struct{ key, desc string }{
 			{"t", "Toggle unified/split diff"},
