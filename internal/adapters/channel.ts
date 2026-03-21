@@ -327,6 +327,11 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             description: "Optional ID for updating existing content",
           },
+          content_type: {
+            type: "string",
+            description:
+              "File extension for syntax highlighting (e.g. 'md', 'go', 'py', 'ts')",
+          },
         },
         required: ["title", "content"],
       },
@@ -384,6 +389,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           id: args.id || "",
           title: args.title,
           content: args.content,
+          content_type: args.content_type || "",
         });
         return {
           content: [

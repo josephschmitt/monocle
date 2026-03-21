@@ -892,9 +892,10 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			}
 			// Build content as a document view with line numbers
 			return loadContentMsg{
-				id:      item.ID,
-				title:   item.Title,
-				content: item.Content,
+				id:          item.ID,
+				title:       item.Title,
+				content:     item.Content,
+				contentType: item.ContentType,
 			}
 		}
 	}
@@ -1022,9 +1023,10 @@ type refreshResultMsg struct {
 
 // loadContentMsg carries content item data for rendering in the diff view.
 type loadContentMsg struct {
-	id      string
-	title   string
-	content string
+	id          string
+	title       string
+	content     string
+	contentType string
 }
 
 // View renders the full TUI layout.

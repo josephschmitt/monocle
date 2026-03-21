@@ -118,7 +118,15 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = true
 		m.contentID = msg.id
 		m.contentTitle = msg.title
-		m.path = msg.id
+		if msg.contentType != "" {
+			ext := msg.contentType
+			if !strings.HasPrefix(ext, ".") {
+				ext = "." + ext
+			}
+			m.path = "content" + ext
+		} else {
+			m.path = msg.id
+		}
 		m.hunks = nil
 		m.comments = nil
 		m.buildContentLines(msg.content)
