@@ -104,6 +104,15 @@ When in plan mode and the Monocle MCP channel is connected:
 - Use the plan filename as the `id` parameter so updates replace the previous version
 - This makes the plan visible in Monocle's TUI for real-time reviewer feedback
 
+## Documentation
+
+**Keep README.md up to date when adding or changing user-facing features.** Specifically:
+
+- **Keybindings** — If you add, remove, or change a keybinding in the TUI, update both `internal/tui/help.go` and the keybinding table in `README.md`.
+- **Config options** — If you add or change a field in `types.Config`, update the Configuration section in `README.md` (the example JSON, the settings table, and defaults in `internal/core/config.go`).
+- **CLI commands** — If you add or change a subcommand, update the CLI section in `README.md`.
+- **Features list** — If you add a significant new capability, add it to the Features bullet list in `README.md`.
+
 ## Common Tasks
 
 ### Add a new TUI component

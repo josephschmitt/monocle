@@ -71,14 +71,14 @@ Download from [GitHub Releases](https://github.com/josephschmitt/monocle/release
 ```bash
 # Apple Silicon
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.5.0_darwin_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.8.0_darwin_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # Intel
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.5.0_darwin_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.8.0_darwin_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
@@ -88,14 +88,14 @@ sudo mv monocle /usr/local/bin/
 ```bash
 # x86_64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.5.0_linux_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.8.0_linux_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # ARM64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.5.0_linux_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.8.0/monocle_0.8.0_linux_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
@@ -141,17 +141,29 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 
 | Key | Action |
 |-----|--------|
-| `j`/`k` | Navigate files |
-| `Enter` | Focus diff pane |
+| `j`/`k` | Move up/down |
+| `J`/`K` | Scroll diff up/down (any pane) |
+| `Ctrl+d`/`u` | Scroll diff half page (any pane) |
+| `g`/`G` | Top/bottom |
+| `h`/`l` | Scroll diff left/right |
+| `H`/`L` | Scroll diff left/right (any pane) |
+| `[`/`]` | Previous/next file (any pane) |
+| `Enter` | Focus diff pane / toggle dir |
+| `Tab` | Switch pane focus |
+| `1`/`2` | Jump to pane |
+| `w` | Toggle line wrapping |
+| `f` | Toggle flat/tree view |
+| `z`/`e` | Collapse/expand all (tree) |
+| `b` | Change base ref |
 | `c` | Add comment at cursor |
 | `C` | Add file-level comment |
 | `v` | Visual select (multi-line comments) |
+| `r` | Toggle file reviewed |
 | `t` | Toggle unified/split diff |
-| `h`/`l` | Scroll diff left/right |
-| `w` | Toggle line wrapping |
-| `b` | Change base ref |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
 | `S` | Submit review |
 | `P` | Pause Claude Code (wait for your review) |
+| `D` | Dismiss outdated comments |
 | `?` | Show all keybindings |
 
 **Submit** (`S`): Your review is formatted and pushed to Claude Code via the MCP channel. If there are no comments, it's treated as an approval.
@@ -165,6 +177,47 @@ monocle                     Start a review session
 monocle install [--global]  Install MCP channel for Claude Code
 monocle uninstall [--global] Remove MCP channel
 ```
+
+## Configuration
+
+Monocle loads settings from JSON config files:
+
+1. **Global:** `~/.config/monocle/config.json` (or `$XDG_CONFIG_HOME/monocle/config.json`)
+2. **Project:** `.monocle/config.json` in the working directory (overrides global)
+
+```json
+{
+  "layout": "auto",
+  "diff_style": "unified",
+  "sidebar_style": "flat",
+  "wrap": false,
+  "tab_size": 4,
+  "context_lines": 3,
+  "theme": "default",
+  "ignore_patterns": [],
+  "keybindings": {},
+  "review_format": {
+    "include_snippets": true,
+    "max_snippet_lines": 10,
+    "include_summary": true
+  }
+}
+```
+
+| Setting | Values | Default | Description |
+|---------|--------|---------|-------------|
+| `layout` | `"auto"`, `"side-by-side"`, `"stacked"` | `"auto"` | Pane arrangement (`auto` switches based on terminal width) |
+| `diff_style` | `"unified"`, `"split"` | `"unified"` | Diff display mode |
+| `sidebar_style` | `"flat"`, `"tree"` | `"flat"` | File list display mode |
+| `wrap` | `true`, `false` | `false` | Word-wrap long lines in diffs |
+| `tab_size` | integer | `4` | Spaces per tab character |
+| `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
+| `theme` | `"default"` | `"default"` | Color theme |
+| `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
+| `keybindings` | object | `{}` | Custom key overrides |
+| `review_format` | object | see above | Controls how review feedback is formatted |
+
+Toggle keybindings (`T`, `t`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
 
 ## Requirements
 
