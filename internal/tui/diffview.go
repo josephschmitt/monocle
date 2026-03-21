@@ -195,21 +195,29 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				// Content mode: comment on the content item
 				if m.visualMode {
 					start, end := m.visualRange()
-					return m, openCommentCmd(m.contentID, start, end)
+					return m, openCommentCmd(m.contentID, start, end, types.TargetContent)
 				}
 				line := m.currentDiffLine()
 				if line > 0 {
-					return m, openCommentCmd(m.contentID, line, line)
+					return m, openCommentCmd(m.contentID, line, line, types.TargetContent)
 				}
 			} else {
 				if m.visualMode {
 					start, end := m.visualRange()
-					return m, openCommentCmd(m.path, start, end)
+					return m, openCommentCmd(m.path, start, end, types.TargetFile)
 				}
 				line := m.currentDiffLine()
 				if line > 0 {
-					return m, openCommentCmd(m.path, line, line)
+					return m, openCommentCmd(m.path, line, line, types.TargetFile)
 				}
+			}
+		case "C":
+			// File-level comment
+			if m.contentMode {
+				return m, openFileCommentCmd(m.contentID, types.TargetContent)
+			}
+			if m.path != "" {
+				return m, openFileCommentCmd(m.path, types.TargetFile)
 			}
 		}
 	}
@@ -277,6 +285,18 @@ func (m *diffViewModel) buildLines() {
 		return
 	}
 
+	// File-level comments (LineStart == 0) rendered before hunks
+	for i := range m.comments {
+		c := &m.comments[i]
+		if c.TargetRef == m.path && c.LineStart == 0 {
+			m.lines = append(m.lines, diffViewLine{
+				isComment: true,
+				comment:   c,
+				content:   formatInlineComment(c),
+			})
+		}
+	}
+
 	for _, hunk := range m.hunks {
 		// Hunk header
 		m.lines = append(m.lines, diffViewLine{
@@ -324,6 +344,18 @@ func (m *diffViewModel) buildContentLines(content string) {
 }
 
 func (m *diffViewModel) buildSplitLines() {
+	// File-level comments (LineStart == 0) rendered before hunks
+	for i := range m.comments {
+		c := &m.comments[i]
+		if c.TargetRef == m.path && c.LineStart == 0 {
+			m.lines = append(m.lines, diffViewLine{
+				isComment: true,
+				comment:   c,
+				content:   formatInlineComment(c),
+			})
+		}
+	}
+
 	for _, hunk := range m.hunks {
 		m.lines = append(m.lines, diffViewLine{
 			isHunk:     true,
@@ -987,14 +1019,21 @@ func (m diffViewModel) currentDiffLine() int {
 }
 
 type openCommentMsg struct {
-	path      string
-	lineStart int
-	lineEnd   int
+	path       string
+	lineStart  int
+	lineEnd    int
+	targetType types.TargetType
 }
 
-func openCommentCmd(path string, start, end int) tea.Cmd {
+func openCommentCmd(path string, start, end int, targetType types.TargetType) tea.Cmd {
 	return func() tea.Msg {
-		return openCommentMsg{path: path, lineStart: start, lineEnd: end}
+		return openCommentMsg{path: path, lineStart: start, lineEnd: end, targetType: targetType}
+	}
+}
+
+func openFileCommentCmd(path string, targetType types.TargetType) tea.Cmd {
+	return func() tea.Msg {
+		return openCommentMsg{path: path, lineStart: 0, lineEnd: 0, targetType: targetType}
 	}
 }
 

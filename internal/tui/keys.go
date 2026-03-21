@@ -13,9 +13,10 @@ type KeyMap struct {
 	PrevFile  key.Binding
 	NextFile  key.Binding
 	Select    key.Binding
-	Comment   key.Binding
-	Visual    key.Binding
-	VisualLine key.Binding
+	Comment     key.Binding
+	FileComment key.Binding
+	Visual      key.Binding
+	VisualLine  key.Binding
 	Reviewed  key.Binding
 	ToggleDiff key.Binding
 	TreeMode   key.Binding
@@ -42,8 +43,9 @@ func DefaultKeyMap() KeyMap {
 		PrevFile:  key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev file")),
 		NextFile:  key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next file")),
 		Select:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-		Comment:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
-		Visual:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "visual")),
+		Comment:     key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
+		FileComment: key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "file comment")),
+		Visual:      key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "visual")),
 		VisualLine: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "visual line")),
 		Reviewed:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "mark reviewed")),
 		ToggleDiff: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "toggle diff style")),

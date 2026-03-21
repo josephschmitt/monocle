@@ -75,6 +75,7 @@ func (m helpModel) View() string {
 		}},
 		{"Review", []struct{ key, desc string }{
 			{"c", "Add comment at cursor"},
+			{"C", "Add file comment"},
 			{"v", "Visual select mode"},
 			{"r", "Toggle file reviewed"},
 			{"S / :submit", "Submit review (approve if no comments)"},

@@ -336,7 +336,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Comment overlay
 	case openCommentMsg:
-		m.commentEditor.open(msg.path, msg.lineStart, msg.lineEnd)
+		m.commentEditor.open(msg.path, msg.lineStart, msg.lineEnd, msg.targetType)
 		m.overlay = overlayComment
 		return m, nil
 
@@ -452,6 +452,19 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sidebar.focused = false
 		m.diffView.focused = true
 		return m, nil
+
+	case "C":
+		// File-level comment from sidebar
+		if m.focus == focusSidebar {
+			if f := m.sidebar.selectedFile(); f != nil {
+				return m, openFileCommentCmd(f.Path, types.TargetFile)
+			}
+			return m, nil
+		}
+		// Delegate to diff view when focused on main
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
 
 	case "r":
 		return m, m.handleMarkReviewed()
@@ -726,14 +739,10 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 	return func() tea.Msg {
 		target := core.CommentTarget{
-			TargetRef: msg.path,
-			LineStart: msg.lineStart,
-			LineEnd:   msg.lineEnd,
-		}
-		if target.LineStart > 0 {
-			target.TargetType = types.TargetFile
-		} else {
-			target.TargetType = types.TargetContent
+			TargetType: msg.targetType,
+			TargetRef:  msg.path,
+			LineStart:  msg.lineStart,
+			LineEnd:    msg.lineEnd,
 		}
 
 		if msg.editingID != "" {

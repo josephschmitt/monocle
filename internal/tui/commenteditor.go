@@ -15,6 +15,7 @@ type commentEditorModel struct {
 	path        string
 	lineStart   int
 	lineEnd     int
+	targetType  types.TargetType
 	commentType types.CommentType
 	body        string
 	cursorPos   int
@@ -35,6 +36,7 @@ type saveCommentMsg struct {
 	path        string
 	lineStart   int
 	lineEnd     int
+	targetType  types.TargetType
 	commentType types.CommentType
 	body        string
 	editingID   string
@@ -65,6 +67,7 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 				path:        m.path,
 				lineStart:   m.lineStart,
 				lineEnd:     m.lineEnd,
+				targetType:  m.targetType,
 				commentType: m.commentType,
 				body:        m.body,
 				editingID:   m.editingID,
@@ -133,7 +136,7 @@ func (m commentEditorModel) View() string {
 			b.WriteString(fmt.Sprintf("File: %s (line %d)\n", m.path, m.lineStart))
 		}
 	} else {
-		b.WriteString(fmt.Sprintf("File: %s\n", m.path))
+		b.WriteString(fmt.Sprintf("File: %s (file-level comment)\n", m.path))
 	}
 	b.WriteString("\n")
 
@@ -167,11 +170,12 @@ func (m commentEditorModel) View() string {
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
 
-func (m *commentEditorModel) open(path string, lineStart, lineEnd int) {
+func (m *commentEditorModel) open(path string, lineStart, lineEnd int, targetType types.TargetType) {
 	m.active = true
 	m.path = path
 	m.lineStart = lineStart
 	m.lineEnd = lineEnd
+	m.targetType = targetType
 	m.commentType = types.CommentIssue
 	m.body = ""
 	m.editingID = ""
@@ -182,6 +186,7 @@ func (m *commentEditorModel) openEdit(comment *types.ReviewComment) {
 	m.path = comment.TargetRef
 	m.lineStart = comment.LineStart
 	m.lineEnd = comment.LineEnd
+	m.targetType = comment.TargetType
 	m.commentType = comment.Type
 	m.body = comment.Body
 	m.editingID = comment.ID
