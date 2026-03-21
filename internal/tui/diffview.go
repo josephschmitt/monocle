@@ -138,20 +138,6 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		case "k", "up":
 			m.cursor = m.nextSelectable(m.cursor, -1)
 			m.ensureVisible()
-		case "ctrl+d":
-			m.cursor += m.height / 2
-			if m.cursor >= len(m.lines) {
-				m.cursor = len(m.lines) - 1
-			}
-			m.cursor = m.nearestSelectable(m.cursor, 1)
-			m.ensureVisible()
-		case "ctrl+u":
-			m.cursor -= m.height / 2
-			if m.cursor < 0 {
-				m.cursor = 0
-			}
-			m.cursor = m.nearestSelectable(m.cursor, -1)
-			m.ensureVisible()
 		case "g":
 			m.cursor = m.nearestSelectable(0, 1)
 			m.ensureVisible()
@@ -944,6 +930,58 @@ func (m *diffViewModel) ScrollUp() {
 		if !m.wrap && m.cursor >= m.offset+m.height {
 			m.cursor = m.nearestSelectable(m.offset+m.height-1, -1)
 		}
+	}
+}
+
+// ScrollDownHalfPage scrolls the diff viewport down by half a page.
+func (m *diffViewModel) ScrollDownHalfPage() {
+	jump := m.height / 2
+	if jump < 1 {
+		jump = 1
+	}
+	if m.wrap {
+		for i := 0; i < jump; i++ {
+			screenLines := 0
+			canScroll := false
+			for j := m.offset; j < len(m.lines); j++ {
+				screenLines += m.screenLinesFor(j)
+				if screenLines > m.height {
+					m.offset++
+					canScroll = true
+					break
+				}
+			}
+			if !canScroll {
+				break
+			}
+		}
+		return
+	}
+	maxOffset := len(m.lines) - m.height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	m.offset += jump
+	if m.offset > maxOffset {
+		m.offset = maxOffset
+	}
+	if m.cursor < m.offset {
+		m.cursor = m.nearestSelectable(m.offset, 1)
+	}
+}
+
+// ScrollUpHalfPage scrolls the diff viewport up by half a page.
+func (m *diffViewModel) ScrollUpHalfPage() {
+	jump := m.height / 2
+	if jump < 1 {
+		jump = 1
+	}
+	m.offset -= jump
+	if m.offset < 0 {
+		m.offset = 0
+	}
+	if !m.wrap && m.cursor >= m.offset+m.height {
+		m.cursor = m.nearestSelectable(m.offset+m.height-1, -1)
 	}
 }
 

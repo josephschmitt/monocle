@@ -617,6 +617,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView.ScrollRight()
 		return m, nil
 
+	case "ctrl+d":
+		// Scroll diff view down by half page regardless of focus
+		m.diffView.ScrollDownHalfPage()
+		return m, nil
+
+	case "ctrl+u":
+		// Scroll diff view up by half page regardless of focus
+		m.diffView.ScrollUpHalfPage()
+		return m, nil
+
+	case "[":
+		// Navigate to previous file regardless of focus
+		cmd := m.sidebar.navigateFile(-1)
+		return m, cmd
+
+	case "]":
+		// Navigate to next file regardless of focus
+		cmd := m.sidebar.navigateFile(+1)
+		return m, cmd
+
 	case "enter":
 		if m.focus == focusSidebar {
 			// In tree mode, enter on a directory toggles collapse

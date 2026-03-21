@@ -87,13 +87,13 @@ func (m helpModel) View() string {
 	}{
 		{"Navigation", []struct{ key, desc string }{
 			{"j/k", "Move up/down"},
-			{"Ctrl+d/u", "Half page down/up"},
+			{"Ctrl+d/u", "Scroll diff half page (any pane)"},
 			{"g/G", "Top/bottom"},
 			{"J/K", "Scroll diff up/down (any pane)"},
 			{"h/l", "Scroll diff left/right"},
 			{"H/L", "Scroll diff left/right (any pane)"},
 			{"w", "Toggle line wrapping"},
-			{"[/]", "Previous/next file"},
+			{"[/]", "Previous/next file (any pane)"},
 			{"Enter", "Focus diff pane / toggle dir"},
 			{"Tab", "Switch pane focus"},
 			{"1/2", "Jump to pane"},

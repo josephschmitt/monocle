@@ -99,18 +99,6 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 				}
 			}
 			return m, m.selectCurrent()
-		case "]":
-			if m.cursor < m.totalItems()-1 {
-				m.cursor++
-			}
-			m.ensureVisible()
-			return m, m.selectCurrent()
-		case "[":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-			m.ensureVisible()
-			return m, m.selectCurrent()
 		case "f":
 			currentPath := ""
 			if f := m.selectedFile(); f != nil {
@@ -283,8 +271,13 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
+	leftPad := " "
+	if selected {
+		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
+	}
+
 	right := " " + reviewChar + " "
-	prefix := fmt.Sprintf(" %s %s%s ", styledStatus, recentChar, icon)
+	prefix := fmt.Sprintf("%s%s %s%s ", leftPad, styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	if nameW < 1 {
 		nameW = 1
@@ -317,9 +310,14 @@ func (m sidebarModel) renderDirItem(item visibleItem, selected bool) string {
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
+	leftPad := " "
+	if selected {
+		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
+	}
+
 	styledArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(arrow)
 	styledFolder := lipgloss.NewStyle().Foreground(lipgloss.Color(folderColor)).Render(folderGlyph)
-	prefix := fmt.Sprintf(" %s%s %s ", indent, styledArrow, styledFolder)
+	prefix := fmt.Sprintf("%s%s%s %s ", leftPad, indent, styledArrow, styledFolder)
 	nameW := m.width - lipgloss.Width(prefix) - iconSlack
 	if nameW < 1 {
 		nameW = 1
@@ -383,9 +381,14 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 		return lipgloss.NewStyle().Reverse(true).Render(padded)
 	}
 
+	leftPad := " "
+	if selected {
+		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
+	}
+
 	styledStatus := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true).Render(statusChar)
 	right := " " + reviewChar + " "
-	prefix := fmt.Sprintf(" %s%s %s%s ", indent, styledStatus, recentChar, icon)
+	prefix := fmt.Sprintf("%s%s%s %s%s ", leftPad, indent, styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	if nameW < 1 {
 		nameW = 1
@@ -406,6 +409,10 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 	if selected && m.focused {
 		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
 		return style.Render(line)
+	}
+	if selected {
+		leftPad := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
+		line = fmt.Sprintf("%s  %s %s", leftPad, name, reviewChar)
 	}
 	return fmt.Sprintf("%-*s", m.width, line)
 }
@@ -467,6 +474,32 @@ func (m sidebarModel) selectedFile() *types.ChangedFile {
 		return item.node.File
 	}
 	return &m.files[m.cursor]
+}
+
+// navigateFile moves the cursor to the next (dir=+1) or previous (dir=-1)
+// file, skipping directory nodes in tree mode. Returns a selectCurrent()
+// command if a file was found, or nil if navigation is not possible.
+func (m *sidebarModel) navigateFile(dir int) tea.Cmd {
+	total := m.totalItems()
+	if total == 0 {
+		return nil
+	}
+	next := m.cursor + dir
+	for next >= 0 && next < total {
+		if m.treeMode && next < m.fileItemCount() {
+			if m.visibleItems[next].isDir {
+				next += dir
+				continue
+			}
+		}
+		break
+	}
+	if next < 0 || next >= total {
+		return nil
+	}
+	m.cursor = next
+	m.ensureVisible()
+	return m.selectCurrent()
 }
 
 // rebuildTree reconstructs the tree from the current file list and updates
