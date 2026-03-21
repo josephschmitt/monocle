@@ -1,30 +1,24 @@
 # o_(◉) monocle
 
-A terminal-based code review tool that creates a real feedback loop between you and Claude Code.
+**Review your AI agent's code as it writes it.** Leave comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal.
+
 ![image](https://github.com/user-attachments/assets/30580911-35ee-4d82-9eb0-5dde13663741)
 
-Monocle uses an [MCP channel](https://code.claude.com/docs/en/channels-reference) to push your review feedback directly into Claude Code's context — no copy-pasting, no polling, no window switching. You review diffs and leave structured comments. Claude Code receives them as they happen and addresses the issues. It's PR reviews, but between you and your agent, in real time.
+Monocle is a TUI that runs alongside [Claude Code](https://claude.com/claude-code). It connects via an [MCP channel](https://code.claude.com/docs/en/channels-reference) that pushes your review feedback directly into the agent's context. No copy-pasting, no window switching, no waiting.
 
-## The Problem
+## Why
 
-Without a tool like Monocle, reviewing agent-written code is painful:
+Without something like Monocle, reviewing agent-written code means rubber-stamping diffs you didn't read, copy-pasting feedback into a chat window, or just hoping the agent got it right. There's no way to say "fix these three issues and show me again."
 
-- **Rubber-stamping** — You approve without reading because there's no good way to review in-progress work
-- **Copy-pasting** — You read a diff somewhere, then manually paste feedback into the agent's prompt
-- **Context switching** — You bounce between terminal, editor, git diff, and the agent window
-- **No iteration** — There's no way to say "fix these three issues and show me again"
+Monocle gives you a proper review loop: you read diffs, leave line-level comments, and submit. The agent receives your feedback immediately and starts addressing it. You see the updated diffs, review again, and iterate — like PR reviews, but in real time.
 
-## How Monocle Solves It
-
-Monocle runs alongside Claude Code as a dedicated review TUI. Under the hood, it connects via an **MCP channel** — a push-based communication layer that lets Monocle deliver feedback directly into Claude Code's context without the agent needing to poll or check for updates.
-
-Here's the flow:
+## How it works
 
 ```
-┌─────────────┐    stdio/MCP    ┌───────────────┐    socket     ┌──────────┐
-│ Claude Code │ ◂──────────────▸│  channel.ts   │ ◂───────────▸│ monocle  │
-│             │                 │  (MCP server)  │               │  (TUI)   │
-└─────────────┘                 └───────────────┘               └──────────┘
+┌─────────────┐    stdio/MCP    ┌───────────────┐    socket    ┌──────────┐
+│ Claude Code │ ◂──────────────▸│  channel.ts   │ ◂──────────▸│ monocle  │
+│             │                 │ (MCP server)  │              │  (TUI)   │
+└─────────────┘                 └───────────────┘              └──────────┘
 ```
 
 1. You leave line-level comments on diffs — issues, suggestions, notes, praise
@@ -45,10 +39,13 @@ This means you can review the agent's *thinking* before it writes code — not j
 
 - **MCP channel integration** — Push-based feedback delivery to Claude Code, no polling or copy-pasting
 - **Pause flow** — Ask Claude Code to stop and wait while you review, then release it when ready
-- **Live diff viewer** — Unified and side-by-side views that update as the agent makes changes
-- **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level precision
+- **Live diff viewer** — Unified and split (side-by-side) views with syntax highlighting and intra-line diffs
+- **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level or file-level precision
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
 - **Plan review** — Claude Code can submit plans for your review before writing code
+- **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
+- **Responsive layout** — Automatically stacks panes vertically in narrow terminals
+- **Ref picker** — Change the base ref on the fly to compare against any branch or commit
 - **Feedback queue** — Submit reviews while the agent is working; delivered when Claude Code next checks
 - **Session persistence** — Reviews survive restarts via SQLite
 
@@ -63,7 +60,7 @@ brew install josephschmitt/tap/monocle
 ### Go Install
 
 ```bash
-go install github.com/anthropics/monocle/cmd/monocle@latest
+go install github.com/josephschmitt/monocle/cmd/monocle@latest
 ```
 
 ### Pre-built Binaries
@@ -74,14 +71,14 @@ Download from [GitHub Releases](https://github.com/josephschmitt/monocle/release
 ```bash
 # Apple Silicon
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.2.0_darwin_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.5.0_darwin_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # Intel
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.2.0_darwin_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.5.0_darwin_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
@@ -91,14 +88,14 @@ sudo mv monocle /usr/local/bin/
 ```bash
 # x86_64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.2.0_linux_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.5.0_linux_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # ARM64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.2.0_linux_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.5.0/monocle_0.5.0_linux_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
@@ -147,7 +144,12 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `j`/`k` | Navigate files |
 | `Enter` | Focus diff pane |
 | `c` | Add comment at cursor |
+| `C` | Add file-level comment |
 | `v` | Visual select (multi-line comments) |
+| `t` | Toggle unified/split diff |
+| `h`/`l` | Scroll diff left/right |
+| `w` | Toggle line wrapping |
+| `b` | Change base ref |
 | `S` | Submit review |
 | `P` | Pause Claude Code (wait for your review) |
 | `?` | Show all keybindings |
