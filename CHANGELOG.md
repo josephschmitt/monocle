@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/josephschmitt/monocle/compare/v0.6.0...v0.7.0) (2026-03-21)
+
+
+### Features
+
+* **tui:** add splash screen with setup instructions and keybinding hints ([398902c](https://github.com/josephschmitt/monocle/commit/398902cec26ef3db5d876bdc4fbc951808b69ad9))
+* **tui:** clear comments on submit, discard command, and review status selector ([4b3e058](https://github.com/josephschmitt/monocle/commit/4b3e058b472061b410e46a1d1eefb2dd589e5a4c))
+* **tui:** cross-pane file navigation, half-page scroll, and unfocused selection indicator ([f307eaa](https://github.com/josephschmitt/monocle/commit/f307eaad16be860fe19875b14cc6da0f957f047d))
+* **tui:** persist sidebar style preference across sessions ([42489f9](https://github.com/josephschmitt/monocle/commit/42489f961e82c65a8e7ab893f4f0b53a455e9023))
+* **tui:** raise layout breakpoint and prioritize diff area width ([2aa1ba4](https://github.com/josephschmitt/monocle/commit/2aa1ba4494a2f88d5db8895d017fe539b34f3bf1))
+
+
+### Bug Fixes
+
+* ignore node_modules symlink in worktrees ([862b2bb](https://github.com/josephschmitt/monocle/commit/862b2bbeeaa54165125b0dd1c0ff2e391a768a7d))
+* **tui:** default review status based on comment types ([7ffc803](https://github.com/josephschmitt/monocle/commit/7ffc803d742c6ebd2bd648c74fc5d2c74a6b059a))
+* **tui:** reduce modal top padding and add help modal scrolling ([eff7cb1](https://github.com/josephschmitt/monocle/commit/eff7cb1cbd30aac0c97e39ce0caf163659495b75))
+
 ## [0.6.0](https://github.com/josephschmitt/monocle/compare/v0.5.0...v0.6.0) (2026-03-21)
 
 
