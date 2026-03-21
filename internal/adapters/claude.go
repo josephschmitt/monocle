@@ -45,7 +45,7 @@ func (a *ClaudeAdapter) Uninstall(global bool) error {
 	channelPath := channelTSPath()
 	if channelPath != "" {
 		dir := filepath.Dir(channelPath)
-		// Remove the entire channel directory (channel.ts, package.json, node_modules, bun.lock)
+		// Remove the entire channel directory (channel.ts, package.json, node_modules, lock files)
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("remove channel directory: %w", err)
 		}
@@ -82,19 +82,69 @@ func (a *ClaudeAdapter) InstallDetails(global bool) []string {
 	}
 	details = append(details, fmt.Sprintf("mcp → %s", mcpJSONPath(global)))
 
-	if _, err := exec.LookPath("bun"); err != nil {
-		details = append(details, "⚠ bun not found in PATH — install bun for MCP channel support")
+	rt, err := detectJSRuntime()
+	if err != nil {
+		details = append(details, "⚠ no JavaScript runtime found — install bun, deno, or node")
+	} else {
+		details = append(details, fmt.Sprintf("runtime → %s", rt.name))
 	}
 
 	return details
 }
 
+// jsRuntime represents a detected JavaScript runtime.
+type jsRuntime struct {
+	name string // "bun", "deno", "node"
+}
+
+// detectJSRuntime finds the first available runtime in preference order: bun, deno, node.
+func detectJSRuntime() (*jsRuntime, error) {
+	for _, name := range []string{"bun", "deno", "node"} {
+		if _, err := exec.LookPath(name); err == nil {
+			return &jsRuntime{name: name}, nil
+		}
+	}
+	return nil, fmt.Errorf("no JavaScript runtime found (install bun, deno, or node)")
+}
+
+// installDeps runs the runtime-appropriate dependency install command.
+func (r *jsRuntime) installDeps(dir string) error {
+	var cmd *exec.Cmd
+	switch r.name {
+	case "bun":
+		cmd = exec.Command("bun", "install")
+	case "deno":
+		cmd = exec.Command("deno", "install")
+	case "node":
+		cmd = exec.Command("npm", "install")
+	}
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s install failed: %w\n%s", r.name, err, output)
+	}
+	return nil
+}
+
+// mcpCommand returns the command and args for .mcp.json.
+func (r *jsRuntime) mcpCommand(channelPath string) (string, []any) {
+	switch r.name {
+	case "deno":
+		return "deno", []any{"run", "--allow-all", channelPath}
+	case "node":
+		return "npx", []any{"tsx", channelPath}
+	default: // bun
+		return "bun", []any{channelPath}
+	}
+}
+
 // packageJSON is the package.json for the channel's npm dependencies.
+// tsx is included for Node.js compatibility (bun/deno ignore it).
 const packageJSON = `{
   "name": "monocle-channel",
   "private": true,
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "tsx": "^4.0.0"
   }
 }
 `
@@ -119,18 +169,12 @@ func (a *ClaudeAdapter) installChannel() error {
 		return fmt.Errorf("write package.json: %w", err)
 	}
 
-	// Run bun install to fetch dependencies
-	bunPath, err := exec.LookPath("bun")
+	// Detect runtime and install dependencies
+	rt, err := detectJSRuntime()
 	if err != nil {
-		return fmt.Errorf("bun not found in PATH — install bun for MCP channel support")
+		return err
 	}
-	cmd := exec.Command(bunPath, "install")
-	cmd.Dir = dir
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("bun install failed: %w\n%s", err, output)
-	}
-
-	return nil
+	return rt.installDeps(dir)
 }
 
 // configureMCP adds monocle to .mcp.json.
@@ -153,9 +197,14 @@ func (a *ClaudeAdapter) configureMCP(global bool) error {
 		return fmt.Errorf("cannot determine channel.ts path")
 	}
 
+	rt, err := detectJSRuntime()
+	if err != nil {
+		return err
+	}
+	command, args := rt.mcpCommand(channelPath)
 	servers["monocle"] = map[string]any{
-		"command": "bun",
-		"args":    []any{channelPath},
+		"command": command,
+		"args":    args,
 	}
 
 	return WriteJSONFile(mcpPath, data)

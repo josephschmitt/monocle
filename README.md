@@ -169,7 +169,7 @@ monocle uninstall [--global] Remove MCP channel
 ## Requirements
 
 - [Claude Code](https://claude.com/claude-code) v2.1.80+ (channels require claude.ai login, not API keys)
-- [Bun](https://bun.sh) (runtime for the MCP channel server)
+- A JavaScript runtime for the MCP channel: [Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org) (auto-detected in that order)
 - A terminal with 256-color or true color support
 - A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
 
