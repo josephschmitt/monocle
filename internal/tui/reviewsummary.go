@@ -38,8 +38,9 @@ func (m *reviewSummaryModel) open(summary *types.ReviewSummary, agentStopped boo
 	m.agentStopped = agentStopped
 	m.body = ""
 
-	// Default action: request_changes if there are issues, approve otherwise
-	if summary != nil && summary.IssueCt > 0 {
+	// Default action: request_changes if issues or suggestions, approve otherwise
+	hasActionable := summary != nil && (summary.IssueCt+summary.SuggestionCt > 0)
+	if hasActionable {
 		m.action = types.ActionRequestChanges
 	} else {
 		m.action = types.ActionApprove

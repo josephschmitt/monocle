@@ -695,10 +695,10 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 
 	case "submit!":
 		return func() tea.Msg {
-			// Auto-detect action: request_changes if issues, approve otherwise
+			// Auto-detect action: request_changes if issues/suggestions, approve otherwise
 			action := types.ActionApprove
 			summary, _ := engine.GetReviewSummary()
-			if summary != nil && summary.IssueCt > 0 {
+			if summary != nil && (summary.IssueCt+summary.SuggestionCt > 0) {
 				action = types.ActionRequestChanges
 			}
 			_, err := engine.Submit(action, "")
