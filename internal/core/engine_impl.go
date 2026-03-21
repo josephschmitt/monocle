@@ -487,11 +487,17 @@ func (e *Engine) Approve() (*types.SubmitResult, error) {
 // -- Base ref management --
 
 // SetBaseRef manually sets the diff baseline and disables auto-advance.
+// The base is set to the parent of the given ref so the diff includes that
+// commit's changes (the user selects a commit to review, not to exclude).
 func (e *Engine) SetBaseRef(ref string) error {
-	// Resolve the ref to a full hash
-	resolved, err := e.git.run("rev-parse", ref)
+	// Resolve to the parent so the selected commit's changes are included
+	resolved, err := e.git.run("rev-parse", ref+"~1")
 	if err != nil {
-		return fmt.Errorf("resolve ref %q: %w", ref, err)
+		// Fall back to the ref itself if it has no parent (root commit)
+		resolved, err = e.git.run("rev-parse", ref)
+		if err != nil {
+			return fmt.Errorf("resolve ref %q: %w", ref, err)
+		}
 	}
 	resolved = strings.TrimSpace(resolved)
 
