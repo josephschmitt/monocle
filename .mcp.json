@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "monocle": {
+      "args": [
+        "${HOME}/.config/monocle/channel.ts"
+      ],
+      "command": "bun"
+    }
+  }
+}
