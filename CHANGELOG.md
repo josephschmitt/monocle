@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/josephschmitt/monocle/compare/v0.4.0...v0.5.0) (2026-03-21)
+
+
+### Features
+
+* **tui:** add file-level commenting with C key ([8f00d5e](https://github.com/josephschmitt/monocle/commit/8f00d5e234ed6be5d9082bb29379f2dff26b8766))
+* **tui:** style comment type selector with colored pill tabs ([43776c8](https://github.com/josephschmitt/monocle/commit/43776c84a92618a538185750c384a0eb67852d79))
+
+
+### Bug Fixes
+
+* **tui:** fix modal overlay breaking borders and improve modal sizing ([1b7b11b](https://github.com/josephschmitt/monocle/commit/1b7b11b6c295b4e8dc68d9d5d453b470813dc7a7))
+* **tui:** fix split diff layout overflow caused by tab characters ([a0d0382](https://github.com/josephschmitt/monocle/commit/a0d0382c091b9fffaea662da6afcf81a817c2e91))
+* **tui:** render inline comments at target line with per-type colors ([87a6bde](https://github.com/josephschmitt/monocle/commit/87a6bde60fa5d3437a6a1010aa54416cf4835116))
+* **tui:** skip removed lines in cursor selection ([66ba07a](https://github.com/josephschmitt/monocle/commit/66ba07a22cf325f8a9984e8278e9cad5cc8eb0c9))
+
 ## [0.4.0](https://github.com/josephschmitt/monocle/compare/v0.3.0...v0.4.0) (2026-03-21)
 
 
