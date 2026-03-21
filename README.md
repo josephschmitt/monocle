@@ -15,10 +15,10 @@ Monocle gives you a proper review loop without slowing the agent down. It doesn'
 ## How it works
 
 ```
-┌─────────────┐    stdio/MCP    ┌───────────────┐    socket    ┌──────────┐
-│ Claude Code │ ◂──────────────▸│  channel.ts   │ ◂──────────▸│ monocle  │
-│             │                 │ (MCP server)  │              │  (TUI)   │
-└─────────────┘                 └───────────────┘              └──────────┘
+┌─────────────┐                ┌───────────────┐              ┌──────────┐
+│ Claude Code │<--stdio/MCP--->│  channel.ts   │<---socket--->│ monocle  │
+│             │                │ (MCP server)  │              │  (TUI)   │
+└─────────────┘                └───────────────┘              └──────────┘
 ```
 
 1. You leave line-level comments on diffs — issues, suggestions, notes, praise
