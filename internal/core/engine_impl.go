@@ -726,6 +726,16 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 // -- Lifecycle --
 
 // Shutdown stops the socket server and cleans up resources.
+// GetConfig returns the current configuration.
+func (e *Engine) GetConfig() *types.Config {
+	return e.cfg
+}
+
+// SaveConfig persists the current configuration to disk.
+func (e *Engine) SaveConfig() error {
+	return SaveConfig(e.cfg)
+}
+
 func (e *Engine) Shutdown() {
 	_ = e.server.Shutdown()
 }

@@ -110,6 +110,10 @@ type EngineAPI interface {
 	// Events
 	On(event EventKind, callback EventCallback) UnsubscribeFunc
 
+	// Config
+	GetConfig() *types.Config
+	SaveConfig() error
+
 	// Lifecycle
 	Shutdown()
 }

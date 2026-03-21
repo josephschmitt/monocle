@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -40,6 +41,19 @@ func DefaultConfig() *types.Config {
 			IncludeSummary:  true,
 		},
 	}
+}
+
+// SaveConfig writes the configuration to the global config path.
+func SaveConfig(cfg *types.Config) error {
+	path := configPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func configPath() string {

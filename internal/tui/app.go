@@ -117,6 +117,11 @@ func NewApp(engine core.EngineAPI) appModel {
 	theme := DefaultTheme()
 	sidebar := newSidebarModel()
 	sidebar.focused = true
+	if engine != nil {
+		if cfg := engine.GetConfig(); cfg != nil && cfg.SidebarStyle == "tree" {
+			sidebar.treeMode = true
+		}
+	}
 	return appModel{
 		engine:        engine,
 		sidebar:       sidebar,
@@ -457,6 +462,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload current diff to remove inline comment markers
 		if msg.reloadPath != "" && !msg.isContent {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath})
+		}
+		return m, nil
+
+	case sidebarStyleChangedMsg:
+		cfg := m.engine.GetConfig()
+		if cfg != nil {
+			cfg.SidebarStyle = msg.style
+			_ = m.engine.SaveConfig()
 		}
 		return m, nil
 
