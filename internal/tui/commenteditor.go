@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -134,24 +135,38 @@ func (m commentEditorModel) View() string {
 	}
 	b.WriteString("\n")
 
-	// Type selector
+	// Type selector — each type has a color; selected gets solid bg, unselected gets colored text
 	typeLabels := []struct {
 		t     types.CommentType
 		label string
+		color color.Color
 	}{
-		{types.CommentIssue, "ISSUE"},
-		{types.CommentSuggestion, "SUGGESTION"},
-		{types.CommentNote, "NOTE"},
-		{types.CommentPraise, "PRAISE"},
+		{types.CommentIssue, "ISSUE", lipgloss.Color("1")},
+		{types.CommentSuggestion, "SUGGESTION", lipgloss.Color("3")},
+		{types.CommentNote, "NOTE", lipgloss.Color("4")},
+		{types.CommentPraise, "PRAISE", lipgloss.Color("2")},
 	}
-	for _, tl := range typeLabels {
+	for i, tl := range typeLabels {
+		var style lipgloss.Style
 		if tl.t == m.commentType {
-			b.WriteString(fmt.Sprintf("[%s] ", tl.label))
+			style = lipgloss.NewStyle().
+				Background(tl.color).
+				Foreground(lipgloss.Color("0")).
+				Bold(true).
+				Padding(0, 1)
 		} else {
-			b.WriteString(fmt.Sprintf(" %s  ", strings.ToLower(tl.label)))
+			style = lipgloss.NewStyle().
+				Foreground(tl.color).
+				Padding(0, 1)
+		}
+		b.WriteString(style.Render(tl.label))
+		if i < len(typeLabels)-1 {
+			b.WriteString(" ")
 		}
 	}
-	b.WriteString("  (Tab to cycle)\n\n")
+	b.WriteString("  ")
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("(Tab)"))
+	b.WriteString("\n\n")
 
 	// Text area
 	bodyDisplay := m.body + "█"
