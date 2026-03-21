@@ -8,10 +8,11 @@ import (
 )
 
 type helpModel struct {
-	active bool
-	width  int
-	height int
-	theme  Theme
+	active       bool
+	width        int
+	height       int
+	scrollOffset int
+	theme        Theme
 }
 
 func newHelpModel(theme Theme) helpModel {
@@ -30,9 +31,33 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 		case "esc", "?", "q":
 			m.active = false
 			return m, func() tea.Msg { return closeHelpMsg{} }
+		case "j", "down":
+			m.scrollOffset++
+		case "k", "up":
+			if m.scrollOffset > 0 {
+				m.scrollOffset--
+			}
+		case "ctrl+d":
+			m.scrollOffset += m.viewportHeight() / 2
+		case "ctrl+u":
+			m.scrollOffset -= m.viewportHeight() / 2
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
 		}
 	}
 	return m, nil
+}
+
+// viewportHeight returns how many content lines fit inside the modal.
+// Accounts for overlay topPad (2), border (2), and padding (2).
+func (m helpModel) viewportHeight() int {
+	const chrome = 8 // 2*topPad + 2 border + 2 padding
+	h := m.height - chrome
+	if h < 1 {
+		h = 1
+	}
+	return h
 }
 
 func (m helpModel) View() string {
@@ -116,5 +141,36 @@ func (m helpModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Press ? or Esc to close"))
 
-	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
+	content := b.String()
+
+	// Apply scrolling if content is taller than viewport
+	vpH := m.viewportHeight()
+	lines := strings.Split(content, "\n")
+	if len(lines) > vpH {
+		// Clamp scroll offset
+		maxOffset := len(lines) - vpH
+		if m.scrollOffset > maxOffset {
+			m.scrollOffset = maxOffset
+		}
+
+		end := m.scrollOffset + vpH
+		if end > len(lines) {
+			end = len(lines)
+		}
+		visible := lines[m.scrollOffset:end]
+
+		// Add scroll indicators
+		if m.scrollOffset > 0 {
+			indicator := lipgloss.NewStyle().Faint(true).Render("▲ scroll up")
+			visible[0] = indicator
+		}
+		if end < len(lines) {
+			indicator := lipgloss.NewStyle().Faint(true).Render("▼ scroll down")
+			visible[len(visible)-1] = indicator
+		}
+
+		content = strings.Join(visible, "\n")
+	}
+
+	return m.theme.ModalBorder.Width(modalWidth).Render(content)
 }

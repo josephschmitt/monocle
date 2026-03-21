@@ -433,6 +433,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "?":
 		m.help.active = true
+		m.help.scrollOffset = 0
 		m.overlay = overlayHelp
 		return m, nil
 
@@ -951,8 +952,8 @@ func overlayOn(base, overlay string, width, height int) string {
 	}
 
 	topPad := (height - overlayH) / 2
-	if topPad < 5 {
-		topPad = 5
+	if topPad < 2 {
+		topPad = 2
 	}
 	leftPad := (width - overlayW) / 2
 	if leftPad < 0 {
