@@ -116,6 +116,7 @@ type appModel struct {
 	height int
 
 	theme Theme
+	keys  KeyMap
 
 	mcpInstallFn    func(global bool) error
 	installPrompt   installPromptModel
@@ -129,13 +130,17 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 	}
 
 	theme := DefaultTheme()
-	sidebar := newSidebarModel()
+	keys := DefaultKeyMap()
+	sidebar := newSidebarModel(&keys)
 	sidebar.focused = true
-	dv := newDiffViewModel(&theme)
+	dv := newDiffViewModel(&theme, &keys)
 	var layoutCfg string
 
 	if engine != nil {
 		if cfg := engine.GetConfig(); cfg != nil {
+			if cfg.Keybindings != nil {
+				keys = keys.ApplyOverrides(cfg.Keybindings)
+			}
 			if cfg.SidebarStyle == "tree" {
 				sidebar.treeMode = true
 			}
@@ -161,7 +166,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		statusBar:     newStatusBarModel(theme),
 		commentEditor: newCommentEditorModel(theme),
 		reviewSummary: newReviewSummaryModel(theme),
-		help:          newHelpModel(theme),
+		help:          newHelpModel(theme, &keys),
 		refPicker:     newRefPickerModel(theme),
 		confirm:       newConfirmModel(theme),
 		installPrompt: newInstallPromptModel(theme),
@@ -169,6 +174,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
 		theme:         theme,
+		keys:          keys,
 		mcpInstallFn:  o.MCPInstallFn,
 	}
 }
@@ -590,25 +596,41 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	key := msg.String()
+	km := m.keys
 
-	switch key {
-	case ":":
+	// Check for pane-number shortcuts (1, 2, etc.)
+	if pane, ok := km.FocusPaneN[key]; ok {
+		switch pane {
+		case 1:
+			m.focus = focusSidebar
+			m.sidebar.focused = true
+			m.diffView.focused = false
+		case 2:
+			m.focus = focusMain
+			m.sidebar.focused = false
+			m.diffView.focused = true
+		}
+		return m, nil
+	}
+
+	switch {
+	case Matches(key, km.CommandMode):
 		m.commandMode = true
 		m.commandBuffer = ""
 		m.statusBar.commandMode = true
 		m.statusBar.commandBuffer = ""
 		return m, nil
 
-	case "q":
+	case Matches(key, km.Quit):
 		return m, tea.Quit
 
-	case "?":
+	case Matches(key, km.Help):
 		m.help.active = true
 		m.help.scrollOffset = 0
 		m.overlay = overlayHelp
 		return m, nil
 
-	case "tab":
+	case Matches(key, km.FocusSwap):
 		if m.focus == focusSidebar {
 			m.focus = focusMain
 			m.sidebar.focused = false
@@ -620,19 +642,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "1":
-		m.focus = focusSidebar
-		m.sidebar.focused = true
-		m.diffView.focused = false
-		return m, nil
-
-	case "2":
-		m.focus = focusMain
-		m.sidebar.focused = false
-		m.diffView.focused = true
-		return m, nil
-
-	case "C":
+	case Matches(key, km.FileComment):
 		// File-level comment from sidebar
 		if m.focus == focusSidebar {
 			if f := m.sidebar.selectedFile(); f != nil {
@@ -645,21 +655,19 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
 
-	case "r":
+	case Matches(key, km.Reviewed):
 		return m, m.handleMarkReviewed()
 
-	case "S":
+	case Matches(key, km.Submit):
 		return m, m.executeCommand("submit")
 
-	case "D":
+	case Matches(key, km.DismissOutdated):
 		return m, m.executeCommand("dismiss-outdated")
 
-	case "P":
-		// Toggle pause
+	case Matches(key, km.Pause):
 		return m, m.executeCommand("pause")
 
-	case "T":
-		// Cycle layout: auto → side-by-side → stacked → auto
+	case Matches(key, km.CycleLayout):
 		switch m.layoutConfig {
 		case "", "auto":
 			m.layoutConfig = "side-by-side"
@@ -672,8 +680,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return tea.WindowSizeMsg{Width: m.width, Height: m.height}
 		}
 
-	case "b":
-		// Open ref picker
+	case Matches(key, km.BaseRef):
 		engine := m.engine
 		return m, func() tea.Msg {
 			entries, err := engine.RecentCommits(20)
@@ -686,47 +693,39 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case "J":
-		// Scroll diff view down regardless of focus
+	case Matches(key, km.ScrollDown):
 		m.diffView.ScrollDown()
 		return m, nil
 
-	case "K":
-		// Scroll diff view up regardless of focus
+	case Matches(key, km.ScrollUp):
 		m.diffView.ScrollUp()
 		return m, nil
 
-	case "H":
-		// Scroll diff view left regardless of focus
+	case Matches(key, km.ScrollLeft):
 		m.diffView.ScrollLeft()
 		return m, nil
 
-	case "L":
-		// Scroll diff view right regardless of focus
+	case Matches(key, km.ScrollRight):
 		m.diffView.ScrollRight()
 		return m, nil
 
-	case "ctrl+d":
-		// Scroll diff view down by half page regardless of focus
+	case Matches(key, km.HalfDown):
 		m.diffView.ScrollDownHalfPage()
 		return m, nil
 
-	case "ctrl+u":
-		// Scroll diff view up by half page regardless of focus
+	case Matches(key, km.HalfUp):
 		m.diffView.ScrollUpHalfPage()
 		return m, nil
 
-	case "[":
-		// Navigate to previous file regardless of focus
+	case Matches(key, km.PrevFile):
 		cmd := m.sidebar.navigateFile(-1)
 		return m, cmd
 
-	case "]":
-		// Navigate to next file regardless of focus
+	case Matches(key, km.NextFile):
 		cmd := m.sidebar.navigateFile(+1)
 		return m, cmd
 
-	case "enter":
+	case Matches(key, km.Select):
 		if m.focus == focusSidebar {
 			// In tree mode, enter on a directory toggles collapse
 			if m.sidebar.treeMode && m.sidebar.selectedFile() == nil {
