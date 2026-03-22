@@ -44,6 +44,7 @@ const (
 	overlayConfirm
 	overlayInstallPrompt
 	overlayConnectionInfo
+	overlayHistory
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -121,6 +122,7 @@ type appModel struct {
 	refPicker      refPickerModel
 	confirm        confirmModel
 	connectionInfo connectionInfoModel
+	history        historyModel
 
 	focus        focusTarget
 	overlay      overlayKind
@@ -188,6 +190,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		refPicker:     newRefPickerModel(theme),
 		confirm:        newConfirmModel(theme),
 		connectionInfo: newConnectionInfoModel(theme),
+		history:        newHistoryModel(theme),
 		installPrompt: newInstallPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
@@ -624,6 +627,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		return m, nil
 
+	case openHistoryMsg:
+		m.history.open(msg.submissions)
+		m.history.width = m.width
+		m.history.height = m.height
+		m.overlay = overlayHistory
+		return m, nil
+
+	case closeHistoryMsg:
+		m.overlay = overlayNone
+		return m, nil
+
 	// After comments are cleared, refresh sidebar + diff
 	case commentsClearedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
@@ -688,6 +702,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayConnectionInfo {
 		var cmd tea.Cmd
 		m.connectionInfo, cmd = m.connectionInfo.Update(msg)
+		return m, cmd
+	}
+	if m.overlay == overlayHistory {
+		var cmd tea.Cmd
+		m.history, cmd = m.history.Update(msg)
 		return m, cmd
 	}
 
@@ -974,6 +993,15 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 		return func() tea.Msg {
 			engine.CancelPause()
 			return pauseChangedMsg{status: "cancelled"}
+		}
+
+	case "history":
+		return func() tea.Msg {
+			subs, err := engine.GetSubmissions()
+			if err != nil {
+				return nil
+			}
+			return openHistoryMsg{submissions: subs}
 		}
 	}
 
@@ -1357,6 +1385,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayConnectionInfo {
 		overlayContent := m.connectionInfo.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayHistory {
+		overlayContent := m.history.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

@@ -87,6 +87,7 @@ type EngineAPI interface {
 	GetReviewSummary() (*types.ReviewSummary, error)
 	Submit(action types.SubmitAction, body string) error
 	FormatReview(action types.SubmitAction, body string) (string, error)
+	GetSubmissions() ([]types.ReviewSubmission, error)
 
 	// Base ref management
 	SetBaseRef(ref string) error

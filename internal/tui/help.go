@@ -114,6 +114,7 @@ func (m helpModel) View() string {
 			{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{Label(km.DismissOutdated) + " / :dismiss-outdated", "Dismiss outdated comments"},
 			{":discard", "Discard all pending comments"},
+			{":history", "View submission history"},
 		}},
 		{"General", []struct{ key, desc string }{
 			{Label(km.ToggleDiff), "Toggle unified/split diff"},
