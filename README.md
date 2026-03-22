@@ -2,7 +2,8 @@
 
 **Review your AI agent's code as it writes it.** Leave comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal.
 
-![image](https://github.com/user-attachments/assets/30580911-35ee-4d82-9eb0-5dde13663741)
+![image](https://github.com/user-attachments/assets/c9c2b7ed-ce1b-417e-9fcb-b5086c6e94d4)
+![image](https://github.com/user-attachments/assets/91daaa6f-c838-46df-a699-aaedae62b240)
 
 Monocle is a TUI that runs alongside [Claude Code](https://claude.com/claude-code). It connects via an [MCP channel](https://code.claude.com/docs/en/channels-reference) that pushes your review feedback directly into the agent's context. No copy-pasting, no window switching, no waiting.
 
