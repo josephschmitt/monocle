@@ -29,8 +29,7 @@ func setupTestRepo(t *testing.T) (string, string) {
 		}
 	}
 
-	run("init")
-	run("checkout", "-b", "main")
+	run("init", "-b", "test-main")
 
 	// Create initial file and commit
 	os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n\nfunc hello() {}\n"), 0o644)
