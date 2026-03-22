@@ -140,8 +140,8 @@ func runTUI() error {
 	var appOpts tui.AppOptions
 	adapter := &adapters.ClaudeAdapter{}
 	if adapter.Detect() && adapter.NeedsInstall() {
-		appOpts.MCPInstallFn = func() error {
-			return adapter.Install(true) // global: ~/.mcp.json
+		appOpts.MCPInstallFn = func(global bool) error {
+			return adapter.Install(global)
 		}
 	}
 

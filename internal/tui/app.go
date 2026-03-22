@@ -40,6 +40,7 @@ const (
 	overlayHelp
 	overlayRefPicker
 	overlayConfirm
+	overlayInstallPrompt
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -93,7 +94,7 @@ func refreshTick() tea.Cmd {
 
 // AppOptions configures optional behavior for the TUI app.
 type AppOptions struct {
-	MCPInstallFn func() error // if non-nil, offer MCP auto-install on startup
+	MCPInstallFn func(global bool) error // if non-nil, offer MCP auto-install on startup
 }
 
 // appModel is the root model that composes all sub-models.
@@ -123,7 +124,8 @@ type appModel struct {
 	theme Theme
 	keys  KeyMap
 
-	mcpInstallFn func() error
+	mcpInstallFn    func(global bool) error
+	installPrompt   installPromptModel
 }
 
 // NewApp creates the root appModel.
@@ -169,6 +171,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		help:          newHelpModel(theme),
 		refPicker:     newRefPickerModel(theme),
 		confirm:       newConfirmModel(theme),
+		installPrompt: newInstallPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
@@ -287,6 +290,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help.height = m.height
 		m.confirm.width = m.width
 		m.confirm.height = m.height
+		m.installPrompt.width = m.width
+		m.installPrompt.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -485,31 +490,30 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Confirm overlay actions
 	case confirmActionMsg:
 		m.overlay = overlayNone
-		switch msg.action {
-		case confirmClearAfterSubmit, confirmDiscard:
-			engine := m.engine
-			currentPath := m.diffView.path
-			isContent := m.diffView.contentMode
-			return m, func() tea.Msg {
-				_ = engine.ClearComments()
-				return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
-			}
-		case confirmAutoInstallMCP:
-			installFn := m.mcpInstallFn
-			m.statusBar.feedbackStatus = "Installing MCP channel..."
-			return m, func() tea.Msg {
-				return mcpInstallResultMsg{err: installFn()}
-			}
+		engine := m.engine
+		currentPath := m.diffView.path
+		isContent := m.diffView.contentMode
+		return m, func() tea.Msg {
+			_ = engine.ClearComments()
+			return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
 		}
-		return m, nil
 
 	case mcpInstallPromptMsg:
-		m.confirm.open(
-			"Install MCP Channel",
-			"Monocle's MCP channel for Claude Code is not installed.\nInstall it now? (configures ~/.mcp.json)",
-			confirmAutoInstallMCP,
-		)
-		m.overlay = overlayConfirm
+		m.installPrompt.open()
+		m.overlay = overlayInstallPrompt
+		return m, nil
+
+	case installMCPMsg:
+		m.overlay = overlayNone
+		installFn := m.mcpInstallFn
+		global := msg.global
+		m.statusBar.feedbackStatus = "Installing MCP channel..."
+		return m, func() tea.Msg {
+			return mcpInstallResultMsg{err: installFn(global)}
+		}
+
+	case cancelInstallMsg:
+		m.overlay = overlayNone
 		return m, nil
 
 	case mcpInstallResultMsg:
@@ -581,6 +585,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayConfirm {
 		var cmd tea.Cmd
 		m.confirm, cmd = m.confirm.Update(msg)
+		return m, cmd
+	}
+	if m.overlay == overlayInstallPrompt {
+		var cmd tea.Cmd
+		m.installPrompt, cmd = m.installPrompt.Update(msg)
 		return m, cmd
 	}
 
@@ -1166,6 +1175,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayConfirm {
 		overlayContent := m.confirm.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayInstallPrompt {
+		overlayContent := m.installPrompt.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}
