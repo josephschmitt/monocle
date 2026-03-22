@@ -1200,9 +1200,11 @@ func (m appModel) refreshFiles() tea.Cmd {
 		var comments []types.ReviewComment
 		if currentPath != "" && !inContentMode {
 			result, _ = engine.GetFileDiff(currentPath)
-			for _, c := range session.Comments {
-				if c.TargetRef == currentPath {
-					comments = append(comments, c)
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == currentPath {
+						comments = append(comments, c)
+					}
 				}
 			}
 		}
