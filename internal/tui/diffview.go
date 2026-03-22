@@ -32,6 +32,11 @@ type diffViewLine struct {
 	// Paired line content for intra-line diff highlighting (unified mode)
 	pairContent string
 
+	// Markdown rendering state
+	mdInCodeBlock bool
+	mdIsFence     bool
+	mdCodeLang    string
+
 	// Split diff: right side
 	isSplit      bool
 	rightKind    types.DiffLineKind
@@ -67,12 +72,14 @@ type diffViewModel struct {
 	contentMode bool
 	contentID   string
 	contentTitle string
+	mdStyler    *markdownStyler
 }
 
 func newDiffViewModel(theme *Theme) diffViewModel {
 	return diffViewModel{
-		theme: theme,
-		hl:    newHighlighter(),
+		theme:    theme,
+		hl:       newHighlighter(),
+		mdStyler: newMarkdownStyler(*theme),
 	}
 }
 
@@ -115,6 +122,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		return m, nil
 
 	case loadContentMsg:
+		isReload := m.contentMode && m.contentID == msg.id
 		m.contentMode = true
 		m.contentID = msg.id
 		m.contentTitle = msg.title
@@ -128,10 +136,17 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.path = msg.id
 		}
 		m.hunks = nil
-		m.comments = nil
+		m.comments = msg.comments
+		prevCursor := m.cursor
+		prevOffset := m.offset
 		m.buildContentLines(msg.content)
-		m.cursor = m.nearestSelectable(0, 1)
-		m.offset = 0
+		if isReload && prevCursor < len(m.lines) {
+			m.cursor = m.nearestSelectable(prevCursor, 1)
+			m.offset = prevOffset
+		} else {
+			m.cursor = m.nearestSelectable(0, 1)
+			m.offset = 0
+		}
 		m.hOffset = 0
 		m.visualMode = false
 		return m, nil
@@ -309,10 +324,14 @@ func (m *diffViewModel) buildLines() {
 				content:    m.expandTabs(dl.Content),
 			})
 
-			// Insert comments targeting this new-file line
+			// Insert comments after their last targeted line
 			for i := range m.comments {
 				c := &m.comments[i]
-				if c.TargetRef == m.path && c.LineStart == dl.NewLineNum && dl.NewLineNum > 0 {
+				anchor := c.LineEnd
+				if anchor == 0 {
+					anchor = c.LineStart
+				}
+				if c.TargetRef == m.path && anchor == dl.NewLineNum && dl.NewLineNum > 0 {
 					m.lines = append(m.lines, diffViewLine{
 						isComment: true,
 						comment:   c,
@@ -329,13 +348,65 @@ func (m *diffViewModel) buildLines() {
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
 func (m *diffViewModel) buildContentLines(content string) {
 	m.lines = nil
+
+	// File-level comments (LineStart == 0) rendered before content
+	for i := range m.comments {
+		c := &m.comments[i]
+		if c.TargetRef == m.contentID && c.LineStart == 0 {
+			m.lines = append(m.lines, diffViewLine{
+				isComment: true,
+				comment:   c,
+				content:   formatInlineComment(c),
+			})
+		}
+	}
+
+	isMd := isMarkdownContent(m.path)
+	inCodeBlock := false
+	codeLang := ""
 	rawLines := strings.Split(content, "\n")
 	for i, line := range rawLines {
+		lineNum := i + 1
+
+		// Track code fence state for markdown rendering
+		isFence := false
+		if isMd {
+			if fence := codeFencePattern.FindStringSubmatch(line); fence != nil {
+				isFence = true
+				if !inCodeBlock {
+					inCodeBlock = true
+					codeLang = fence[1]
+				} else {
+					inCodeBlock = false
+					codeLang = ""
+				}
+			}
+		}
+
 		m.lines = append(m.lines, diffViewLine{
-			kind:       types.DiffLineContext,
-			newLineNum: i + 1,
-			content:    m.expandTabs(line),
+			kind:          types.DiffLineContext,
+			newLineNum:    lineNum,
+			content:       m.expandTabs(line),
+			mdInCodeBlock: inCodeBlock && isMd && !isFence,
+			mdIsFence:     isFence,
+			mdCodeLang:    codeLang,
 		})
+
+		// Insert comments after their last targeted line
+		for j := range m.comments {
+			c := &m.comments[j]
+			anchor := c.LineEnd
+			if anchor == 0 {
+				anchor = c.LineStart
+			}
+			if c.TargetRef == m.contentID && anchor == lineNum {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
+		}
 	}
 }
 
@@ -510,6 +581,7 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
 	gutterWidth := 4
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
+	isMd := m.contentMode && isMarkdownContent(m.path)
 
 	// Wrap mode
 	if m.wrap {
@@ -538,7 +610,28 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
 	renderedGutter := gutterStyle.Render(gutter)
-	renderedContent := m.hl.highlightLine(m.path, content, nil, nil, nil, contentWidth)
+
+	// Render content: markdown styling or syntax highlighting
+	var renderedContent string
+	if isMd && line.mdIsFence {
+		// Code fence markers → render as horizontal rule
+		renderedContent = m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
+		renderedContent = padToWidth(renderedContent, contentWidth)
+	} else if isMd && line.mdInCodeBlock && line.mdCodeLang != "" {
+		// Code block with language → use Chroma syntax highlighting
+		fakePath := "code." + line.mdCodeLang
+		renderedContent = m.hl.highlightLine(fakePath, content, nil, nil, nil, contentWidth)
+	} else if isMd && line.mdInCodeBlock {
+		// Code block without language → code block style
+		renderedContent = m.mdStyler.theme.MarkdownCodeBlock.Render(content)
+		renderedContent = padToWidth(renderedContent, contentWidth)
+	} else if isMd {
+		// Regular markdown line
+		renderedContent = m.mdStyler.StyleLine(content)
+		renderedContent = padToWidth(renderedContent, contentWidth)
+	} else {
+		renderedContent = m.hl.highlightLine(m.path, content, nil, nil, nil, contentWidth)
+	}
 
 	return renderedGutter + renderedContent
 }
@@ -1175,7 +1268,11 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 		}
 
 		for _, c := range hunkComments {
-			if c.LineStart == lineNum {
+			anchor := c.LineEnd
+			if anchor == 0 {
+				anchor = c.LineStart
+			}
+			if anchor == lineNum {
 				result = append(result, diffViewLine{
 					isComment: true,
 					comment:   c,
