@@ -13,10 +13,11 @@ type helpModel struct {
 	height       int
 	scrollOffset int
 	theme        Theme
+	keys         *KeyMap
 }
 
-func newHelpModel(theme Theme) helpModel {
-	return helpModel{theme: theme}
+func newHelpModel(theme Theme, keys *KeyMap) helpModel {
+	return helpModel{theme: theme, keys: keys}
 }
 
 type closeHelpMsg struct{}
@@ -81,43 +82,44 @@ func (m helpModel) View() string {
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Keybindings"))
 	b.WriteString("\n\n")
 
+	km := m.keys
 	sections := []struct {
 		title string
 		keys  []struct{ key, desc string }
 	}{
 		{"Navigation", []struct{ key, desc string }{
-			{"j/k", "Move up/down"},
-			{"Ctrl+d/u", "Scroll diff half page (any pane)"},
-			{"g/G", "Top/bottom"},
-			{"J/K", "Scroll diff up/down (any pane)"},
+			{Label(km.Down) + "/" + Label(km.Up), "Move up/down"},
+			{Label(km.HalfDown) + "/" + Label(km.HalfUp), "Scroll diff half page (any pane)"},
+			{Label(km.Top) + "/" + Label(km.Bottom), "Top/bottom"},
+			{Label(km.ScrollDown) + "/" + Label(km.ScrollUp), "Scroll diff up/down (any pane)"},
 			{"h/l", "Scroll diff left/right"},
-			{"H/L", "Scroll diff left/right (any pane)"},
-			{"w", "Toggle line wrapping"},
-			{"[/]", "Previous/next file (any pane)"},
-			{"Enter", "Focus diff pane / toggle dir"},
-			{"Tab", "Switch pane focus"},
+			{Label(km.ScrollLeft) + "/" + Label(km.ScrollRight), "Scroll diff left/right (any pane)"},
+			{Label(km.Wrap), "Toggle line wrapping"},
+			{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next file (any pane)"},
+			{Label(km.Select), "Focus diff pane / toggle dir"},
+			{Label(km.FocusSwap), "Switch pane focus"},
 			{"1/2", "Jump to pane"},
-			{"b", "Change base ref"},
-			{"f", "Toggle flat/tree view"},
-			{"z/e", "Collapse/expand all (tree)"},
+			{Label(km.BaseRef), "Change base ref"},
+			{Label(km.TreeMode), "Toggle flat/tree view"},
+			{Label(km.CollapseAll) + "/" + Label(km.ExpandAll), "Collapse/expand all (tree)"},
 		}},
 		{"Review", []struct{ key, desc string }{
-			{"c", "Add comment at cursor"},
-			{"C", "Add file comment"},
-			{"v", "Visual select mode"},
-			{"r", "Toggle file reviewed"},
-			{"S / :submit", "Submit review"},
+			{Label(km.Comment), "Add comment at cursor"},
+			{Label(km.FileComment), "Add file comment"},
+			{Label(km.Visual), "Visual select mode"},
+			{Label(km.Reviewed), "Toggle file reviewed"},
+			{Label(km.Submit) + " / :submit", "Submit review"},
 			{"Ctrl+y", "Copy review to clipboard"},
-			{"P / :pause", "Toggle pause (ask Claude Code to wait)"},
-			{"D / :dismiss-outdated", "Dismiss outdated comments"},
+			{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
+			{Label(km.DismissOutdated) + " / :dismiss-outdated", "Dismiss outdated comments"},
 			{":discard", "Discard all pending comments"},
 		}},
 		{"General", []struct{ key, desc string }{
-			{"t", "Toggle unified/split diff"},
-			{"T", "Cycle layout (auto/side-by-side/stacked)"},
+			{Label(km.ToggleDiff), "Toggle unified/split diff"},
+			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
 			{"I", "Connection info"},
-			{"?", "Show this help"},
-			{"q", "Quit"},
+			{Label(km.Help), "Show this help"},
+			{Label(km.Quit), "Quit"},
 		}},
 	}
 

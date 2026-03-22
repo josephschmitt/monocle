@@ -1,63 +1,204 @@
 package tui
 
-import "charm.land/bubbles/v2/key"
-
-// KeyMap defines all keybindings.
+// KeyMap defines all configurable keybindings. Each field holds one or more
+// key strings that trigger that action. Users override individual actions
+// via Config.Keybindings (map action name → key string).
 type KeyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	HalfUp   key.Binding
-	HalfDown key.Binding
-	Top       key.Binding
-	Bottom    key.Binding
-	PrevFile  key.Binding
-	NextFile  key.Binding
-	Select    key.Binding
-	Comment     key.Binding
-	FileComment key.Binding
-	Visual      key.Binding
-	VisualLine  key.Binding
-	Reviewed  key.Binding
-	ToggleDiff key.Binding
-	TreeMode   key.Binding
-	Collapse   key.Binding
-	ExpandAll  key.Binding
-	ScrollMainDown  key.Binding
-	ScrollMainUp    key.Binding
-	ScrollMainLeft  key.Binding
-	ScrollMainRight key.Binding
-	Wrap            key.Binding
-	FocusSwap       key.Binding
-	Quit      key.Binding
+	// Navigation
+	Up       []string
+	Down     []string
+	Top      []string
+	Bottom   []string
+	HalfUp   []string
+	HalfDown []string
+	PrevFile []string
+	NextFile []string
+	Select   []string
+
+	// Pane focus
+	FocusSwap   []string
+	FocusPaneN  map[string]int // key → pane number (1=sidebar, 2=diff)
+
+	// Diff view
+	ScrollDown  []string
+	ScrollUp    []string
+	ScrollLeft  []string
+	ScrollRight []string
+	ScrollHome  []string
+	Wrap        []string
+	ToggleDiff  []string
+
+	// Sidebar
+	TreeMode    []string
+	CollapseAll []string
+	ExpandAll   []string
+
+	// Review actions
+	Comment     []string
+	FileComment []string
+	Visual      []string
+	Reviewed    []string
+	Submit      []string
+	Pause       []string
+	DismissOutdated []string
+
+	// General
+	BaseRef     []string
+	CycleLayout []string
+	Help        []string
+	Quit        []string
+	CommandMode []string
 }
 
-// DefaultKeyMap returns the default keybindings.
+// DefaultKeyMap returns the built-in default keybindings.
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
-		Up:        key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
-		Down:      key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
-		HalfUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("C-u", "scroll diff half page up")),
-		HalfDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("C-d", "scroll diff half page down")),
-		Top:       key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
-		Bottom:    key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
-		PrevFile:  key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev file (any pane)")),
-		NextFile:  key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next file (any pane)")),
-		Select:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-		Comment:     key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
-		FileComment: key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "file comment")),
-		Visual:      key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "visual")),
-		VisualLine: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "visual line")),
-		Reviewed:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "mark reviewed")),
-		ToggleDiff: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "toggle diff style")),
-		TreeMode:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "tree mode")),
-		Collapse:   key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "collapse all")),
-		ExpandAll:  key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expand all")),
-		ScrollMainDown:  key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "scroll diff down")),
-		ScrollMainUp:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "scroll diff up")),
-		ScrollMainLeft:  key.NewBinding(key.WithKeys("H"), key.WithHelp("H", "scroll diff left")),
-		ScrollMainRight: key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "scroll diff right")),
-		Wrap:            key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "toggle line wrap")),
-		FocusSwap:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
-		Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		Up:       []string{"k", "up"},
+		Down:     []string{"j", "down"},
+		Top:      []string{"g"},
+		Bottom:   []string{"G"},
+		HalfUp:   []string{"ctrl+u"},
+		HalfDown: []string{"ctrl+d"},
+		PrevFile: []string{"["},
+		NextFile: []string{"]"},
+		Select:   []string{"enter"},
+
+		FocusSwap:  []string{"tab"},
+		FocusPaneN: map[string]int{"1": 1, "2": 2},
+
+		ScrollDown:  []string{"J"},
+		ScrollUp:    []string{"K"},
+		ScrollLeft:  []string{"H"},
+		ScrollRight: []string{"L"},
+		ScrollHome:  []string{"0"},
+		Wrap:        []string{"w"},
+		ToggleDiff:  []string{"t"},
+
+		TreeMode:    []string{"f"},
+		CollapseAll: []string{"z"},
+		ExpandAll:   []string{"e"},
+
+		Comment:         []string{"c"},
+		FileComment:     []string{"C"},
+		Visual:          []string{"v"},
+		Reviewed:        []string{"r"},
+		Submit:          []string{"S"},
+		Pause:           []string{"P"},
+		DismissOutdated: []string{"D"},
+
+		BaseRef:     []string{"b"},
+		CycleLayout: []string{"T"},
+		Help:        []string{"?"},
+		Quit:        []string{"q"},
+		CommandMode: []string{":"},
 	}
+}
+
+// actionBindings maps config action names to pointers into the KeyMap.
+// This is used by ApplyOverrides to find which field to update.
+var actionNames = []string{
+	"up", "down", "top", "bottom", "half_up", "half_down",
+	"prev_file", "next_file", "select",
+	"focus_swap",
+	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home",
+	"wrap", "toggle_diff",
+	"tree_mode", "collapse_all", "expand_all",
+	"comment", "file_comment", "visual", "reviewed",
+	"submit", "pause", "dismiss_outdated",
+	"base_ref", "cycle_layout", "help", "quit", "command_mode",
+}
+
+// ApplyOverrides merges user-configured keybinding overrides into the keymap.
+// Each key in overrides is an action name (e.g. "quit"), value is the key string.
+func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
+	for action, key := range overrides {
+		switch action {
+		case "up":
+			km.Up = []string{key}
+		case "down":
+			km.Down = []string{key}
+		case "top":
+			km.Top = []string{key}
+		case "bottom":
+			km.Bottom = []string{key}
+		case "half_up":
+			km.HalfUp = []string{key}
+		case "half_down":
+			km.HalfDown = []string{key}
+		case "prev_file":
+			km.PrevFile = []string{key}
+		case "next_file":
+			km.NextFile = []string{key}
+		case "select":
+			km.Select = []string{key}
+		case "focus_swap":
+			km.FocusSwap = []string{key}
+		case "scroll_down":
+			km.ScrollDown = []string{key}
+		case "scroll_up":
+			km.ScrollUp = []string{key}
+		case "scroll_left":
+			km.ScrollLeft = []string{key}
+		case "scroll_right":
+			km.ScrollRight = []string{key}
+		case "scroll_home":
+			km.ScrollHome = []string{key}
+		case "wrap":
+			km.Wrap = []string{key}
+		case "toggle_diff":
+			km.ToggleDiff = []string{key}
+		case "tree_mode":
+			km.TreeMode = []string{key}
+		case "collapse_all":
+			km.CollapseAll = []string{key}
+		case "expand_all":
+			km.ExpandAll = []string{key}
+		case "comment":
+			km.Comment = []string{key}
+		case "file_comment":
+			km.FileComment = []string{key}
+		case "visual":
+			km.Visual = []string{key}
+		case "reviewed":
+			km.Reviewed = []string{key}
+		case "submit":
+			km.Submit = []string{key}
+		case "pause":
+			km.Pause = []string{key}
+		case "dismiss_outdated":
+			km.DismissOutdated = []string{key}
+		case "base_ref":
+			km.BaseRef = []string{key}
+		case "cycle_layout":
+			km.CycleLayout = []string{key}
+		case "help":
+			km.Help = []string{key}
+		case "quit":
+			km.Quit = []string{key}
+		case "command_mode":
+			km.CommandMode = []string{key}
+		}
+	}
+	return km
+}
+
+// Matches returns true if the key string matches any of the given bindings.
+func Matches(key string, bindings []string) bool {
+	for _, b := range bindings {
+		if key == b {
+			return true
+		}
+	}
+	return false
+}
+
+// Label returns the display label for a keybinding (first key, or joined with /).
+func Label(bindings []string) string {
+	if len(bindings) == 0 {
+		return ""
+	}
+	if len(bindings) == 1 {
+		return bindings[0]
+	}
+	return bindings[0] + "/" + bindings[1]
 }

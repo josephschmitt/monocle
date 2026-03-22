@@ -19,6 +19,7 @@ type sidebarModel struct {
 	height       int
 	focused      bool
 	recentPaths  map[string]bool
+	keys         *KeyMap
 
 	// Tree mode state
 	treeMode     bool
@@ -27,10 +28,11 @@ type sidebarModel struct {
 	visibleItems []visibleItem
 }
 
-func newSidebarModel() sidebarModel {
+func newSidebarModel(keys *KeyMap) sidebarModel {
 	return sidebarModel{
 		recentPaths: make(map[string]bool),
 		collapsed:   make(map[string]bool),
+		keys:        keys,
 	}
 }
 
@@ -54,28 +56,29 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 		if !m.focused {
 			return m, nil
 		}
-		switch msg.String() {
-		case "j", "down":
+		key := msg.String()
+		switch {
+		case Matches(key, m.keys.Down):
 			if m.cursor < m.totalItems()-1 {
 				m.cursor++
 			}
 			m.ensureVisible()
 			return m, m.selectCurrent()
-		case "k", "up":
+		case Matches(key, m.keys.Up):
 			if m.cursor > 0 {
 				m.cursor--
 			}
 			m.ensureVisible()
 			return m, m.selectCurrent()
-		case "g":
+		case Matches(key, m.keys.Top):
 			m.cursor = 0
 			m.ensureVisible()
-		case "G":
+		case Matches(key, m.keys.Bottom):
 			if total := m.totalItems(); total > 0 {
 				m.cursor = total - 1
 			}
 			m.ensureVisible()
-		case "enter":
+		case Matches(key, m.keys.Select):
 			if m.treeMode {
 				idx := m.cursor - len(m.contentItems)
 				if idx >= 0 && idx < len(m.visibleItems) && m.visibleItems[idx].isDir {
@@ -95,7 +98,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 				}
 			}
 			return m, m.selectCurrent()
-		case "f":
+		case Matches(key, m.keys.TreeMode):
 			currentPath := ""
 			if f := m.selectedFile(); f != nil {
 				currentPath = f.Path
@@ -112,12 +115,12 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			}
 			m.ensureVisible()
 			return m, m.selectCurrent()
-		case "z":
+		case Matches(key, m.keys.CollapseAll):
 			if m.treeMode {
 				m.collapseAll()
 				return m, m.selectCurrent()
 			}
-		case "e":
+		case Matches(key, m.keys.ExpandAll):
 			if m.treeMode {
 				m.collapsed = make(map[string]bool)
 				m.visibleItems = flattenTree(m.treeRoots, m.collapsed)

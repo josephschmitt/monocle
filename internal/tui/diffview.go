@@ -73,13 +73,16 @@ type diffViewModel struct {
 	contentID   string
 	contentTitle string
 	mdStyler    *markdownStyler
+
+	keys *KeyMap
 }
 
-func newDiffViewModel(theme *Theme) diffViewModel {
+func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
 	return diffViewModel{
 		theme:    theme,
 		hl:       newHighlighter(),
 		mdStyler: newMarkdownStyler(*theme),
+		keys:     keys,
 	}
 }
 
@@ -155,43 +158,44 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		if !m.focused {
 			return m, nil
 		}
-		switch msg.String() {
-		case "j", "down":
+		key := msg.String()
+		switch {
+		case Matches(key, m.keys.Down):
 			m.cursor = m.nextSelectable(m.cursor, 1)
 			m.ensureVisible()
-		case "k", "up":
+		case Matches(key, m.keys.Up):
 			m.cursor = m.nextSelectable(m.cursor, -1)
 			m.ensureVisible()
-		case "g":
+		case Matches(key, m.keys.Top):
 			m.cursor = m.nearestSelectable(0, 1)
 			m.ensureVisible()
-		case "G":
+		case Matches(key, m.keys.Bottom):
 			if len(m.lines) > 0 {
 				m.cursor = m.nearestSelectable(len(m.lines)-1, -1)
 			}
 			m.ensureVisible()
-		case "v":
+		case Matches(key, m.keys.Visual):
 			if !m.visualMode {
 				m.visualMode = true
 				m.visualStart = m.cursor
 			} else {
 				m.visualMode = false
 			}
-		case "esc":
+		case key == "esc":
 			m.visualMode = false
-		case "h", "left":
+		case key == "h" || key == "left":
 			m.ScrollLeft()
-		case "l", "right":
+		case key == "l" || key == "right":
 			m.ScrollRight()
-		case "0":
+		case Matches(key, m.keys.ScrollHome):
 			m.hOffset = 0
-		case "w":
+		case Matches(key, m.keys.Wrap):
 			m.wrap = !m.wrap
 			if m.wrap {
 				m.hOffset = 0
 			}
 			m.ensureVisible()
-		case "t":
+		case Matches(key, m.keys.ToggleDiff):
 			// Toggle diff style
 			if m.style == diffStyleUnified {
 				m.style = diffStyleSplit
@@ -199,7 +203,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				m.style = diffStyleUnified
 			}
 			m.buildLines()
-		case "c":
+		case Matches(key, m.keys.Comment):
 			// Open comment editor
 			if m.contentMode {
 				// Content mode: comment on the content item
@@ -221,7 +225,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 					return m, openCommentCmd(m.path, line, line, types.TargetFile)
 				}
 			}
-		case "C":
+		case Matches(key, m.keys.FileComment):
 			// File-level comment
 			if m.contentMode {
 				return m, openFileCommentCmd(m.contentID, types.TargetContent)
