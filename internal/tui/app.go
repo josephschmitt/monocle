@@ -547,10 +547,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		currentPath := m.diffView.path
 		isContent := m.diffView.contentMode
-		return m, func() tea.Msg {
-			_ = engine.ClearComments()
-			return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+		switch msg.action {
+		case confirmClearAfterSubmit, confirmDiscard:
+			return m, func() tea.Msg {
+				_ = engine.ClearComments()
+				return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+			}
 		}
+		return m, nil
 
 	case mcpInstallPromptMsg:
 		m.installPrompt.open()

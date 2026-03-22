@@ -37,6 +37,11 @@ func DefaultConfig() *types.Config {
 		Layout:         "auto",
 		TabSize:        4,
 		ContextLines:   3,
+		ReviewFormat: types.ReviewFormatConfig{
+			IncludeSnippets: true,
+			MaxSnippetLines: 10,
+			IncludeSummary:  true,
+		},
 	}
 }
 
