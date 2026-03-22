@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/anthropics/monocle/internal/clipboard"
 	"github.com/anthropics/monocle/internal/core"
 	"github.com/anthropics/monocle/internal/types"
 )
@@ -470,13 +471,44 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		action := msg.action
 		body := msg.body
+		copyToClip := msg.copyToClipboard
+		engine := m.engine
 		return m, func() tea.Msg {
-			_, err := m.engine.Submit(action, body)
+			_, err := engine.Submit(action, body)
 			if err != nil {
 				return agentStatusMsg{status: "submit_error"}
 			}
+			if copyToClip {
+				if text, err := engine.FormatReview(action, body); err == nil {
+					clipboard.Copy(text)
+				}
+			}
 			return submitSuccessMsg{}
 		}
+
+	case yankReviewMsg:
+		m.overlay = overlayNone
+		action := msg.action
+		body := msg.body
+		engine := m.engine
+		return m, func() tea.Msg {
+			text, err := engine.FormatReview(action, body)
+			if err != nil {
+				return yankFailMsg{err: err.Error()}
+			}
+			if copyErr := clipboard.Copy(text); copyErr != nil {
+				return yankFailMsg{err: copyErr.Error()}
+			}
+			return yankSuccessMsg{}
+		}
+
+	case yankSuccessMsg:
+		m.statusBar.feedbackStatus = "copied"
+		return m, nil
+
+	case yankFailMsg:
+		m.statusBar.feedbackStatus = "copy_failed"
+		return m, nil
 
 	case cancelSubmitMsg:
 		m.overlay = overlayNone

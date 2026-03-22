@@ -12,14 +12,15 @@ import (
 )
 
 type reviewSummaryModel struct {
-	active       bool
-	summary      *types.ReviewSummary
-	agentStopped bool
-	action       types.SubmitAction
-	body         string
-	width        int
-	height       int
-	theme        Theme
+	active          bool
+	summary         *types.ReviewSummary
+	agentStopped    bool
+	action          types.SubmitAction
+	body            string
+	copyToClipboard bool
+	width           int
+	height          int
+	theme           Theme
 }
 
 func newReviewSummaryModel(theme Theme) reviewSummaryModel {
@@ -27,16 +28,27 @@ func newReviewSummaryModel(theme Theme) reviewSummaryModel {
 }
 
 type confirmSubmitMsg struct {
+	action          types.SubmitAction
+	body            string
+	copyToClipboard bool
+}
+type cancelSubmitMsg struct{}
+
+type yankReviewMsg struct {
 	action types.SubmitAction
 	body   string
 }
-type cancelSubmitMsg struct{}
+type yankSuccessMsg struct{}
+type yankFailMsg struct {
+	err string
+}
 
 func (m *reviewSummaryModel) open(summary *types.ReviewSummary, agentStopped bool) {
 	m.active = true
 	m.summary = summary
 	m.agentStopped = agentStopped
 	m.body = ""
+	m.copyToClipboard = false
 
 	// Default action: request_changes if issues or suggestions, approve otherwise
 	hasActionable := summary != nil && (summary.IssueCt+summary.SuggestionCt > 0)
@@ -62,8 +74,9 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 		case "enter":
 			m.active = false
 			submitMsg := confirmSubmitMsg{
-				action: m.action,
-				body:   m.body,
+				action:          m.action,
+				body:            m.body,
+				copyToClipboard: m.copyToClipboard,
 			}
 			return m, func() tea.Msg { return submitMsg }
 		case "esc":
@@ -76,6 +89,15 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 			} else {
 				m.action = types.ActionApprove
 			}
+		case "ctrl+y":
+			m.active = false
+			yank := yankReviewMsg{
+				action: m.action,
+				body:   m.body,
+			}
+			return m, func() tea.Msg { return yank }
+		case "shift+tab":
+			m.copyToClipboard = !m.copyToClipboard
 		case "shift+enter", "alt+enter":
 			m.body += "\n"
 		case "backspace":
@@ -182,6 +204,15 @@ func (m reviewSummaryModel) View() string {
 	b.WriteString(bodyDisplay)
 	b.WriteString("\n\n")
 
+	// Copy to clipboard checkbox
+	check := " "
+	if m.copyToClipboard {
+		check = "x"
+	}
+	b.WriteString(fmt.Sprintf("[%s] Copy to clipboard  ", check))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("(Shift+Tab)"))
+	b.WriteString("\n\n")
+
 	// Delivery status
 	if m.agentStopped {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("Review will be sent immediately"))
@@ -190,7 +221,7 @@ func (m reviewSummaryModel) View() string {
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Shift+Enter: newline  Tab: cycle status  Esc: cancel"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Ctrl+Y: yank  Esc: cancel"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }

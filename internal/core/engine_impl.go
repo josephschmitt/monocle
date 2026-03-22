@@ -480,6 +480,19 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*types.SubmitRe
 	}, nil
 }
 
+func (e *Engine) FormatReview(action types.SubmitAction, body string) (string, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+
+	if session == nil {
+		return "", fmt.Errorf("no active session")
+	}
+
+	formatted := e.formatter.Format(session, session.Comments, action, body)
+	return formatted.Formatted, nil
+}
+
 // -- Base ref management --
 
 // SetBaseRef manually sets the diff baseline and disables auto-advance.
