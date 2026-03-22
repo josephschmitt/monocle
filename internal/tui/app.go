@@ -77,12 +77,23 @@ type openConfirmMsg struct {
 	action  confirmAction
 }
 
+type mcpInstallPromptMsg struct{}
+
+type mcpInstallResultMsg struct {
+	err error
+}
+
 type refreshTickMsg struct{}
 
 func refreshTick() tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 		return refreshTickMsg{}
 	})
+}
+
+// AppOptions configures optional behavior for the TUI app.
+type AppOptions struct {
+	MCPInstallFn func() error // if non-nil, offer MCP auto-install on startup
 }
 
 // appModel is the root model that composes all sub-models.
@@ -111,10 +122,17 @@ type appModel struct {
 
 	theme Theme
 	keys  KeyMap
+
+	mcpInstallFn func() error
 }
 
 // NewApp creates the root appModel.
-func NewApp(engine core.EngineAPI) appModel {
+func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
+	var o AppOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	theme := DefaultTheme()
 	sidebar := newSidebarModel()
 	sidebar.focused = true
@@ -156,19 +174,26 @@ func NewApp(engine core.EngineAPI) appModel {
 		layoutConfig:  layoutCfg,
 		theme:         theme,
 		keys:          DefaultKeyMap(),
+		mcpInstallFn:  o.MCPInstallFn,
 	}
 }
 
 // Init loads the initial file list from the engine and starts the refresh tick.
 func (m appModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		func() tea.Msg {
 			files := m.engine.GetChangedFiles()
 			items := m.engine.GetContentItems()
 			return initialLoadMsg{files: files, items: items}
 		},
 		refreshTick(),
-	)
+	}
+	if m.mcpInstallFn != nil {
+		cmds = append(cmds, func() tea.Msg {
+			return mcpInstallPromptMsg{}
+		})
+	}
+	return tea.Batch(cmds...)
 }
 
 // initialLoadMsg carries the initial file and content item lists.
@@ -460,13 +485,41 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Confirm overlay actions
 	case confirmActionMsg:
 		m.overlay = overlayNone
-		engine := m.engine
-		currentPath := m.diffView.path
-		isContent := m.diffView.contentMode
-		return m, func() tea.Msg {
-			_ = engine.ClearComments()
-			return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+		switch msg.action {
+		case confirmClearAfterSubmit, confirmDiscard:
+			engine := m.engine
+			currentPath := m.diffView.path
+			isContent := m.diffView.contentMode
+			return m, func() tea.Msg {
+				_ = engine.ClearComments()
+				return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+			}
+		case confirmAutoInstallMCP:
+			installFn := m.mcpInstallFn
+			m.statusBar.feedbackStatus = "Installing MCP channel..."
+			return m, func() tea.Msg {
+				return mcpInstallResultMsg{err: installFn()}
+			}
 		}
+		return m, nil
+
+	case mcpInstallPromptMsg:
+		m.confirm.open(
+			"Install MCP Channel",
+			"Monocle's MCP channel for Claude Code is not installed.\nInstall it now? (configures ~/.mcp.json)",
+			confirmAutoInstallMCP,
+		)
+		m.overlay = overlayConfirm
+		return m, nil
+
+	case mcpInstallResultMsg:
+		if msg.err != nil {
+			m.statusBar.feedbackStatus = "MCP install failed"
+		} else {
+			m.statusBar.feedbackStatus = "MCP channel installed"
+			m.mcpInstallFn = nil
+		}
+		return m, nil
 
 	case openConfirmMsg:
 		m.confirm.open(msg.title, msg.message, msg.action)

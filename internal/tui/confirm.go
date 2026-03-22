@@ -12,6 +12,7 @@ type confirmAction int
 const (
 	confirmClearAfterSubmit confirmAction = iota
 	confirmDiscard
+	confirmAutoInstallMCP
 )
 
 type confirmModel struct {

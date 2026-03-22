@@ -96,6 +96,145 @@ func TestClaudeChannelInstall(t *testing.T) {
 	}
 }
 
+func TestHasMCPConfig_NoFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{}
+	if adapter.HasMCPConfig() {
+		t.Fatal("should return false when no .mcp.json exists")
+	}
+}
+
+func TestHasMCPConfig_GlobalExists(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Write global .mcp.json with monocle entry
+	mcpData := map[string]any{
+		"mcpServers": map[string]any{
+			"monocle": map[string]any{"command": "bun"},
+		},
+	}
+	data, _ := json.Marshal(mcpData)
+	os.WriteFile(filepath.Join(homeDir, ".mcp.json"), data, 0644)
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.HasMCPConfig() {
+		t.Fatal("should return true when global .mcp.json has monocle")
+	}
+}
+
+func TestHasMCPConfig_LocalExists(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Write local .mcp.json with monocle entry
+	mcpData := map[string]any{
+		"mcpServers": map[string]any{
+			"monocle": map[string]any{"command": "bun"},
+		},
+	}
+	data, _ := json.Marshal(mcpData)
+	os.WriteFile(filepath.Join(projDir, ".mcp.json"), data, 0644)
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.HasMCPConfig() {
+		t.Fatal("should return true when local .mcp.json has monocle")
+	}
+}
+
+func TestNeedsInstall_ChannelMissing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.NeedsInstall() {
+		t.Fatal("should need install when channel.ts is missing")
+	}
+}
+
+func TestNeedsInstall_ConfigMissing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Create channel.ts but no .mcp.json
+	channelDir := filepath.Join(dir, "config", "monocle")
+	os.MkdirAll(channelDir, 0755)
+	os.WriteFile(filepath.Join(channelDir, "channel.ts"), []byte("// channel"), 0644)
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.NeedsInstall() {
+		t.Fatal("should need install when .mcp.json config is missing")
+	}
+}
+
+func TestNeedsInstall_FullyInstalled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Create channel.ts
+	channelDir := filepath.Join(dir, "config", "monocle")
+	os.MkdirAll(channelDir, 0755)
+	os.WriteFile(filepath.Join(channelDir, "channel.ts"), []byte("// channel"), 0644)
+
+	// Create global .mcp.json with monocle entry
+	mcpData := map[string]any{
+		"mcpServers": map[string]any{
+			"monocle": map[string]any{"command": "bun"},
+		},
+	}
+	data, _ := json.Marshal(mcpData)
+	os.WriteFile(filepath.Join(homeDir, ".mcp.json"), data, 0644)
+
+	adapter := &ClaudeAdapter{}
+	if adapter.NeedsInstall() {
+		t.Fatal("should not need install when fully set up")
+	}
+}
+
 func TestClaudeChannelInstall_Idempotent(t *testing.T) {
 	requireBun(t)
 	dir := t.TempDir()

@@ -136,8 +136,17 @@ func runTUI() error {
 		return fmt.Errorf("start server: %w", err)
 	}
 
+	// Check if MCP channel needs installation
+	var appOpts tui.AppOptions
+	adapter := &adapters.ClaudeAdapter{}
+	if adapter.Detect() && adapter.NeedsInstall() {
+		appOpts.MCPInstallFn = func() error {
+			return adapter.Install(true) // global: ~/.mcp.json
+		}
+	}
+
 	// Create TUI model
-	app := tui.NewApp(engine)
+	app := tui.NewApp(engine, appOpts)
 
 	// Create Bubble Tea program
 	p := tea.NewProgram(app)

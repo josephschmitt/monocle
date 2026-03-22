@@ -73,6 +73,35 @@ func (a *ClaudeAdapter) IsInstalled() (bool, error) {
 	return false, err
 }
 
+// HasMCPConfig checks if monocle is configured in any .mcp.json (global or local).
+func (a *ClaudeAdapter) HasMCPConfig() bool {
+	for _, global := range []bool{true, false} {
+		path := mcpJSONPath(global)
+		data, err := ReadJSONFile(path)
+		if err != nil {
+			continue
+		}
+		servers, ok := data["mcpServers"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, ok := servers["monocle"]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// NeedsInstall returns true if the MCP channel is not fully set up.
+// It checks that both channel.ts exists AND at least one .mcp.json has a monocle entry.
+func (a *ClaudeAdapter) NeedsInstall() bool {
+	installed, err := a.IsInstalled()
+	if err != nil || !installed {
+		return true
+	}
+	return !a.HasMCPConfig()
+}
+
 // InstallDetails returns additional info about what was installed.
 func (a *ClaudeAdapter) InstallDetails(global bool) []string {
 	var details []string
