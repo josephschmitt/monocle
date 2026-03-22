@@ -25,12 +25,6 @@ func (g *GitClient) RepoRoot() string {
 	return g.repoRoot
 }
 
-// FileStatus represents a file's git status.
-type FileStatus struct {
-	Path   string
-	Status string
-}
-
 // Diff returns the list of changed files between baseRef and the working tree.
 func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 	out, err := g.run("diff", "--name-status", baseRef)
@@ -88,7 +82,6 @@ func (g *GitClient) FileDiff(baseRef, path string, contextLines int) (*types.Dif
 	return &types.DiffResult{
 		Path:  path,
 		Hunks: parseDiff(out),
-		Raw:   out,
 	}, nil
 }
 
@@ -107,26 +100,6 @@ func (g *GitClient) FileContent(ref, path string) (string, error) {
 		return "", fmt.Errorf("git show %s:%s: %w", ref, path, err)
 	}
 	return out, nil
-}
-
-// Status returns the porcelain status of the repo.
-func (g *GitClient) Status() ([]FileStatus, error) {
-	out, err := g.run("status", "--porcelain")
-	if err != nil {
-		return nil, fmt.Errorf("git status: %w", err)
-	}
-
-	var statuses []FileStatus
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if len(line) < 4 {
-			continue
-		}
-		statuses = append(statuses, FileStatus{
-			Status: strings.TrimSpace(line[:2]),
-			Path:   strings.TrimSpace(line[3:]),
-		})
-	}
-	return statuses, nil
 }
 
 // CurrentRef returns the current HEAD commit hash.

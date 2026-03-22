@@ -35,14 +35,8 @@ func DefaultConfig() *types.Config {
 		DiffStyle:      "unified",
 		SidebarStyle:   "flat",
 		Layout:         "auto",
-		Theme:          "default",
 		TabSize:        4,
 		ContextLines:   3,
-		ReviewFormat: types.ReviewFormatConfig{
-			IncludeSnippets: true,
-			MaxSnippetLines: 10,
-			IncludeSummary:  true,
-		},
 	}
 }
 

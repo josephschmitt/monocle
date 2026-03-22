@@ -479,8 +479,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		copyToClip := msg.copyToClipboard
 		engine := m.engine
 		return m, func() tea.Msg {
-			_, err := engine.Submit(action, body)
-			if err != nil {
+			if err := engine.Submit(action, body); err != nil {
 				return agentStatusMsg{status: "submit_error"}
 			}
 			if copyToClip {
@@ -902,8 +901,7 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			if summary != nil && (summary.IssueCt+summary.SuggestionCt > 0) {
 				action = types.ActionRequestChanges
 			}
-			_, err := engine.Submit(action, "")
-			if err != nil {
+			if err := engine.Submit(action, ""); err != nil {
 				return agentStatusMsg{status: "submit_error"}
 			}
 			return submitSuccessMsg{}

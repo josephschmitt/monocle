@@ -61,9 +61,7 @@ type ReviewSession struct {
 type ChangedFile struct {
 	Path     string
 	Status   FileChangeStatus
-	Hunks    []DiffHunk
 	Reviewed bool
-	Comments []ReviewComment
 }
 
 type ContentItem struct {
@@ -130,7 +128,6 @@ type DiffLine struct {
 type DiffResult struct {
 	Path  string
 	Hunks []DiffHunk
-	Raw   string
 }
 
 type ReviewSummary struct {
@@ -141,12 +138,6 @@ type ReviewSummary struct {
 	SuggestionCt    int
 	NoteCt          int
 	PraiseCt        int
-	DeliveryStatus  string
-}
-
-type SubmitResult struct {
-	Delivered bool
-	Queued    bool
 }
 
 type SessionSummary struct {
