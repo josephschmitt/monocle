@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/josephschmitt/monocle/compare/v0.9.0...v0.10.0) (2026-03-22)
+
+
+### Features
+
+* auto-detect and offer MCP channel install on TUI launch ([8685e52](https://github.com/josephschmitt/monocle/commit/8685e52b2dea06c2f0ea3661f55a87a5e9c06335))
+* **tui:** replace confirm modal with dedicated install prompt supporting global/local scope ([d5c2e94](https://github.com/josephschmitt/monocle/commit/d5c2e942235e6d983c00856801de391d593ffaad))
+
+
+### Bug Fixes
+
+* use ${HOME} in .mcp.json channel path instead of absolute path ([372ba71](https://github.com/josephschmitt/monocle/commit/372ba71f25be1dc0f22e4cefe91fdda2d591c5af))
+
 ## [0.9.0](https://github.com/josephschmitt/monocle/compare/v0.8.0...v0.9.0) (2026-03-21)
 
 
