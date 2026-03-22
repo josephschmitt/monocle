@@ -905,17 +905,14 @@ type baseRefChangedMsg struct {
 	err string
 }
 
-// stackedSidebarHeight returns a compact height for the sidebar in stacked mode.
-// It accounts for the header line plus one line per file/content item, clamped
-// to [4, 10] rows and at most 40% of totalHeight.
+// stackedSidebarHeight returns the height for the sidebar in stacked mode.
+// It accounts for the header line plus one line per file/content item, with a
+// minimum of 4 rows and at most 40% of totalHeight.
 func stackedSidebarHeight(totalHeight, fileCount, contentItemCount int) int {
 	// 1 header line + 1 per item
 	h := 1 + fileCount + contentItemCount
 	if h < 4 {
 		h = 4
-	}
-	if h > 10 {
-		h = 10
 	}
 	maxH := totalHeight * 40 / 100
 	if maxH < 4 {

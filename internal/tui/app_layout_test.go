@@ -42,7 +42,8 @@ func TestStackedSidebarHeight(t *testing.T) {
 		{"clamps to minimum 4", 50, 0, 0, 4},
 		{"uses file count plus header", 50, 6, 0, 7},
 		{"includes content items", 50, 3, 3, 7},
-		{"clamps to maximum 10", 50, 15, 5, 10},
+		{"no hard cap uses 40pct", 50, 15, 5, 20},
+		{"grows with tall terminal", 80, 12, 0, 13},
 		{"caps at 40% of total height", 20, 15, 0, 8},
 		{"40% cap doesn't go below min 4", 8, 0, 0, 4},
 	}
