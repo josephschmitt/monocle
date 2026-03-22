@@ -426,9 +426,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refPicker.entries = msg.entries
 		m.refPicker.autoActive = msg.autoActive
 		m.refPicker.active = true
-		m.refPicker.cursor = 0
 		m.refPicker.width = m.width
 		m.refPicker.height = m.height
+		m.refPicker.offset = 0
+		m.refPicker.hasMore = len(msg.entries) >= refPickerPageSize
+		m.refPicker.loading = false
+
+		// Pre-select the currently active ref
+		m.refPicker.cursor = 0
+		if !msg.autoActive {
+			if session := m.engine.GetSession(); session != nil && session.BaseRef != "" {
+				for i, entry := range msg.entries {
+					if strings.HasPrefix(entry.Hash, session.BaseRef) || strings.HasPrefix(session.BaseRef, entry.Hash) {
+						m.refPicker.cursor = i + 1
+						break
+					}
+				}
+			}
+		}
+		m.refPicker.ensureVisible()
 		m.overlay = overlayRefPicker
 		return m, nil
 
@@ -439,6 +455,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.executeCommand("ref auto")
 		}
 		return m, m.executeCommand("ref " + msg.hash)
+
+	case loadMoreRefsMsg:
+		m.refPicker, _ = m.refPicker.Update(msg)
+		return m, nil
 
 	case cancelRefPickerMsg:
 		m.overlay = overlayNone
@@ -723,6 +743,20 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayRefPicker {
 		var cmd tea.Cmd
 		m.refPicker, cmd = m.refPicker.Update(msg)
+		if m.refPicker.loading {
+			engine := m.engine
+			count := len(m.refPicker.entries) + refPickerPageSize
+			cmd = func() tea.Msg {
+				entries, err := engine.RecentCommits(count)
+				if err != nil {
+					return nil
+				}
+				return loadMoreRefsMsg{
+					entries: entries,
+					hasMore: len(entries) >= count,
+				}
+			}
+		}
 		return m, cmd
 	}
 	if m.overlay == overlayConfirm {
