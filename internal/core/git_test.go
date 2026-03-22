@@ -17,11 +17,14 @@ func setupTestRepo(t *testing.T) (string, string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
+		// Isolate from the parent repo's worktree environment
 		cmd.Env = append(os.Environ(),
 			"GIT_AUTHOR_NAME=Test",
 			"GIT_AUTHOR_EMAIL=test@test.com",
 			"GIT_COMMITTER_NAME=Test",
 			"GIT_COMMITTER_EMAIL=test@test.com",
+			"GIT_DIR="+filepath.Join(dir, ".git"),
+			"GIT_WORK_TREE="+dir,
 		)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -29,7 +32,7 @@ func setupTestRepo(t *testing.T) (string, string) {
 		}
 	}
 
-	run("init", "-b", "test-main")
+	run("init", "-b", "main")
 
 	// Create initial file and commit
 	os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n\nfunc hello() {}\n"), 0o644)
@@ -39,6 +42,10 @@ func setupTestRepo(t *testing.T) (string, string) {
 	// Get the base ref
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_DIR="+filepath.Join(dir, ".git"),
+		"GIT_WORK_TREE="+dir,
+	)
 	out, _ := cmd.Output()
 	baseRef := string(out[:len(out)-1])
 
