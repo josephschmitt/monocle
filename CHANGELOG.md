@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.1](https://github.com/josephschmitt/monocle/compare/v0.10.0...v0.10.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* register event handlers before sending subscribe ack to prevent race ([64d4f81](https://github.com/josephschmitt/monocle/commit/64d4f81ffa209e8e1be45224371e0ebd8d973646))
+* **tui:** allow stacked sidebar to grow with terminal height ([78a507a](https://github.com/josephschmitt/monocle/commit/78a507a9529328beb34d7dfb2ca6e39cefe79972))
+* **tui:** allow toggle review keybind to work in diff viewer ([12741df](https://github.com/josephschmitt/monocle/commit/12741df5e42d292f02c35b842a20c39f4e70405d))
+
 ## [0.10.0](https://github.com/josephschmitt/monocle/compare/v0.9.0...v0.10.0) (2026-03-22)
 
 
