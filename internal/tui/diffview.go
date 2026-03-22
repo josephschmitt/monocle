@@ -1277,14 +1277,18 @@ func (m *diffViewModel) ensureVisible() {
 	}
 }
 
-// isSelectable returns true if the line at idx is a diff content line (not a hunk header or comment).
+// isSelectable returns true if the line at idx can receive cursor focus.
+// Hunk headers are skipped; comments and diff content lines are selectable.
 func (m diffViewModel) isSelectable(idx int) bool {
 	if idx < 0 || idx >= len(m.lines) {
 		return false
 	}
 	line := m.lines[idx]
-	if line.isHunk || line.isComment {
+	if line.isHunk {
 		return false
+	}
+	if line.isComment {
+		return true
 	}
 	// Skip removed lines — they have no new-file line number and can't be commented on
 	if line.kind == types.DiffLineRemoved && line.newLineNum == 0 {
