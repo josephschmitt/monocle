@@ -17,11 +17,12 @@ type ContentItemProvider func(id string) string
 type ReviewFormatter struct {
 	getContent     ContentProvider
 	getContentItem ContentItemProvider
+	formatCfg      types.ReviewFormatConfig
 }
 
-// NewReviewFormatter creates a formatter with a content provider callback.
-func NewReviewFormatter(getContent ContentProvider) *ReviewFormatter {
-	return &ReviewFormatter{getContent: getContent}
+// NewReviewFormatter creates a formatter with a content provider callback and format config.
+func NewReviewFormatter(getContent ContentProvider, cfg types.ReviewFormatConfig) *ReviewFormatter {
+	return &ReviewFormatter{getContent: getContent, formatCfg: cfg}
 }
 
 // SetContentItemProvider sets the callback for getting content item text.
@@ -106,31 +107,17 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", typeLabel, path, lineRef))
 
 			// Code snippet
-			if c.CodeSnippet != "" {
-				b.WriteString("```\n")
-				if c.LineStart > 0 {
-					b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, c.LineEnd))
-				}
-				b.WriteString(c.CodeSnippet)
-				if !strings.HasSuffix(c.CodeSnippet, "\n") {
-					b.WriteString("\n")
-				}
-				b.WriteString("```\n")
-			} else if rf.getContent != nil && c.LineStart > 0 {
-				end := c.LineEnd
-				if end == 0 {
-					end = c.LineStart
-				}
-				snippet := rf.getContent(path, c.LineStart, end)
-				if snippet != "" {
-					b.WriteString("```\n")
-					b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, end))
-					b.WriteString(snippet)
-					if !strings.HasSuffix(snippet, "\n") {
-						b.WriteString("\n")
+			if rf.formatCfg.IncludeSnippets {
+				rf.writeSnippet(&b, c, func() string {
+					if rf.getContent == nil || c.LineStart <= 0 {
+						return ""
 					}
-					b.WriteString("```\n")
-				}
+					end := c.LineEnd
+					if end == 0 {
+						end = c.LineStart
+					}
+					return rf.getContent(path, c.LineStart, end)
+				})
 			}
 
 			b.WriteString(c.Body)
@@ -171,34 +158,22 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 			b.WriteString(header)
 
 			// Snippet from content item
-			if c.CodeSnippet != "" {
-				b.WriteString("```\n")
-				if c.LineStart > 0 {
-					b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, c.LineEnd))
-				}
-				b.WriteString(c.CodeSnippet)
-				if !strings.HasSuffix(c.CodeSnippet, "\n") {
-					b.WriteString("\n")
-				}
-				b.WriteString("```\n")
-			} else if rf.getContentItem != nil && c.LineStart > 0 {
-				content := rf.getContentItem(itemID)
-				if content != "" {
+			if rf.formatCfg.IncludeSnippets {
+				itemIDCopy := itemID
+				rf.writeSnippet(&b, c, func() string {
+					if rf.getContentItem == nil || c.LineStart <= 0 {
+						return ""
+					}
+					content := rf.getContentItem(itemIDCopy)
+					if content == "" {
+						return ""
+					}
 					end := c.LineEnd
 					if end == 0 {
 						end = c.LineStart
 					}
-					snippet := extractLines(content, c.LineStart, end)
-					if snippet != "" {
-						b.WriteString("```\n")
-						b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, end))
-						b.WriteString(snippet)
-						if !strings.HasSuffix(snippet, "\n") {
-							b.WriteString("\n")
-						}
-						b.WriteString("```\n")
-					}
-				}
+					return extractLines(content, c.LineStart, end)
+				})
 			}
 
 			b.WriteString(c.Body)
@@ -207,7 +182,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	}
 
 	// Summary (only if there are inline comments)
-	if hasComments {
+	if hasComments && rf.formatCfg.IncludeSummary {
 		b.WriteString("**Summary:** ")
 		parts := []string{}
 		if issueCt > 0 {
@@ -235,6 +210,52 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 		CommentCount: len(comments),
 		Action:       string(action),
 	}
+}
+
+// writeSnippet writes a code snippet block for a comment. It first checks for a pre-saved
+// CodeSnippet, then falls back to the fetchSnippet callback. Snippets are truncated to
+// MaxSnippetLines if configured.
+func (rf *ReviewFormatter) writeSnippet(b *strings.Builder, c types.ReviewComment, fetchSnippet func() string) {
+	snippet := c.CodeSnippet
+	if snippet == "" {
+		snippet = fetchSnippet()
+	}
+	if snippet == "" {
+		return
+	}
+	snippet = truncateSnippet(snippet, rf.formatCfg.MaxSnippetLines)
+	b.WriteString("```\n")
+	if c.LineStart > 0 {
+		end := c.LineEnd
+		if end == 0 {
+			end = c.LineStart
+		}
+		b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, end))
+	}
+	b.WriteString(snippet)
+	if !strings.HasSuffix(snippet, "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString("```\n")
+}
+
+// truncateSnippet limits a snippet to maxLines lines. If truncated, appends an indicator.
+func truncateSnippet(snippet string, maxLines int) string {
+	if maxLines <= 0 {
+		return snippet
+	}
+	lines := strings.Split(snippet, "\n")
+	// Trailing empty line from a final newline doesn't count
+	count := len(lines)
+	if count > 0 && lines[count-1] == "" {
+		count--
+	}
+	if count <= maxLines {
+		return snippet
+	}
+	result := strings.Join(lines[:maxLines], "\n")
+	result += "\n// ... truncated\n"
+	return result
 }
 
 func countByType(comments []types.ReviewComment) (issue, suggestion, note, praise int) {

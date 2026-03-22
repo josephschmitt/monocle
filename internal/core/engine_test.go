@@ -620,7 +620,7 @@ func TestSubmit(t *testing.T) {
 
 	formatter := NewReviewFormatter(func(path string, start, end int) string {
 		return ""
-	})
+	}, types.ReviewFormatConfig{IncludeSnippets: true, MaxSnippetLines: 10, IncludeSummary: true})
 
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),

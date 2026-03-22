@@ -58,7 +58,7 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string) (*Engine, er
 			return ""
 		}
 		return extractLines(content, start, end)
-	})
+	}, cfg.ReviewFormat)
 
 	e.formatter.SetContentItemProvider(func(id string) string {
 		item, err := database.GetContentItem(id)
