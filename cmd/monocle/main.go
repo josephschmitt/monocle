@@ -13,10 +13,13 @@ import (
 	"github.com/anthropics/monocle/internal/tui"
 )
 
+var version = "dev"
+
 type CLI struct {
-	Run       RunCmd       `cmd:"" default:"withargs" help:"Start a review session"`
-	Install   InstallCmd   `cmd:"" help:"Install MCP channel for Claude Code"`
-	Uninstall UninstallCmd `cmd:"" help:"Remove MCP channel for Claude Code"`
+	Run       RunCmd            `cmd:"" default:"withargs" help:"Start a review session"`
+	Install   InstallCmd        `cmd:"" help:"Install MCP channel for Claude Code"`
+	Uninstall UninstallCmd      `cmd:"" help:"Remove MCP channel for Claude Code"`
+	Version   kong.VersionFlag  `help:"Print version" name:"version"`
 }
 
 type RunCmd struct{}
@@ -35,6 +38,7 @@ func main() {
 		kong.Name("monocle"),
 		kong.Description("Terminal-based code review companion for Claude Code"),
 		kong.UsageOnError(),
+		kong.Vars{"version": version},
 	)
 	err := ctx.Run()
 	ctx.FatalIfErrorf(err)
