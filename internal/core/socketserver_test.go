@@ -24,17 +24,33 @@ func setupTestEngine(t *testing.T) (*Engine, string) {
 	}
 	t.Cleanup(func() { database.Close() })
 
-	repoRoot, _ := setupTestRepo(t)
-	cfg := DefaultConfig()
-	engine, err := NewEngine(cfg, database, repoRoot)
-	if err != nil {
-		t.Fatalf("new engine: %v", err)
+	stub := &gitStub{
+		repoRoot:   "/tmp/test-repo",
+		currentRef: "abc123def456abc123def456abc123def456abc1",
+		files: []types.ChangedFile{
+			{Path: "test.go", Status: types.FileModified},
+		},
 	}
+	cfg := DefaultConfig()
+	server := NewSocketServer()
+	feedback := NewFeedbackQueue()
+	engine := &Engine{
+		cfg:            cfg,
+		database:       database,
+		git:            stub,
+		server:         server,
+		feedback:       feedback,
+		sessions:       NewSessionManager(database, stub),
+		formatter:      NewReviewFormatter(func(string, int, int) string { return "" }, cfg.ReviewFormat),
+		autoAdvanceRef: true,
+		subscribers:    make(map[EventKind]map[int]EventCallback),
+	}
+	server.SetEngine(engine)
 
 	// Start a session so the engine is usable
 	_, err = engine.StartSession(SessionOptions{
 		Agent:    "test",
-		RepoRoot: repoRoot,
+		RepoRoot: stub.repoRoot,
 	})
 	if err != nil {
 		t.Fatalf("start session: %v", err)

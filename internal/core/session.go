@@ -12,11 +12,11 @@ import (
 // SessionManager handles session lifecycle operations.
 type SessionManager struct {
 	db  *db.DB
-	git *GitClient
+	git GitAPI
 }
 
 // NewSessionManager creates a new SessionManager.
-func NewSessionManager(database *db.DB, git *GitClient) *SessionManager {
+func NewSessionManager(database *db.DB, git GitAPI) *SessionManager {
 	return &SessionManager{db: database, git: git}
 }
 

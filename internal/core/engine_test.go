@@ -691,42 +691,43 @@ func TestSubmit(t *testing.T) {
 }
 
 func TestSetBaseRef(t *testing.T) {
-	dir, baseRef := setupTestRepo(t)
-
 	database, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer database.Close()
 
+	resolvedRef := "resolved123resolved123resolved123resolved"
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: resolvedRef,
+	}
+
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", AgentStatus: types.AgentStatusIdle,
+		RepoRoot: "/tmp/repo", BaseRef: "old-base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(session)
+
 	e := &Engine{
 		feedback:       NewFeedbackQueue(),
 		database:       database,
-		git:            NewGitClient(dir),
+		git:            stub,
 		autoAdvanceRef: true,
 		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
-	e.current = &types.ReviewSession{
-		ID:           "sess-1",
-		BaseRef:      baseRef,
-		RepoRoot:     dir,
-		FileStatuses: make(map[string]bool),
-	}
-	if err := database.CreateSession(e.current); err != nil {
-		t.Fatalf("create session: %v", err)
-	}
+	e.current = session
 
-	// SetBaseRef with the baseRef (which is HEAD, the only commit)
-	if err := e.SetBaseRef(baseRef); err != nil {
+	if err := e.SetBaseRef("some-ref"); err != nil {
 		t.Fatalf("SetBaseRef: %v", err)
 	}
 
-	// The base should be set (either to parent or to ref itself for root commit)
-	if e.current.BaseRef == "" {
-		t.Error("expected BaseRef to be set")
+	if e.current.BaseRef != resolvedRef {
+		t.Errorf("expected BaseRef %q, got %q", resolvedRef, e.current.BaseRef)
 	}
 
-	// Auto-advance should be disabled
 	if e.autoAdvanceRef {
 		t.Error("expected autoAdvanceRef to be false after SetBaseRef")
 	}
