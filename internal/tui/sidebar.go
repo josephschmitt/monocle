@@ -77,8 +77,8 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			m.ensureVisible()
 		case "enter":
 			if m.treeMode {
-				idx := m.cursor
-				if idx < len(m.visibleItems) && m.visibleItems[idx].isDir {
+				idx := m.cursor - len(m.contentItems)
+				if idx >= 0 && idx < len(m.visibleItems) && m.visibleItems[idx].isDir {
 					path := m.visibleItems[idx].node.Path
 					if m.collapsed[path] {
 						delete(m.collapsed, path)
@@ -139,65 +139,101 @@ func (m sidebarModel) View() string {
 
 	var b strings.Builder
 
-	// Header (always visible, not scrollable)
-	fileCount := len(m.files)
-	reviewedCount := 0
-	for _, f := range m.files {
-		if f.Reviewed {
-			reviewedCount++
-		}
-	}
-	modeIndicator := ""
-	if m.treeMode {
-		modeIndicator = " "
-	}
-	header := fmt.Sprintf(" Files%s  %d / %d", modeIndicator, reviewedCount, fileCount)
-	headerStyle := lipgloss.NewStyle().Bold(true).Width(m.width)
-	b.WriteString(headerStyle.Render(header))
-	b.WriteString("\n")
+	sectionStyle := lipgloss.NewStyle().Bold(true).Width(m.width)
 
 	// Render only items within the viewport [offset, offset+viewportHeight)
-	fileItemCt := m.fileItemCount()
+	contentItemCt := len(m.contentItems)
 	totalItems := m.totalItems()
 	availableLines := m.viewportHeight()
 
 	linesUsed := 0
-	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
-		// Content section divider (when crossing from files to content items)
-		if idx == fileItemCt && len(m.contentItems) > 0 {
-			if linesUsed+2 > availableLines {
-				break
+
+	// Review Items section header (if any content items exist)
+	if contentItemCt > 0 {
+		contentReviewed := 0
+		for _, item := range m.contentItems {
+			if item.Reviewed {
+				contentReviewed++
 			}
+		}
+		header := fmt.Sprintf(" Review Items  %d / %d", contentReviewed, contentItemCt)
+		b.WriteString(sectionStyle.Render(header))
+		b.WriteString("\n")
+		linesUsed++
+	}
+
+	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
+		// Files section header (when crossing from content items to files)
+		if idx == contentItemCt && contentItemCt > 0 {
+			if linesUsed > 0 {
+				if linesUsed+1 > availableLines {
+					break
+				}
+				b.WriteString("\n")
+				linesUsed++
+			}
+
+			fileCount := len(m.files)
+			reviewedCount := 0
+			for _, f := range m.files {
+				if f.Reviewed {
+					reviewedCount++
+				}
+			}
+			modeIndicator := ""
+			if m.treeMode {
+				modeIndicator = " "
+			}
+			header := fmt.Sprintf(" Files%s  %d / %d", modeIndicator, reviewedCount, fileCount)
+			b.WriteString(sectionStyle.Render(header))
 			b.WriteString("\n")
-			divider := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Width(m.width)
-			b.WriteString(divider.Render(" Review Items"))
-			b.WriteString("\n")
-			linesUsed += 2
+			linesUsed++
 			if linesUsed >= availableLines {
 				break
 			}
 		}
 
 		var line string
-		if idx < fileItemCt {
+		if idx < contentItemCt {
+			line = m.renderContentItem(m.contentItems[idx], idx == m.cursor)
+		} else {
+			fileIdx := idx - contentItemCt
 			if m.treeMode {
-				item := m.visibleItems[idx]
+				item := m.visibleItems[fileIdx]
 				if item.isDir {
 					line = m.renderDirItem(item, idx == m.cursor)
 				} else {
 					line = m.renderTreeFileItem(item, idx == m.cursor)
 				}
 			} else {
-				line = m.renderFileItem(m.files[idx], idx == m.cursor)
+				line = m.renderFileItem(m.files[fileIdx], idx == m.cursor)
 			}
-		} else {
-			contentIdx := idx - fileItemCt
-			line = m.renderContentItem(m.contentItems[contentIdx], idx == m.cursor)
 		}
 
 		b.WriteString(line)
 		b.WriteString("\n")
 		linesUsed++
+	}
+
+	// If no content items, show the Files header at the top
+	if contentItemCt == 0 {
+		var header strings.Builder
+		fileCount := len(m.files)
+		reviewedCount := 0
+		for _, f := range m.files {
+			if f.Reviewed {
+				reviewedCount++
+			}
+		}
+		modeIndicator := ""
+		if m.treeMode {
+			modeIndicator = " "
+		}
+		headerStr := fmt.Sprintf(" Files%s  %d / %d", modeIndicator, reviewedCount, fileCount)
+		header.WriteString(sectionStyle.Render(headerStr))
+		header.WriteString("\n")
+		header.WriteString(b.String())
+		return header.String()
 	}
 
 	return b.String()
@@ -393,18 +429,47 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 		reviewChar = "✓"
 	}
 
-	name := truncatePath(item.Title, m.width-6)
-	line := fmt.Sprintf("   %s %s", name, reviewChar)
+	// Build icon path from content type (e.g. "md" → "content.md")
+	iconPath := item.Title
+	if item.ContentType != "" {
+		ext := item.ContentType
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
+		}
+		iconPath = "content" + ext
+	}
+	icon := fileIcon(iconPath)
+	glyph := iconLookup(iconPath).glyph
+	const iconSlack = 2
 
 	if selected && m.focused {
-		style := lipgloss.NewStyle().Reverse(true).Width(m.width)
-		return style.Render(line)
+		plainReview := reviewChar
+		if item.Reviewed {
+			plainReview = "+"
+		}
+		right := " " + plainReview + " "
+		prefix := fmt.Sprintf("  %s ", glyph)
+		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
+		if nameW < 1 {
+			nameW = 1
+		}
+		name := truncatePath(item.Title, nameW)
+		line := fmt.Sprintf("%s%-*s%s", prefix, nameW, name, right)
+		return lipgloss.NewStyle().Reverse(true).Render(line)
 	}
+
+	leftPad := " "
 	if selected {
-		leftPad := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-		line = fmt.Sprintf("%s  %s %s", leftPad, name, reviewChar)
+		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
 	}
-	return fmt.Sprintf("%-*s", m.width, line)
+	right := " " + reviewChar + " "
+	prefix := fmt.Sprintf("%s %s ", leftPad, icon)
+	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
+	if nameW < 1 {
+		nameW = 1
+	}
+	name := truncatePath(item.Title, nameW)
+	return fmt.Sprintf("%s%-*s%s", prefix, nameW, name, right)
 }
 
 func (m sidebarModel) totalItems() int {
@@ -421,11 +486,21 @@ func (m sidebarModel) fileItemCount() int {
 }
 
 func (m sidebarModel) selectCurrent() tea.Cmd {
-	fileCount := m.fileItemCount()
+	contentCount := len(m.contentItems)
 
-	if m.cursor < fileCount {
+	// Content items come first
+	if m.cursor < contentCount {
+		item := m.contentItems[m.cursor]
+		return func() tea.Msg {
+			return sidebarSelectMsg{isContent: true, contentID: item.ID}
+		}
+	}
+
+	// Then file items
+	fileIdx := m.cursor - contentCount
+	if fileIdx < m.fileItemCount() {
 		if m.treeMode {
-			item := m.visibleItems[m.cursor]
+			item := m.visibleItems[fileIdx]
 			if item.isDir {
 				return nil // Don't send selection for directories
 			}
@@ -434,16 +509,9 @@ func (m sidebarModel) selectCurrent() tea.Cmd {
 				return sidebarSelectMsg{path: path}
 			}
 		}
-		path := m.files[m.cursor].Path
+		path := m.files[fileIdx].Path
 		return func() tea.Msg {
 			return sidebarSelectMsg{path: path}
-		}
-	}
-	contentIdx := m.cursor - fileCount
-	if contentIdx < len(m.contentItems) {
-		item := m.contentItems[contentIdx]
-		return func() tea.Msg {
-			return sidebarSelectMsg{isContent: true, contentID: item.ID}
 		}
 	}
 	return nil
@@ -452,18 +520,22 @@ func (m sidebarModel) selectCurrent() tea.Cmd {
 // selectedFile returns the ChangedFile at the current cursor position,
 // or nil if the cursor is on a directory or content item.
 func (m sidebarModel) selectedFile() *types.ChangedFile {
-	fileCount := m.fileItemCount()
-	if m.cursor >= fileCount {
+	contentCount := len(m.contentItems)
+	if m.cursor < contentCount {
+		return nil // content item, not a file
+	}
+	fileIdx := m.cursor - contentCount
+	if fileIdx >= m.fileItemCount() {
 		return nil
 	}
 	if m.treeMode {
-		item := m.visibleItems[m.cursor]
+		item := m.visibleItems[fileIdx]
 		if item.isDir {
 			return nil
 		}
 		return item.node.File
 	}
-	return &m.files[m.cursor]
+	return &m.files[fileIdx]
 }
 
 // navigateFile moves the cursor to the next (dir=+1) or previous (dir=-1)
@@ -474,10 +546,13 @@ func (m *sidebarModel) navigateFile(dir int) tea.Cmd {
 	if total == 0 {
 		return nil
 	}
+	contentCount := len(m.contentItems)
 	next := m.cursor + dir
 	for next >= 0 && next < total {
-		if m.treeMode && next < m.fileItemCount() {
-			if m.visibleItems[next].isDir {
+		// Skip directory nodes in tree mode (file items start at contentCount)
+		fileIdx := next - contentCount
+		if m.treeMode && fileIdx >= 0 && fileIdx < m.fileItemCount() {
+			if m.visibleItems[fileIdx].isDir {
 				next += dir
 				continue
 			}
@@ -504,17 +579,18 @@ func (m *sidebarModel) rebuildTree() {
 
 // selectPath moves the cursor to the item matching the given file path.
 func (m *sidebarModel) selectPath(path string) {
+	contentCount := len(m.contentItems)
 	if m.treeMode {
 		for i, item := range m.visibleItems {
 			if !item.isDir && item.node.File != nil && item.node.File.Path == path {
-				m.cursor = i
+				m.cursor = i + contentCount
 				return
 			}
 		}
 	} else {
 		for i, f := range m.files {
 			if f.Path == path {
-				m.cursor = i
+				m.cursor = i + contentCount
 				return
 			}
 		}
@@ -563,9 +639,17 @@ func (m *sidebarModel) ensureVisible() {
 }
 
 // viewportHeight returns how many item lines fit in the sidebar viewport.
-// The header always takes 1 line; remaining space is for scrollable items.
+// Accounts for section headers and dividers that consume vertical space.
 func (m sidebarModel) viewportHeight() int {
-	h := m.height - 1 // header line
+	headerLines := 0
+	if len(m.contentItems) > 0 {
+		headerLines += 1 // "Review Items" header
+		headerLines += 1 // blank line between sections
+		headerLines += 1 // "Files" header
+	} else {
+		headerLines += 1 // "Files" header only
+	}
+	h := m.height - headerLines
 	if h < 0 {
 		h = 0
 	}
