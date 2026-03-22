@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // ClaudeAdapter handles Claude Code MCP channel installation.
@@ -221,16 +222,11 @@ func (a *ClaudeAdapter) configureMCP(global bool) error {
 		data["mcpServers"] = servers
 	}
 
-	channelPath := channelTSPath()
-	if channelPath == "" {
-		return fmt.Errorf("cannot determine channel.ts path")
-	}
-
 	rt, err := detectJSRuntime()
 	if err != nil {
 		return err
 	}
-	command, args := rt.mcpCommand(channelPath)
+	command, args := rt.mcpCommand(channelTSPathPortable())
 	servers["monocle"] = map[string]any{
 		"command": command,
 		"args":    args,
@@ -286,4 +282,21 @@ func channelTSPath() string {
 		cfgDir = filepath.Join(home, ".config")
 	}
 	return filepath.Join(cfgDir, "monocle", "channel.ts")
+}
+
+// channelTSPathPortable returns the channel.ts path with ${HOME} instead of
+// the resolved home directory, so .mcp.json can be committed to git.
+func channelTSPathPortable() string {
+	abs := channelTSPath()
+	if abs == "" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return abs
+	}
+	if rel, ok := strings.CutPrefix(abs, home); ok {
+		return "${HOME}" + rel
+	}
+	return abs
 }
