@@ -12,7 +12,6 @@ type installPromptModel struct {
 	active bool
 	global bool
 	width  int
-	height int
 	theme  Theme
 }
 

@@ -12,7 +12,6 @@ const (
 	EventAgentStatusChanged    EventKind = "agent_status_changed"
 	EventFeedbackStatusChanged EventKind = "feedback_status_changed"
 	EventContentItemAdded      EventKind = "content_item_added"
-	EventCommentsOutdated      EventKind = "comments_outdated"
 	EventPauseChanged          EventKind = "pause_changed"
 	EventFeedbackSubmitted     EventKind = "feedback_submitted"
 )
@@ -84,7 +83,7 @@ type EngineAPI interface {
 
 	// Submission
 	GetReviewSummary() (*types.ReviewSummary, error)
-	Submit(action types.SubmitAction, body string) (*types.SubmitResult, error)
+	Submit(action types.SubmitAction, body string) error
 
 	// Base ref management
 	SetBaseRef(ref string) error

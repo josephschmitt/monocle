@@ -19,7 +19,6 @@ type commentEditorModel struct {
 	targetType  types.TargetType
 	commentType types.CommentType
 	body        string
-	cursorPos   int
 	width       int
 	height      int
 	theme       Theme

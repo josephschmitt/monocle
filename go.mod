@@ -3,7 +3,6 @@ module github.com/anthropics/monocle
 go 1.25.0
 
 require (
-	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/lipgloss/v2 v2.0.2
 	github.com/alecthomas/chroma/v2 v2.23.1

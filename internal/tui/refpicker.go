@@ -14,7 +14,6 @@ type refPickerModel struct {
 	entries    []core.LogEntry
 	cursor     int
 	width      int
-	height     int
 	active     bool
 	autoActive bool // whether auto-advance is currently on
 	theme      Theme

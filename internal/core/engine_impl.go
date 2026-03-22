@@ -410,7 +410,6 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 		Session:         e.current,
 		FileComments:    make(map[string][]types.ReviewComment),
 		ContentComments: make(map[string][]types.ReviewComment),
-		DeliveryStatus:  e.feedback.GetStatus(),
 	}
 
 	for _, c := range e.current.Comments {
@@ -438,13 +437,13 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 	return summary, nil
 }
 
-func (e *Engine) Submit(action types.SubmitAction, body string) (*types.SubmitResult, error) {
+func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	e.mu.RLock()
 	session := e.current
 	e.mu.RUnlock()
 
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return fmt.Errorf("no active session")
 	}
 
 	formatted := e.formatter.Format(session, session.Comments, action, body)
@@ -474,10 +473,7 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*types.SubmitRe
 		Status:  formatted.Action,
 	})
 
-	return &types.SubmitResult{
-		Delivered: false,
-		Queued:    true,
-	}, nil
+	return nil
 }
 
 // -- Base ref management --

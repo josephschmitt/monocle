@@ -45,13 +45,9 @@ const (
 
 // Engine event messages bridged from core.EngineAPI callbacks.
 
-type fileChangedMsg struct {
-	path string
-}
+type fileChangedMsg struct{}
 
-type agentStatusMsg struct {
-	status string
-}
+type agentStatusMsg struct{}
 
 type feedbackStatusMsg struct {
 	status string
@@ -61,9 +57,7 @@ type contentItemMsg struct {
 	id string
 }
 
-type pauseChangedMsg struct {
-	status string
-}
+type pauseChangedMsg struct{}
 
 type submitSuccessMsg struct{}
 
@@ -122,7 +116,6 @@ type appModel struct {
 	height int
 
 	theme Theme
-	keys  KeyMap
 
 	mcpInstallFn    func(global bool) error
 	installPrompt   installPromptModel
@@ -176,7 +169,6 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
 		theme:         theme,
-		keys:          DefaultKeyMap(),
 		mcpInstallFn:  o.MCPInstallFn,
 	}
 }
@@ -285,13 +277,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commentEditor.width = m.width
 		m.commentEditor.height = m.height
 		m.reviewSummary.width = m.width
-		m.reviewSummary.height = m.height
 		m.help.width = m.width
 		m.help.height = m.height
 		m.confirm.width = m.width
-		m.confirm.height = m.height
 		m.installPrompt.width = m.width
-		m.installPrompt.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -390,7 +379,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refPicker.active = true
 		m.refPicker.cursor = 0
 		m.refPicker.width = m.width
-		m.refPicker.height = m.height
 		m.overlay = overlayRefPicker
 		return m, nil
 
@@ -453,9 +441,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		action := msg.action
 		body := msg.body
 		return m, func() tea.Msg {
-			_, err := m.engine.Submit(action, body)
-			if err != nil {
-				return agentStatusMsg{status: "submit_error"}
+			if err := m.engine.Submit(action, body); err != nil {
+				return agentStatusMsg{}
 			}
 			return submitSuccessMsg{}
 		}
@@ -832,9 +819,8 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			if summary != nil && (summary.IssueCt+summary.SuggestionCt > 0) {
 				action = types.ActionRequestChanges
 			}
-			_, err := engine.Submit(action, "")
-			if err != nil {
-				return agentStatusMsg{status: "submit_error"}
+			if err := engine.Submit(action, ""); err != nil {
+				return agentStatusMsg{}
 			}
 			return submitSuccessMsg{}
 		}
@@ -870,13 +856,13 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	case "pause":
 		return func() tea.Msg {
 			engine.RequestPause()
-			return pauseChangedMsg{status: "pause_requested"}
+			return pauseChangedMsg{}
 		}
 
 	case "unpause":
 		return func() tea.Msg {
 			engine.CancelPause()
-			return pauseChangedMsg{status: "cancelled"}
+			return pauseChangedMsg{}
 		}
 	}
 
@@ -1051,7 +1037,7 @@ func (m appModel) handleMarkReviewed() tea.Cmd {
 		} else {
 			_ = m.engine.MarkReviewed(filePath)
 		}
-		return fileChangedMsg{path: filePath}
+		return fileChangedMsg{}
 	}
 }
 
@@ -1273,11 +1259,11 @@ func calcModalWidth(screenWidth, maxWidth int) int {
 // Bubble Tea program as messages. Call this after tea.NewProgram but before
 // p.Run().
 func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
-	engine.On(core.EventFileChanged, func(e core.EventPayload) {
-		p.Send(fileChangedMsg{path: e.Path})
+	engine.On(core.EventFileChanged, func(_ core.EventPayload) {
+		p.Send(fileChangedMsg{})
 	})
-	engine.On(core.EventAgentStatusChanged, func(e core.EventPayload) {
-		p.Send(agentStatusMsg{status: e.Status})
+	engine.On(core.EventAgentStatusChanged, func(_ core.EventPayload) {
+		p.Send(agentStatusMsg{})
 	})
 	engine.On(core.EventFeedbackStatusChanged, func(e core.EventPayload) {
 		p.Send(feedbackStatusMsg{status: e.Status})
@@ -1285,7 +1271,7 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	engine.On(core.EventContentItemAdded, func(e core.EventPayload) {
 		p.Send(contentItemMsg{id: e.ItemID})
 	})
-	engine.On(core.EventPauseChanged, func(e core.EventPayload) {
-		p.Send(pauseChangedMsg{status: e.Status})
+	engine.On(core.EventPauseChanged, func(_ core.EventPayload) {
+		p.Send(pauseChangedMsg{})
 	})
 }

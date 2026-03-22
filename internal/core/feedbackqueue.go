@@ -55,17 +55,6 @@ func (fq *FeedbackQueue) Submit(review *FormattedReview) {
 	fq.cond.Broadcast()
 }
 
-// Approve clears any pending review and pause state.
-func (fq *FeedbackQueue) Approve() {
-	fq.mu.Lock()
-	defer fq.mu.Unlock()
-
-	fq.pending = nil
-	fq.pauseRequested = false
-	fq.status = "none"
-	fq.cond.Broadcast()
-}
-
 // Poll returns pending feedback without blocking. Returns nil if none available.
 func (fq *FeedbackQueue) Poll() *FormattedReview {
 	fq.mu.Lock()
@@ -137,11 +126,3 @@ func (fq *FeedbackQueue) HasPending() bool {
 	return fq.pending != nil
 }
 
-// Reset clears the queue state.
-func (fq *FeedbackQueue) Reset() {
-	fq.mu.Lock()
-	defer fq.mu.Unlock()
-	fq.pending = nil
-	fq.pauseRequested = false
-	fq.status = "none"
-}

@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -299,5 +298,3 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// Ensure sql.ErrNoRows is accessible for callers without importing database/sql directly.
-var ErrNoRows = sql.ErrNoRows

@@ -20,7 +20,6 @@ type confirmModel struct {
 	message string
 	action  confirmAction
 	width   int
-	height  int
 	theme   Theme
 }
 

@@ -15,14 +15,11 @@ type SocketServer struct {
 	listener   net.Listener
 	engine     *Engine
 	socketPath string
-	done       chan struct{}
 }
 
 // NewSocketServer creates a new SocketServer. Call SetEngine and Start before use.
 func NewSocketServer() *SocketServer {
-	return &SocketServer{
-		done: make(chan struct{}),
-	}
+	return &SocketServer{}
 }
 
 // SetEngine wires the engine to the server. Called during engine construction.
@@ -52,11 +49,6 @@ func (s *SocketServer) Start(socketPath string) error {
 	return nil
 }
 
-// SocketPath returns the path of the Unix domain socket.
-func (s *SocketServer) SocketPath() string {
-	return s.socketPath
-}
-
 // Shutdown stops the server and removes the socket file.
 func (s *SocketServer) Shutdown() error {
 	if s.listener == nil {
@@ -71,13 +63,7 @@ func (s *SocketServer) acceptLoop() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			select {
-			case <-s.done:
-				return
-			default:
-				// listener was closed externally; stop accepting
-				return
-			}
+			return // listener was closed
 		}
 		go s.handleConnection(conn)
 	}

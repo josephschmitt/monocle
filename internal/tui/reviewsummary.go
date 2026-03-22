@@ -18,7 +18,6 @@ type reviewSummaryModel struct {
 	action       types.SubmitAction
 	body         string
 	width        int
-	height       int
 	theme        Theme
 }
 
