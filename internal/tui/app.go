@@ -446,6 +446,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case saveCommentMsg:
 		m.overlay = overlayNone
+		m.diffView.visualMode = false
 		return m, m.handleSaveComment(msg)
 
 	case cancelCommentMsg:
