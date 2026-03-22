@@ -147,15 +147,8 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 		return err
 	}
 
-	// Send ack
-	if err := writeMsg(&protocol.SubscribeResponse{
-		Type:    protocol.TypeSubscribeResponse,
-		Success: true,
-	}); err != nil {
-		return
-	}
-
-	// Subscribe to requested events
+	// Subscribe to requested events before sending ack, so handlers are
+	// registered by the time the client sees the ack and starts emitting.
 	var unsubs []UnsubscribeFunc
 	for _, eventName := range sub.Events {
 		kind := EventKind(eventName)
@@ -172,6 +165,14 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 			})
 		})
 		unsubs = append(unsubs, unsub)
+	}
+
+	// Send ack
+	if err := writeMsg(&protocol.SubscribeResponse{
+		Type:    protocol.TypeSubscribeResponse,
+		Success: true,
+	}); err != nil {
+		return
 	}
 
 	// Clean up subscriptions on exit
