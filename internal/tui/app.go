@@ -595,8 +595,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = session.BaseRef
 			m.statusBar.commentCount = len(session.Comments)
 		}
-		// Reload current diff to remove inline comment markers
-		if msg.reloadPath != "" && !msg.isContent {
+		// Reload current view to remove inline comment markers
+		if msg.reloadPath != "" && msg.isContent {
+			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.reloadPath})
+		} else if msg.reloadPath != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath})
 		}
 		return m, nil
@@ -986,14 +988,14 @@ func stackedSidebarHeight(totalHeight, fileCount, contentItemCount int) int {
 	return h
 }
 
-// diffViewShowsValidFile returns true if the diff view is showing a file
-// that's still in the current file list (not stale or a content item).
+// diffViewShowsValidFile returns true if the diff view is showing a valid
+// view — either a file still in the file list or a content item.
 func (m appModel) diffViewShowsValidFile() bool {
 	if m.diffView.path == "" {
 		return false
 	}
 	if m.diffView.contentMode {
-		return false // content view, not a file
+		return true // content items are always valid
 	}
 	for _, f := range m.sidebar.files {
 		if f.Path == m.diffView.path {
@@ -1011,12 +1013,21 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			if err != nil || item == nil {
 				return loadDiffMsg{path: msg.contentID}
 			}
-			// Build content as a document view with line numbers
+			session := m.engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+						comments = append(comments, c)
+					}
+				}
+			}
 			return loadContentMsg{
 				id:          item.ID,
 				title:       item.Title,
 				content:     item.Content,
 				contentType: item.ContentType,
+				comments:    comments,
 			}
 		}
 	}
@@ -1056,6 +1067,30 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 			_, _ = m.engine.EditComment(msg.editingID, msg.body)
 		} else {
 			_, _ = m.engine.AddComment(target, msg.commentType, msg.body)
+		}
+
+		// Content items: reload as content, not as diff
+		if msg.targetType == types.TargetContent {
+			item, err := m.engine.GetContentItem(msg.path)
+			if err != nil || item == nil {
+				return loadContentMsg{id: msg.path}
+			}
+			session := m.engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadContentMsg{
+				id:          item.ID,
+				title:       item.Title,
+				content:     item.Content,
+				contentType: item.ContentType,
+				comments:    comments,
+			}
 		}
 
 		// Reload diff for the file
@@ -1164,6 +1199,7 @@ type loadContentMsg struct {
 	title       string
 	content     string
 	contentType string
+	comments    []types.ReviewComment
 }
 
 // View renders the full TUI layout.
