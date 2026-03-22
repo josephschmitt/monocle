@@ -310,6 +310,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.contentItems = msg.items
 		m.sidebar.rebuildTree()
 		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
 		// Sync status bar file count
 		session := m.engine.GetSession()
 		if session != nil {
@@ -336,6 +337,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = msg.files
 		m.sidebar.rebuildTree()
 		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(msg.files)
 		if msg.path != "" && msg.result != nil {
 			m.diffView, _ = m.diffView.Update(loadDiffMsg{
@@ -355,6 +357,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.rebuildTree()
 		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
 		session := m.engine.GetSession()
 		if session != nil {
@@ -382,6 +385,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case contentItemMsg:
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
 		// Auto-select only if nothing else is available (no files, no current view)
 		if m.diffView.path == "" && len(m.sidebar.files) == 0 && msg.id != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
@@ -590,6 +594,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.rebuildTree()
 		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
 		session := m.engine.GetSession()
 		if session != nil {
@@ -987,6 +992,32 @@ func stackedSidebarHeight(totalHeight, fileCount, contentItemCount int) int {
 		h = maxH
 	}
 	return h
+}
+
+// recalcStackedLayout recalculates sidebar and diff view heights for stacked
+// mode based on the current file/content item counts. No-op in horizontal mode.
+func recalcStackedLayout(m *appModel) {
+	if m.layout != layoutStacked {
+		return
+	}
+	const borderH = 2
+	const titleHeight = 1
+	const statusBarHeight = 1
+	const chrome = titleHeight + statusBarHeight + borderH
+
+	contentHeight := m.height - chrome
+	if contentHeight < 0 {
+		contentHeight = 0
+	}
+
+	sidebarH := stackedSidebarHeight(contentHeight, len(m.sidebar.files), len(m.sidebar.contentItems))
+	diffH := contentHeight - sidebarH - borderH
+	if diffH < 0 {
+		diffH = 0
+	}
+
+	m.sidebar.height = sidebarH
+	m.diffView.height = diffH
 }
 
 // diffViewShowsValidFile returns true if the diff view is showing a valid
