@@ -2,7 +2,10 @@
 
 **Review your AI agent's code as it writes it.** Leave comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal.
 
+You can run monocle either side-by-side with your agent:
 ![image](https://github.com/user-attachments/assets/c9c2b7ed-ce1b-417e-9fcb-b5086c6e94d4)
+
+Or full-screen to get maximum space for your review:
 ![image](https://github.com/user-attachments/assets/91daaa6f-c838-46df-a699-aaedae62b240)
 
 Monocle is a TUI that runs alongside [Claude Code](https://claude.com/claude-code). It connects via an [MCP channel](https://code.claude.com/docs/en/channels-reference) that pushes your review feedback directly into the agent's context. No copy-pasting, no window switching, no waiting.
@@ -43,7 +46,8 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Live diff viewer** — Unified and split (side-by-side) views with syntax highlighting and intra-line diffs
 - **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level or file-level precision
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
-- **Plan review** — Claude Code can submit plans for your review before writing code
+- **Plan review** — Claude Code can submit plans for your review before writing code, with markdown rendering
+- **Markdown rendering** — Plans and changed `.md` files render with styled headings, bold, italic, lists, and code blocks
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
 - **Ref picker** — Change the base ref on the fly to compare against any branch or commit
@@ -163,10 +167,11 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `r` | Toggle file reviewed |
 | `t` | Toggle unified/split diff |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
-| `S` | Submit review |
+| `S` / `:submit` | Submit review |
 | `Ctrl+y` | Copy review to clipboard |
-| `P` | Pause Claude Code (wait for your review) |
-| `D` | Dismiss outdated comments |
+| `P` / `:pause` | Pause Claude Code (wait for your review) |
+| `D` / `:dismiss-outdated` | Dismiss outdated comments |
+| `:discard` | Discard all pending comments |
 | `I` | Connection info (socket path, subscriber count) |
 | `?` | Show all keybindings |
 
@@ -182,6 +187,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 monocle [--socket PATH]     Start a review session
 monocle install [--global]  Install MCP channel for Claude Code
 monocle uninstall [--global] Remove MCP channel
+monocle --version           Print version
 ```
 
 ### Manual Socket Override
