@@ -519,6 +519,16 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	return nil
 }
 
+func (e *Engine) GetSubmissions() ([]types.ReviewSubmission, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return nil, fmt.Errorf("no active session")
+	}
+	return e.database.GetSubmissions(session.ID)
+}
+
 // -- Base ref management --
 
 // SetBaseRef manually sets the diff baseline and disables auto-advance.

@@ -41,6 +41,7 @@ const (
 	overlayRefPicker
 	overlayConfirm
 	overlayInstallPrompt
+	overlayHistory
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -107,6 +108,7 @@ type appModel struct {
 	help          helpModel
 	refPicker     refPickerModel
 	confirm       confirmModel
+	history       historyModel
 
 	focus        focusTarget
 	overlay      overlayKind
@@ -173,6 +175,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		help:          newHelpModel(theme, &keys),
 		refPicker:     newRefPickerModel(theme),
 		confirm:       newConfirmModel(theme),
+		history:       newHistoryModel(theme),
 		installPrompt: newInstallPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
@@ -559,6 +562,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		return m, nil
 
+	case openHistoryMsg:
+		m.history.open(msg.submissions)
+		m.history.width = m.width
+		m.history.height = m.height
+		m.overlay = overlayHistory
+		return m, nil
+
+	case closeHistoryMsg:
+		m.overlay = overlayNone
+		return m, nil
+
 	// After comments are cleared, refresh sidebar + diff
 	case commentsClearedMsg:
 		m.sidebar.files = m.engine.GetChangedFiles()
@@ -615,6 +629,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayInstallPrompt {
 		var cmd tea.Cmd
 		m.installPrompt, cmd = m.installPrompt.Update(msg)
+		return m, cmd
+	}
+	if m.overlay == overlayHistory {
+		var cmd tea.Cmd
+		m.history, cmd = m.history.Update(msg)
 		return m, cmd
 	}
 
@@ -894,6 +913,15 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 		return func() tea.Msg {
 			engine.CancelPause()
 			return pauseChangedMsg{}
+		}
+
+	case "history":
+		return func() tea.Msg {
+			subs, err := engine.GetSubmissions()
+			if err != nil {
+				return nil
+			}
+			return openHistoryMsg{submissions: subs}
 		}
 	}
 
@@ -1212,6 +1240,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayInstallPrompt {
 		overlayContent := m.installPrompt.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayHistory {
+		overlayContent := m.history.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}
