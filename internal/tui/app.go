@@ -73,6 +73,14 @@ type pauseChangedMsg struct {
 	status string
 }
 
+type editCommentMsg struct {
+	comment *types.ReviewComment
+}
+
+type deleteCommentMsg struct {
+	commentID string
+}
+
 type submitSuccessMsg struct{}
 
 type commentsClearedMsg struct {
@@ -458,6 +466,34 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commentEditor.open(msg.path, msg.lineStart, msg.lineEnd, msg.targetType)
 		m.overlay = overlayComment
 		return m, nil
+
+	case editCommentMsg:
+		m.commentEditor.openEdit(msg.comment)
+		m.overlay = overlayComment
+		return m, nil
+
+	case deleteCommentMsg:
+		engine := m.engine
+		id := msg.commentID
+		currentPath := m.diffView.path
+		isContent := m.diffView.contentMode
+		return m, func() tea.Msg {
+			_ = engine.DeleteComment(id)
+			if isContent {
+				return fileChangedMsg{}
+			}
+			result, _ := engine.GetFileDiff(currentPath)
+			session := engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == currentPath {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+		}
 
 	case saveCommentMsg:
 		m.overlay = overlayNone
@@ -1349,6 +1385,11 @@ func (m appModel) View() tea.View {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	}
 	m.statusBar.width = m.width
+	if m.focus == focusMain && m.diffView.CursorComment() != nil {
+		m.statusBar.contextHints = "c:edit  d:delete  x:resolve  ?:help"
+	} else {
+		m.statusBar.contextHints = ""
+	}
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

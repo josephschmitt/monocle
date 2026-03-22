@@ -19,6 +19,7 @@ type statusBarModel struct {
 	connected      bool
 	commandMode    bool
 	commandBuffer  string
+	contextHints   string // override hints when set (e.g. comment-specific keybinds)
 	width          int
 	theme          Theme
 }
@@ -91,7 +92,12 @@ func (m statusBarModel) View() string {
 	}
 
 	// Key hints (right-aligned, collapse to ?:help when narrow)
-	fullHints := "c:comment  S:submit  P:pause  D:dismiss  q:quit"
+	var fullHints string
+	if m.contextHints != "" {
+		fullHints = m.contextHints
+	} else {
+		fullHints = "c:comment  S:submit  P:pause  D:dismiss  q:quit"
+	}
 	shortHints := "?:help"
 	left := strings.Join(parts, "  ")
 

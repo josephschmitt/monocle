@@ -204,9 +204,13 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			}
 			m.buildLines()
 		case Matches(key, m.keys.Comment):
-			// Open comment editor
+			// If cursor is on a comment, edit it
+			if c := m.CursorComment(); c != nil {
+				comment := *c
+				return m, func() tea.Msg { return editCommentMsg{comment: &comment} }
+			}
+			// Otherwise open new comment editor
 			if m.contentMode {
-				// Content mode: comment on the content item
 				if m.visualMode {
 					start, end := m.visualRange()
 					return m, openCommentCmd(m.contentID, start, end, types.TargetContent)
@@ -233,10 +237,16 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			if m.path != "" {
 				return m, openFileCommentCmd(m.path, types.TargetFile)
 			}
+		case key == "d":
+			// Delete comment under cursor
+			if c := m.CursorComment(); c != nil {
+				commentID := c.ID
+				return m, func() tea.Msg { return deleteCommentMsg{commentID: commentID} }
+			}
 		case key == "x":
 			// Toggle resolved on comment under cursor
-			if m.cursor >= 0 && m.cursor < len(m.lines) && m.lines[m.cursor].isComment && m.lines[m.cursor].comment != nil {
-				commentID := m.lines[m.cursor].comment.ID
+			if c := m.CursorComment(); c != nil {
+				commentID := c.ID
 				return m, func() tea.Msg { return resolveCommentMsg{commentID: commentID} }
 			}
 		}
@@ -1275,6 +1285,14 @@ func (m *diffViewModel) ensureVisible() {
 		screenLines -= m.screenLinesFor(m.offset)
 		m.offset++
 	}
+}
+
+// CursorComment returns the comment under the cursor, or nil if the cursor is not on a comment line.
+func (m diffViewModel) CursorComment() *types.ReviewComment {
+	if m.cursor >= 0 && m.cursor < len(m.lines) && m.lines[m.cursor].isComment {
+		return m.lines[m.cursor].comment
+	}
+	return nil
 }
 
 // isSelectable returns true if the line at idx can receive cursor focus.
