@@ -689,6 +689,14 @@ func (e *Engine) GetFeedbackStatus() string {
 	return e.feedback.GetStatus()
 }
 
+func (e *Engine) GetSubscriberCount() int {
+	return e.server.SubscriberCount()
+}
+
+func (e *Engine) GetSocketPath() string {
+	return e.server.SocketPath()
+}
+
 // -- Events --
 
 func (e *Engine) On(event EventKind, callback EventCallback) UnsubscribeFunc {

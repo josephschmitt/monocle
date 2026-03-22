@@ -222,7 +222,7 @@ async function blockingGetFeedback(socketPath: string): Promise<Message> {
 
 const cwd = process.cwd();
 const repoRoot = findRepoRoot(cwd);
-const socketPath = defaultSocketPath(repoRoot);
+const socketPath = process.env.MONOCLE_SOCKET || defaultSocketPath(repoRoot);
 
 // Create MCP server with channel capability
 const mcp = new Server(

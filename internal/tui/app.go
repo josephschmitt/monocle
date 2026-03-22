@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ const (
 	overlayRefPicker
 	overlayConfirm
 	overlayInstallPrompt
+	overlayConnectionInfo
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -59,6 +61,10 @@ type feedbackStatusMsg struct {
 
 type contentItemMsg struct {
 	id string
+}
+
+type connectionChangedMsg struct {
+	count int
 }
 
 type pauseChangedMsg struct {
@@ -107,8 +113,9 @@ type appModel struct {
 	commentEditor commentEditorModel
 	reviewSummary reviewSummaryModel
 	help          helpModel
-	refPicker     refPickerModel
-	confirm       confirmModel
+	refPicker      refPickerModel
+	confirm        confirmModel
+	connectionInfo connectionInfoModel
 
 	focus        focusTarget
 	overlay      overlayKind
@@ -170,7 +177,8 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		reviewSummary: newReviewSummaryModel(theme),
 		help:          newHelpModel(theme),
 		refPicker:     newRefPickerModel(theme),
-		confirm:       newConfirmModel(theme),
+		confirm:        newConfirmModel(theme),
+		connectionInfo: newConnectionInfoModel(theme),
 		installPrompt: newInstallPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
@@ -292,6 +300,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.confirm.height = m.height
 		m.installPrompt.width = m.width
 		m.installPrompt.height = m.height
+		m.connectionInfo.width = m.width
+		m.connectionInfo.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -358,6 +368,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentStatusMsg:
 		m.statusBar.agentStatus = m.engine.GetAgentStatus()
+		return m, nil
+
+	case connectionChangedMsg:
+		m.statusBar.connected = msg.count > 0
 		return m, nil
 
 	case feedbackStatusMsg:
@@ -438,6 +452,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case closeHelpMsg:
+		m.overlay = overlayNone
+		return m, nil
+
+	case closeConnectionInfoMsg:
 		m.overlay = overlayNone
 		return m, nil
 
@@ -592,6 +610,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.installPrompt, cmd = m.installPrompt.Update(msg)
 		return m, cmd
 	}
+	if m.overlay == overlayConnectionInfo {
+		var cmd tea.Cmd
+		m.connectionInfo, cmd = m.connectionInfo.Update(msg)
+		return m, cmd
+	}
 
 	// Command mode input.
 	if m.commandMode {
@@ -615,6 +638,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.help.active = true
 		m.help.scrollOffset = 0
 		m.overlay = overlayHelp
+		return m, nil
+
+	case "I":
+		m.connectionInfo.active = true
+		m.connectionInfo.socketPath = m.engine.GetSocketPath()
+		m.connectionInfo.subscriberCount = m.engine.GetSubscriberCount()
+		m.overlay = overlayConnectionInfo
 		return m, nil
 
 	case "tab":
@@ -1196,6 +1226,11 @@ func (m appModel) View() tea.View {
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}
+	} else if m.overlay == overlayConnectionInfo {
+		overlayContent := m.connectionInfo.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
 	}
 
 	v := tea.NewView(full)
@@ -1287,5 +1322,9 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventPauseChanged, func(e core.EventPayload) {
 		p.Send(pauseChangedMsg{status: e.Status})
+	})
+	engine.On(core.EventConnectionChanged, func(e core.EventPayload) {
+		count, _ := strconv.Atoi(e.Status)
+		p.Send(connectionChangedMsg{count: count})
 	})
 }

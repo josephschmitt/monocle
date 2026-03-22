@@ -12,10 +12,12 @@ import (
 
 // SocketServer listens on a Unix domain socket for CLI subcommand messages.
 type SocketServer struct {
-	listener   net.Listener
-	engine     *Engine
-	socketPath string
-	done       chan struct{}
+	listener        net.Listener
+	engine          *Engine
+	socketPath      string
+	done            chan struct{}
+	subscriberCount int
+	subscriberMu    sync.Mutex
 }
 
 // NewSocketServer creates a new SocketServer. Call SetEngine and Start before use.
@@ -56,6 +58,14 @@ func (s *SocketServer) Start(socketPath string) error {
 func (s *SocketServer) SocketPath() string {
 	return s.socketPath
 }
+
+// SubscriberCount returns the number of active subscriber connections.
+func (s *SocketServer) SubscriberCount() int {
+	s.subscriberMu.Lock()
+	defer s.subscriberMu.Unlock()
+	return s.subscriberCount
+}
+
 
 // Shutdown stops the server and removes the socket file.
 func (s *SocketServer) Shutdown() error {
@@ -175,8 +185,26 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 		return
 	}
 
-	// Clean up subscriptions on exit
+	// Track subscriber connection
+	s.subscriberMu.Lock()
+	s.subscriberCount++
+	count := s.subscriberCount
+	s.subscriberMu.Unlock()
+	s.engine.emit(EventConnectionChanged, EventPayload{
+		Kind:   EventConnectionChanged,
+		Status: fmt.Sprintf("%d", count),
+	})
+
+	// Clean up subscriptions and subscriber count on exit
 	defer func() {
+		s.subscriberMu.Lock()
+		s.subscriberCount--
+		count := s.subscriberCount
+		s.subscriberMu.Unlock()
+		s.engine.emit(EventConnectionChanged, EventPayload{
+			Kind:   EventConnectionChanged,
+			Status: fmt.Sprintf("%d", count),
+		})
 		for _, unsub := range unsubs {
 			unsub()
 		}

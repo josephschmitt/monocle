@@ -22,7 +22,9 @@ type CLI struct {
 	Version   kong.VersionFlag  `help:"Print version" name:"version"`
 }
 
-type RunCmd struct{}
+type RunCmd struct {
+	Socket string `help:"Override socket path for MCP channel connection" env:"MONOCLE_SOCKET" default:""`
+}
 
 type InstallCmd struct {
 	Global bool `help:"Install to user-level ~/.mcp.json instead of project" default:"false"`
@@ -45,7 +47,7 @@ func main() {
 }
 
 func (cmd *RunCmd) Run() error {
-	return runTUI()
+	return runTUI(cmd.Socket)
 }
 
 func (cmd *InstallCmd) Run() error {
@@ -98,7 +100,7 @@ func (cmd *UninstallCmd) Run() error {
 	return nil
 }
 
-func runTUI() error {
+func runTUI(socketOverride string) error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
@@ -135,7 +137,10 @@ func runTUI() error {
 	}
 
 	// Start socket server
-	socketPath := adapters.DefaultSocketPath(repoRoot)
+	socketPath := socketOverride
+	if socketPath == "" {
+		socketPath = adapters.DefaultSocketPath(repoRoot)
+	}
 	if err := engine.StartServer(socketPath); err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}

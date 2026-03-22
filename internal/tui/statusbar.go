@@ -16,6 +16,7 @@ type statusBarModel struct {
 	fileCount      int
 	commentCount   int
 	feedbackStatus string
+	connected      bool
 	commandMode    bool
 	commandBuffer  string
 	width          int
@@ -58,8 +59,16 @@ func (m statusBarModel) View() string {
 	}
 	status := statusStyle.Bold(true).Render(fmt.Sprintf("[%s]", statusStr))
 
+	// Connection indicator
+	var connIndicator string
+	if m.connected {
+		connIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
+	} else {
+		connIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("○")
+	}
+
 	// Info sections
-	parts := []string{status}
+	parts := []string{status, connIndicator}
 
 	if m.baseRef != "" {
 		ref := m.baseRef

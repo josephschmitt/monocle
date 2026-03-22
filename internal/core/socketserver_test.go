@@ -199,6 +199,107 @@ func TestSocketServer_SubscriptionWithRequests(t *testing.T) {
 	}
 }
 
+func TestSocketServer_SubscriberCount(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+
+	// Initially no subscribers
+	if got := engine.GetSubscriberCount(); got != 0 {
+		t.Fatalf("initial subscriber count = %d, want 0", got)
+	}
+
+	// Connect and subscribe
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	sub := protocol.SubscribeMsg{
+		Type:   protocol.TypeSubscribe,
+		Events: []string{string(EventFeedbackSubmitted)},
+	}
+	data, _ := protocol.Encode(&sub)
+	conn.Write(data)
+
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+	// Read ack
+	if !scanner.Scan() {
+		t.Fatal("no ack")
+	}
+
+	// Wait briefly for the count to update
+	time.Sleep(50 * time.Millisecond)
+
+	if got := engine.GetSubscriberCount(); got != 1 {
+		t.Errorf("subscriber count after connect = %d, want 1", got)
+	}
+
+	// Disconnect
+	conn.Close()
+
+	// Wait for cleanup
+	time.Sleep(50 * time.Millisecond)
+
+	if got := engine.GetSubscriberCount(); got != 0 {
+		t.Errorf("subscriber count after disconnect = %d, want 0", got)
+	}
+}
+
+func TestSocketServer_ConnectionChangedEvent(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+
+	// Subscribe to connection events
+	events := make(chan EventPayload, 10)
+	engine.On(EventConnectionChanged, func(e EventPayload) {
+		events <- e
+	})
+
+	// Connect and subscribe
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	sub := protocol.SubscribeMsg{
+		Type:   protocol.TypeSubscribe,
+		Events: []string{string(EventFeedbackSubmitted)},
+	}
+	data, _ := protocol.Encode(&sub)
+	conn.Write(data)
+
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+	// Read ack
+	if !scanner.Scan() {
+		t.Fatal("no ack")
+	}
+
+	// Should get a connection event for connect
+	select {
+	case e := <-events:
+		if e.Status != "1" {
+			t.Errorf("connect event status = %q, want %q", e.Status, "1")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no connect event received")
+	}
+
+	// Disconnect
+	conn.Close()
+
+	// Should get a connection event for disconnect
+	select {
+	case e := <-events:
+		if e.Status != "0" {
+			t.Errorf("disconnect event status = %q, want %q", e.Status, "0")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no disconnect event received")
+	}
+}
+
 func TestSocketServer_SubmitEmitsFeedbackEvent(t *testing.T) {
 	engine, socketPath := setupTestEngine(t)
 

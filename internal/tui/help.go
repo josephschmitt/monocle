@@ -114,6 +114,7 @@ func (m helpModel) View() string {
 		{"General", []struct{ key, desc string }{
 			{"t", "Toggle unified/split diff"},
 			{"T", "Cycle layout (auto/side-by-side/stacked)"},
+			{"I", "Connection info"},
 			{"?", "Show this help"},
 			{"q", "Quit"},
 		}},

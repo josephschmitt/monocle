@@ -47,6 +47,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
 - **Ref picker** — Change the base ref on the fly to compare against any branch or commit
 - **Feedback queue** — Submit reviews while the agent is working; delivered when Claude Code next checks
+- **Connection indicator** — See at a glance whether Claude Code is connected, with manual socket override for troubleshooting
 - **Session persistence** — Reviews survive restarts via SQLite
 
 ## Installation
@@ -164,6 +165,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `S` | Submit review |
 | `P` | Pause Claude Code (wait for your review) |
 | `D` | Dismiss outdated comments |
+| `I` | Connection info (socket path, subscriber count) |
 | `?` | Show all keybindings |
 
 **Submit** (`S`): Your review is formatted and pushed to Claude Code via the MCP channel. If there are no comments, it's treated as an approval.
@@ -173,10 +175,28 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 ## CLI
 
 ```
-monocle                     Start a review session
+monocle [--socket PATH]     Start a review session
 monocle install [--global]  Install MCP channel for Claude Code
 monocle uninstall [--global] Remove MCP channel
 ```
+
+### Manual Socket Override
+
+If auto-pairing fails (e.g., Claude Code's working directory differs from Monocle's), you can manually specify the socket path on either side:
+
+- **Monocle:** `monocle --socket /tmp/monocle-abc123.sock`
+- **Channel (env var):** Set `MONOCLE_SOCKET` in your `.mcp.json`:
+  ```json
+  {
+    "mcpServers": {
+      "monocle": {
+        "env": { "MONOCLE_SOCKET": "/tmp/monocle-abc123.sock" }
+      }
+    }
+  }
+  ```
+
+Press `I` in the TUI to see the current socket path and connection status.
 
 ## Configuration
 

@@ -15,6 +15,7 @@ const (
 	EventCommentsOutdated      EventKind = "comments_outdated"
 	EventPauseChanged          EventKind = "pause_changed"
 	EventFeedbackSubmitted     EventKind = "feedback_submitted"
+	EventConnectionChanged     EventKind = "connection_changed"
 )
 
 // EventPayload carries data for an engine event.
@@ -106,6 +107,10 @@ type EngineAPI interface {
 	// Agent status
 	GetAgentStatus() types.AgentStatus
 	GetFeedbackStatus() string
+
+	// Connection status
+	GetSubscriberCount() int
+	GetSocketPath() string
 
 	// Events
 	On(event EventKind, callback EventCallback) UnsubscribeFunc
