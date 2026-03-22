@@ -108,6 +108,7 @@ func (m helpModel) View() string {
 			{Label(km.FileComment), "Add file comment"},
 			{Label(km.Visual), "Visual select mode"},
 			{"x", "Toggle comment resolved"},
+			{"d", "Delete comment (on comment)"},
 			{Label(km.Reviewed), "Toggle file reviewed"},
 			{Label(km.Submit) + " / :submit", "Submit review"},
 			{"Ctrl+y", "Copy review to clipboard"},

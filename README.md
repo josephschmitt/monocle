@@ -51,6 +51,9 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
 - **Ref picker** — Change the base ref on the fly to compare against any branch or commit
+- **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
+- **Submission history** — View past review submissions with `:history`
+- **Configurable keybindings** — Override any navigation or action key via config
 - **Feedback queue** — Submit reviews while the agent is working; delivered when Claude Code next checks
 - **Connection indicator** — See at a glance whether Claude Code is connected, with manual socket override for troubleshooting
 - **Session persistence** — Reviews survive restarts via SQLite
@@ -161,9 +164,11 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `f` | Toggle flat/tree view |
 | `z`/`e` | Collapse/expand all (tree) |
 | `b` | Change base ref |
-| `c` | Add comment at cursor |
+| `c` | Add comment at cursor (edit if on a comment) |
 | `C` | Add file-level comment |
 | `v` | Visual select (multi-line comments) |
+| `x` | Toggle comment resolved (on a comment line) |
+| `d` | Delete comment (on a comment line) |
 | `r` | Toggle file reviewed |
 | `t` | Toggle unified/split diff |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
@@ -172,6 +177,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `P` / `:pause` | Pause Claude Code (wait for your review) |
 | `D` / `:dismiss-outdated` | Dismiss outdated comments |
 | `:discard` | Discard all pending comments |
+| `:history` | View past review submissions |
 | `I` | Connection info (socket path, subscriber count) |
 | `?` | Show all keybindings |
 
@@ -223,7 +229,6 @@ Monocle loads settings from JSON config files:
   "wrap": false,
   "tab_size": 4,
   "context_lines": 3,
-  "theme": "default",
   "ignore_patterns": [],
   "keybindings": {},
   "review_format": {
@@ -242,12 +247,31 @@ Monocle loads settings from JSON config files:
 | `wrap` | `true`, `false` | `false` | Word-wrap long lines in diffs |
 | `tab_size` | integer | `4` | Spaces per tab character |
 | `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
-| `theme` | `"default"` | `"default"` | Color theme |
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
-| `keybindings` | object | `{}` | Custom key overrides |
-| `review_format` | object | see above | Controls how review feedback is formatted |
+| `keybindings` | object | `{}` | Custom key overrides (see below) |
+| `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
+| `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |
+| `review_format.include_summary` | `true`, `false` | `true` | Include comment count summary in formatted reviews |
 
 Toggle keybindings (`T`, `t`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
+
+### Custom Keybindings
+
+Override any action key by mapping the action name to a new key string:
+
+```json
+{
+  "keybindings": {
+    "quit": "Q",
+    "submit": "ctrl+s",
+    "scroll_down": "ctrl+j"
+  }
+}
+```
+
+Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `wrap`, `toggle_diff`, `tree_mode`, `collapse_all`, `expand_all`, `comment`, `file_comment`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `help`, `quit`, `command_mode`.
+
+The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 
 ## Requirements
 
