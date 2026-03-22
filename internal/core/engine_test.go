@@ -1,8 +1,10 @@
 package core
 
 import (
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/anthropics/monocle/internal/db"
 	"github.com/anthropics/monocle/internal/types"
@@ -752,5 +754,116 @@ func TestSetAutoAdvanceRef(t *testing.T) {
 	e.SetAutoAdvanceRef(false)
 	if e.IsAutoAdvanceRef() {
 		t.Error("expected IsAutoAdvanceRef to be false after SetAutoAdvanceRef(false)")
+	}
+}
+
+func TestResolveComment(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID:           "sess-1",
+		Agent:        "claude",
+		AgentStatus:  types.AgentStatusIdle,
+		RepoRoot:     "/tmp",
+		BaseRef:      "abc",
+		ReviewRound:  1,
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	database.CreateSession(session)
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = session
+
+	// Add a comment
+	comment, err := e.AddComment(CommentTarget{
+		TargetType: types.TargetFile,
+		TargetRef:  "main.go",
+		LineStart:  10,
+	}, types.CommentIssue, "Fix this bug")
+	if err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+
+	// Initially not resolved
+	if comment.Resolved {
+		t.Error("comment should not be resolved initially")
+	}
+
+	// Resolve it
+	if err := e.ResolveComment(comment.ID); err != nil {
+		t.Fatalf("ResolveComment: %v", err)
+	}
+
+	// Verify in-memory
+	e.mu.RLock()
+	resolved := false
+	for _, c := range e.current.Comments {
+		if c.ID == comment.ID {
+			resolved = c.Resolved
+			break
+		}
+	}
+	e.mu.RUnlock()
+	if !resolved {
+		t.Error("expected comment to be resolved in memory")
+	}
+
+	// Verify in DB
+	dbComments, _ := database.GetComments("sess-1")
+	if len(dbComments) != 1 || !dbComments[0].Resolved {
+		t.Error("expected comment to be resolved in DB")
+	}
+
+	// Toggle back to unresolved
+	if err := e.ResolveComment(comment.ID); err != nil {
+		t.Fatalf("unresolve: %v", err)
+	}
+	dbComments, _ = database.GetComments("sess-1")
+	if len(dbComments) != 1 || dbComments[0].Resolved {
+		t.Error("expected comment to be unresolved after toggle")
+	}
+}
+
+func TestFormatSkipsResolvedComments(t *testing.T) {
+	f := NewReviewFormatter(nil, types.ReviewFormatConfig{IncludeSnippets: true, MaxSnippetLines: 10, IncludeSummary: true})
+	comments := []types.ReviewComment{
+		{
+			ID:         "c1",
+			TargetType: types.TargetFile,
+			TargetRef:  "main.go",
+			Type:       types.CommentIssue,
+			Body:       "Active issue",
+		},
+		{
+			ID:         "c2",
+			TargetType: types.TargetFile,
+			TargetRef:  "main.go",
+			Type:       types.CommentIssue,
+			Body:       "Resolved issue",
+			Resolved:   true,
+		},
+	}
+
+	result := f.Format(&types.ReviewSession{}, comments, types.ActionRequestChanges, "")
+
+	if !strings.Contains(result.Formatted, "Active issue") {
+		t.Error("active comment should be included")
+	}
+	if strings.Contains(result.Formatted, "Resolved issue") {
+		t.Error("resolved comment should be excluded from formatted output")
+	}
+	if !strings.Contains(result.Formatted, "1 issue(s)") {
+		t.Error("summary should only count active (non-resolved) comments")
 	}
 }

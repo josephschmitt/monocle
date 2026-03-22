@@ -36,7 +36,7 @@ func (rf *ReviewFormatter) SetContentItemProvider(provider ContentItemProvider) 
 func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types.ReviewComment, action types.SubmitAction, body string) *FormattedReview {
 	hasComments := false
 	for _, c := range comments {
-		if !c.Outdated {
+		if !c.Outdated && !c.Resolved {
 			hasComments = true
 			break
 		}
@@ -80,7 +80,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	fileComments := map[string][]types.ReviewComment{}
 	contentComments := map[string][]types.ReviewComment{}
 	for _, c := range comments {
-		if c.Outdated {
+		if c.Outdated || c.Resolved {
 			continue
 		}
 		switch c.TargetType {
@@ -260,7 +260,7 @@ func truncateSnippet(snippet string, maxLines int) string {
 
 func countByType(comments []types.ReviewComment) (issue, suggestion, note, praise int) {
 	for _, c := range comments {
-		if c.Outdated {
+		if c.Outdated || c.Resolved {
 			continue
 		}
 		switch c.Type {
