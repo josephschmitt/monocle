@@ -836,11 +836,7 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	if cw <= 0 {
 		return 1
 	}
-	contentLen := len([]rune(line.content))
-	if contentLen <= cw {
-		return 1
-	}
-	return (contentLen + cw - 1) / cw
+	return len(wrapContent(line.content, cw))
 }
 
 // applyHOffset slices content at the horizontal offset (rune-aware).
@@ -888,7 +884,9 @@ func (m *diffViewModel) expandTabs(s string) string {
 	return strings.ReplaceAll(s, "\t", strings.Repeat(" ", tabSize))
 }
 
-// wrapContent splits content into chunks of at most width runes.
+// wrapContent splits content into lines that fit within width, preferring
+// to break at word boundaries (spaces). Falls back to character-based
+// wrapping when a single word exceeds the available width.
 func wrapContent(content string, width int) []string {
 	if width <= 0 {
 		return []string{content}
@@ -897,15 +895,38 @@ func wrapContent(content string, width int) []string {
 	if len(runes) <= width {
 		return []string{content}
 	}
+
 	var chunks []string
-	for len(runes) > 0 {
-		end := width
-		if end > len(runes) {
-			end = len(runes)
+	lineStart := 0
+	lastSpace := -1 // index of last space seen on the current line
+
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == ' ' {
+			lastSpace = i
 		}
-		chunks = append(chunks, string(runes[:end]))
-		runes = runes[end:]
+
+		lineLen := i - lineStart + 1
+		if lineLen > width {
+			if lastSpace > lineStart {
+				// Break after the last space (space stays at end of current line)
+				chunks = append(chunks, string(runes[lineStart:lastSpace+1]))
+				lineStart = lastSpace + 1
+				lastSpace = -1
+			} else {
+				// No space on this line — force break at width (character fallback)
+				chunks = append(chunks, string(runes[lineStart:lineStart+width]))
+				lineStart = lineStart + width
+				lastSpace = -1
+				i = lineStart - 1 // will be incremented by loop
+			}
+		}
 	}
+
+	// Emit remaining content
+	if lineStart < len(runes) {
+		chunks = append(chunks, string(runes[lineStart:]))
+	}
+
 	return chunks
 }
 
