@@ -107,7 +107,7 @@ func (m helpModel) View() string {
 			{"v", "Visual select mode"},
 			{"r", "Toggle file reviewed"},
 			{"S / :submit", "Submit review"},
-			{"Ctrl+Y", "Copy review to clipboard"},
+			{"Ctrl+y", "Copy review to clipboard"},
 			{"P / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{"D / :dismiss-outdated", "Dismiss outdated comments"},
 			{":discard", "Discard all pending comments"},

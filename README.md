@@ -163,7 +163,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `t` | Toggle unified/split diff |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
 | `S` | Submit review |
-| `Ctrl+Y` | Copy review to clipboard |
+| `Ctrl+y` | Copy review to clipboard |
 | `P` | Pause Claude Code (wait for your review) |
 | `D` | Dismiss outdated comments |
 | `I` | Connection info (socket path, subscriber count) |
@@ -171,7 +171,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 
 **Submit** (`S`): Your review is formatted and pushed to Claude Code via the MCP channel. If there are no comments, it's treated as an approval. Toggle the "Copy to clipboard" checkbox with `Shift+Tab` in the submit modal to also copy the formatted review when submitting.
 
-**Yank** (`Ctrl+Y`): In the submit modal, copies the formatted review to your system clipboard without submitting, then closes the modal.
+**Yank** (`Ctrl+y`): In the submit modal, copies the formatted review to your system clipboard without submitting, then closes the modal.
 
 **Pause** (`P`): Claude Code receives a notification to stop and wait. It calls `get_feedback` with `wait=true` and blocks until you submit your review. This is for when you want to review before the agent moves on.
 

@@ -221,7 +221,7 @@ func (m reviewSummaryModel) View() string {
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Ctrl+Y: yank  Esc: cancel"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Ctrl+y: yank  Esc: cancel"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
