@@ -1023,15 +1023,31 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 
 // handleMarkReviewed toggles the reviewed status of the currently selected file.
 func (m appModel) handleMarkReviewed() tea.Cmd {
-	if m.focus != focusSidebar {
+	var filePath string
+	var reviewed bool
+
+	switch m.focus {
+	case focusSidebar:
+		file := m.sidebar.selectedFile()
+		if file == nil {
+			return nil
+		}
+		filePath = file.Path
+		reviewed = file.Reviewed
+	case focusMain:
+		if m.diffView.path == "" || m.diffView.contentMode {
+			return nil
+		}
+		filePath = m.diffView.path
+		for _, f := range m.sidebar.files {
+			if f.Path == filePath {
+				reviewed = f.Reviewed
+				break
+			}
+		}
+	default:
 		return nil
 	}
-	file := m.sidebar.selectedFile()
-	if file == nil {
-		return nil
-	}
-	filePath := file.Path
-	reviewed := file.Reviewed
 	return func() tea.Msg {
 		if reviewed {
 			_ = m.engine.UnmarkReviewed(filePath)
