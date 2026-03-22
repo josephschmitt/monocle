@@ -43,6 +43,16 @@ type Theme struct {
 	// Modal
 	ModalOverlay   lipgloss.Style
 	ModalBorder    lipgloss.Style
+
+	// Markdown
+	MarkdownH1         lipgloss.Style
+	MarkdownH2         lipgloss.Style
+	MarkdownH3         lipgloss.Style
+	MarkdownBlockquote lipgloss.Style
+	MarkdownCode       lipgloss.Style
+	MarkdownCodeBlock  lipgloss.Style
+	MarkdownRule       lipgloss.Style
+	MarkdownBullet     lipgloss.Style
 }
 
 // DefaultTheme returns a theme using 16-color ANSI for maximum compatibility.
@@ -72,6 +82,15 @@ func DefaultTheme() Theme {
 
 		ModalOverlay:   lipgloss.NewStyle().Background(lipgloss.Color("0")),
 		ModalBorder:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
+
+		MarkdownH1:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		MarkdownH2:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		MarkdownH3:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		MarkdownBlockquote: lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true),
+		MarkdownCode:       lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		MarkdownCodeBlock:  lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Faint(true),
+		MarkdownRule:       lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		MarkdownBullet:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 
 		AddedBg:         lipgloss.Color("#132a13"),
 		RemovedBg:       lipgloss.Color("#2a1313"),
