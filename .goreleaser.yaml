@@ -27,7 +27,6 @@ archives:
   - id: monocle
     name_template: >-
       {{ .ProjectName }}_
-      {{- .Version }}_
       {{- .Os }}_
       {{- .Arch }}
     files:
