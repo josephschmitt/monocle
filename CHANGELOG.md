@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/josephschmitt/monocle/compare/v0.12.0...v0.13.0) (2026-03-22)
+
+
+### Features
+
+* **tui:** improve ref picker with scrolling, pre-selection, and load more ([522daa0](https://github.com/josephschmitt/monocle/commit/522daa0d8e15629098ef116a4865daa2011f0e25))
+
 ## [0.12.0](https://github.com/josephschmitt/monocle/compare/v0.11.0...v0.12.0) (2026-03-22)
 
 
