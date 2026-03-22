@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.12.0](https://github.com/josephschmitt/monocle/compare/v0.11.0...v0.12.0) (2026-03-22)
+
+
+### Features
+
+* **core:** wire ReviewFormatConfig into formatter ([4272f79](https://github.com/josephschmitt/monocle/commit/4272f7932db745731a2f7f808093473f37b35181))
+* implement comment resolution flow ([dffb57b](https://github.com/josephschmitt/monocle/commit/dffb57bf97602313421e236f30d86c8611091913))
+* **tui:** add submission history view ([b624109](https://github.com/josephschmitt/monocle/commit/b624109594eee000cdcbf3f899b9072a19e853a0))
+* **tui:** contextual comment keybinds and status bar hints ([57079f3](https://github.com/josephschmitt/monocle/commit/57079f30a8bdd763d685c7f3df996cdebfbaac62))
+* **tui:** implement configurable keybindings system ([a4f0558](https://github.com/josephschmitt/monocle/commit/a4f0558044c843e35742cf3fd8449031e35740f9))
+
+
+### Bug Fixes
+
+* restore incomplete features incorrectly removed as dead code ([e459357](https://github.com/josephschmitt/monocle/commit/e459357bbcd0a80126e357aa8c62fb9e2339080d))
+* **test:** isolate setupTestRepo from parent worktree git environment ([2594164](https://github.com/josephschmitt/monocle/commit/2594164fbd5d7026cbbb900be208fbbf7c938e31))
+* **test:** use git init -b to avoid branch name collision in worktrees ([ccbd564](https://github.com/josephschmitt/monocle/commit/ccbd564364e127aa7ac25ebfd97b22ee14db2232))
+* **tui:** guard against nil session in refreshFiles ([c2ee7ea](https://github.com/josephschmitt/monocle/commit/c2ee7ead18b2a0f98f32b68f12081ff5842e466f))
+* **tui:** make comment lines selectable so resolve keybind works ([adfc284](https://github.com/josephschmitt/monocle/commit/adfc2842f44a6321ae957bf8808598b6ecf83e58))
+
 ## [0.11.0](https://github.com/josephschmitt/monocle/compare/v0.10.1...v0.11.0) (2026-03-22)
 
 
