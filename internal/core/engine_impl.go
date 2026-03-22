@@ -60,6 +60,20 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string) (*Engine, er
 		return extractLines(content, start, end)
 	})
 
+	e.formatter.SetContentItemProvider(func(id string) string {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		if e.current == nil {
+			return ""
+		}
+		for _, item := range e.current.ContentItems {
+			if item.ID == id {
+				return item.Content
+			}
+		}
+		return ""
+	})
+
 	server.SetEngine(e)
 
 	return e, nil

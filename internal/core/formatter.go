@@ -10,14 +10,23 @@ import (
 // ContentProvider is a callback to get file content for code snippets.
 type ContentProvider func(path string, start, end int) string
 
+// ContentItemProvider is a callback to get content item text for plan snippets.
+type ContentItemProvider func(id string) string
+
 // ReviewFormatter formats review comments into structured markdown.
 type ReviewFormatter struct {
-	getContent ContentProvider
+	getContent     ContentProvider
+	getContentItem ContentItemProvider
 }
 
 // NewReviewFormatter creates a formatter with a content provider callback.
 func NewReviewFormatter(getContent ContentProvider) *ReviewFormatter {
 	return &ReviewFormatter{getContent: getContent}
+}
+
+// SetContentItemProvider sets the callback for getting content item text.
+func (rf *ReviewFormatter) SetContentItemProvider(provider ContentItemProvider) {
+	rf.getContentItem = provider
 }
 
 // Format produces a FormattedReview from a session and its comments.
@@ -172,6 +181,24 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 					b.WriteString("\n")
 				}
 				b.WriteString("```\n")
+			} else if rf.getContentItem != nil && c.LineStart > 0 {
+				content := rf.getContentItem(itemID)
+				if content != "" {
+					end := c.LineEnd
+					if end == 0 {
+						end = c.LineStart
+					}
+					snippet := extractLines(content, c.LineStart, end)
+					if snippet != "" {
+						b.WriteString("```\n")
+						b.WriteString(fmt.Sprintf("// Lines %d-%d:\n", c.LineStart, end))
+						b.WriteString(snippet)
+						if !strings.HasSuffix(snippet, "\n") {
+							b.WriteString("\n")
+						}
+						b.WriteString("```\n")
+					}
+				}
 			}
 
 			b.WriteString(c.Body)
