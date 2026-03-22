@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +17,7 @@ type Engine struct {
 
 	cfg       *types.Config
 	database  *db.DB
-	git       *GitClient
+	git       GitAPI
 	server    *SocketServer
 	feedback  *FeedbackQueue
 	formatter *ReviewFormatter
@@ -543,15 +542,14 @@ func (e *Engine) GetSubmissions() ([]types.ReviewSubmission, error) {
 // commit's changes (the user selects a commit to review, not to exclude).
 func (e *Engine) SetBaseRef(ref string) error {
 	// Resolve to the parent so the selected commit's changes are included
-	resolved, err := e.git.run("rev-parse", ref+"~1")
+	resolved, err := e.git.ResolveRef(ref + "~1")
 	if err != nil {
 		// Fall back to the ref itself if it has no parent (root commit)
-		resolved, err = e.git.run("rev-parse", ref)
+		resolved, err = e.git.ResolveRef(ref)
 		if err != nil {
 			return fmt.Errorf("resolve ref %q: %w", ref, err)
 		}
 	}
-	resolved = strings.TrimSpace(resolved)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

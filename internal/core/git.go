@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -9,6 +10,18 @@ import (
 
 	"github.com/anthropics/monocle/internal/types"
 )
+
+// GitAPI defines the interface for git operations. Implemented by GitClient
+// for production use and stubbed in tests.
+type GitAPI interface {
+	RepoRoot() string
+	CurrentRef() (string, error)
+	Diff(baseRef string) ([]types.ChangedFile, error)
+	FileDiff(baseRef, path string, contextLines int) (*types.DiffResult, error)
+	FileContent(ref, path string) (string, error)
+	RecentCommits(n int) ([]LogEntry, error)
+	ResolveRef(ref string) (string, error)
+}
 
 // GitClient wraps git operations for a repository.
 type GitClient struct {
@@ -139,9 +152,29 @@ func (g *GitClient) RecentCommits(n int) ([]LogEntry, error) {
 	return entries, nil
 }
 
+// ResolveRef resolves a ref string (e.g. "abc123~1") to a full commit hash.
+func (g *GitClient) ResolveRef(ref string) (string, error) {
+	out, err := g.run("rev-parse", ref)
+	if err != nil {
+		return "", fmt.Errorf("resolve ref %q: %w", ref, err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
 func (g *GitClient) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.repoRoot
+	// Clear worktree env vars so git uses cmd.Dir as the repo root.
+	// Without this, git may use GIT_DIR/GIT_WORK_TREE from the parent
+	// process (e.g. when running inside a git worktree).
+	env := os.Environ()
+	filtered := env[:0]
+	for _, e := range env {
+		if !strings.HasPrefix(e, "GIT_DIR=") && !strings.HasPrefix(e, "GIT_WORK_TREE=") {
+			filtered = append(filtered, e)
+		}
+	}
+	cmd.Env = filtered
 	out, err := cmd.Output()
 	if err != nil {
 		return string(out), err
