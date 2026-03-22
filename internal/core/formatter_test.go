@@ -133,3 +133,68 @@ func TestFormatOutdatedSkipped(t *testing.T) {
 		t.Error("current comment should be included")
 	}
 }
+
+func TestFormatContentItemWithProvider(t *testing.T) {
+	f := NewReviewFormatter(nil)
+	f.SetContentItemProvider(func(id string) string {
+		if id == "plan-1" {
+			return "# Migration Plan\n\nStep 1: Do the thing\nStep 2: Do the other thing\n"
+		}
+		return ""
+	})
+
+	session := &types.ReviewSession{
+		ContentItems: []types.ContentItem{
+			{ID: "plan-1", Title: "Migration Plan"},
+		},
+	}
+	comments := []types.ReviewComment{
+		{
+			ID:         "c1",
+			TargetType: types.TargetContent,
+			TargetRef:  "plan-1",
+			LineStart:  3,
+			LineEnd:    4,
+			Type:       types.CommentIssue,
+			Body:       "These steps need more detail",
+		},
+	}
+
+	result := f.Format(session, comments, types.ActionRequestChanges, "")
+
+	if !strings.Contains(result.Formatted, "Plan: Migration Plan:3-4") {
+		t.Errorf("expected plan title with line ref, got:\n%s", result.Formatted)
+	}
+	if !strings.Contains(result.Formatted, "Step 1: Do the thing") {
+		t.Errorf("expected content snippet from provider, got:\n%s", result.Formatted)
+	}
+	if !strings.Contains(result.Formatted, "These steps need more detail") {
+		t.Error("expected comment body")
+	}
+}
+
+func TestFormatContentItemWithoutProvider(t *testing.T) {
+	f := NewReviewFormatter(nil)
+	// No ContentItemProvider set
+
+	comments := []types.ReviewComment{
+		{
+			ID:         "c1",
+			TargetType: types.TargetContent,
+			TargetRef:  "plan-1",
+			LineStart:  5,
+			Type:       types.CommentNote,
+			Body:       "Looks good",
+		},
+	}
+
+	result := f.Format(&types.ReviewSession{}, comments, types.ActionApprove, "")
+
+	// Should still format without panicking, just no snippet
+	if !strings.Contains(result.Formatted, "Looks good") {
+		t.Error("expected comment body even without provider")
+	}
+	if !strings.Contains(result.Formatted, "Content: plan-1:5") {
+		t.Errorf("expected content ref fallback, got:\n%s", result.Formatted)
+	}
+}
