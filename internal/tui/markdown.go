@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"image/color"
 	"regexp"
 	"strings"
 
@@ -131,4 +132,20 @@ func isMarkdownContent(pathOrType string) bool {
 	}
 	lower := strings.ToLower(pathOrType)
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+// isMarkdownFile returns true if the file path has a markdown extension.
+// Unlike isMarkdownContent, this does NOT treat extensionless paths as markdown,
+// making it safe for real file paths (e.g., Makefile, LICENSE won't match).
+func isMarkdownFile(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+// applyBgAndPad wraps already-styled content with a background color and pads to width.
+func applyBgAndPad(styled string, bg color.Color, width int) string {
+	if bg != nil {
+		styled = lipgloss.NewStyle().Background(bg).Render(styled)
+	}
+	return padToWidth(styled, width)
 }

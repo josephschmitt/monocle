@@ -295,6 +295,8 @@ func (m *diffViewModel) buildLines() {
 		return
 	}
 
+	isMd := isMarkdownFile(m.path)
+
 	// File-level comments (LineStart == 0) rendered before hunks
 	for i := range m.comments {
 		c := &m.comments[i]
@@ -307,6 +309,9 @@ func (m *diffViewModel) buildLines() {
 		}
 	}
 
+	inCodeBlock := false
+	codeLang := ""
+
 	for _, hunk := range m.hunks {
 		// Hunk header
 		m.lines = append(m.lines, diffViewLine{
@@ -317,11 +322,32 @@ func (m *diffViewModel) buildLines() {
 
 		// Diff lines with inline comments inserted after target line
 		for _, dl := range hunk.Lines {
+			// Track code fence state for markdown files
+			isFence := false
+			if isMd {
+				if fence := codeFencePattern.FindStringSubmatch(dl.Content); fence != nil {
+					isFence = true
+					// Only advance state on context + added lines (new file version)
+					if dl.Kind != types.DiffLineRemoved {
+						if !inCodeBlock {
+							inCodeBlock = true
+							codeLang = fence[1]
+						} else {
+							inCodeBlock = false
+							codeLang = ""
+						}
+					}
+				}
+			}
+
 			m.lines = append(m.lines, diffViewLine{
-				kind:       dl.Kind,
-				oldLineNum: dl.OldLineNum,
-				newLineNum: dl.NewLineNum,
-				content:    m.expandTabs(dl.Content),
+				kind:          dl.Kind,
+				oldLineNum:    dl.OldLineNum,
+				newLineNum:    dl.NewLineNum,
+				content:       m.expandTabs(dl.Content),
+				mdInCodeBlock: inCodeBlock && isMd && !isFence,
+				mdIsFence:     isFence,
+				mdCodeLang:    codeLang,
 			})
 
 			// Insert comments after their last targeted line
@@ -411,6 +437,8 @@ func (m *diffViewModel) buildContentLines(content string) {
 }
 
 func (m *diffViewModel) buildSplitLines() {
+	isMd := isMarkdownFile(m.path)
+
 	// File-level comments (LineStart == 0) rendered before hunks
 	for i := range m.comments {
 		c := &m.comments[i]
@@ -422,6 +450,9 @@ func (m *diffViewModel) buildSplitLines() {
 			})
 		}
 	}
+
+	inCodeBlock := false
+	codeLang := ""
 
 	for _, hunk := range m.hunks {
 		m.lines = append(m.lines, diffViewLine{
@@ -438,11 +469,21 @@ func (m *diffViewModel) buildSplitLines() {
 				maxLen = len(added)
 			}
 			for i := 0; i < maxLen; i++ {
-				sl := diffViewLine{isSplit: true}
+				sl := diffViewLine{
+					isSplit:       true,
+					mdInCodeBlock: inCodeBlock && isMd,
+					mdCodeLang:    codeLang,
+				}
 				if i < len(removed) {
 					sl.kind = types.DiffLineRemoved
 					sl.oldLineNum = removed[i].OldLineNum
 					sl.content = m.expandTabs(removed[i].Content)
+					if isMd {
+						if fence := codeFencePattern.FindStringSubmatch(removed[i].Content); fence != nil {
+							sl.mdIsFence = true
+							sl.mdInCodeBlock = false
+						}
+					}
 				} else {
 					sl.leftEmpty = true
 					sl.kind = types.DiffLineContext
@@ -457,6 +498,22 @@ func (m *diffViewModel) buildSplitLines() {
 				}
 				m.lines = append(m.lines, sl)
 			}
+
+			// Update fence state from added lines (new file version)
+			if isMd {
+				for _, a := range added {
+					if fence := codeFencePattern.FindStringSubmatch(a.Content); fence != nil {
+						if !inCodeBlock {
+							inCodeBlock = true
+							codeLang = fence[1]
+						} else {
+							inCodeBlock = false
+							codeLang = ""
+						}
+					}
+				}
+			}
+
 			removed = removed[:0]
 			added = added[:0]
 		}
@@ -469,15 +526,34 @@ func (m *diffViewModel) buildSplitLines() {
 				added = append(added, dl)
 			case types.DiffLineContext:
 				flushPairs()
+
+				// Track fence state from context lines
+				isFence := false
+				if isMd {
+					if fence := codeFencePattern.FindStringSubmatch(dl.Content); fence != nil {
+						isFence = true
+						if !inCodeBlock {
+							inCodeBlock = true
+							codeLang = fence[1]
+						} else {
+							inCodeBlock = false
+							codeLang = ""
+						}
+					}
+				}
+
 				expanded := m.expandTabs(dl.Content)
 				m.lines = append(m.lines, diffViewLine{
-					isSplit:      true,
-					kind:         types.DiffLineContext,
-					oldLineNum:   dl.OldLineNum,
-					content:      expanded,
-					rightKind:    types.DiffLineContext,
-					rightLineNum: dl.NewLineNum,
-					rightContent: expanded,
+					isSplit:       true,
+					kind:          types.DiffLineContext,
+					oldLineNum:    dl.OldLineNum,
+					content:       expanded,
+					rightKind:     types.DiffLineContext,
+					rightLineNum:  dl.NewLineNum,
+					rightContent:  expanded,
+					mdInCodeBlock: inCodeBlock && isMd && !isFence,
+					mdIsFence:     isFence,
+					mdCodeLang:    codeLang,
 				})
 			}
 		}
@@ -586,7 +662,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	// Wrap mode
 	if m.wrap {
 		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
-			nil, nil, selected || inVisual)
+			nil, nil, selected || inVisual, nil)
 	}
 
 	// Scroll mode: apply horizontal offset, then clip
@@ -664,7 +740,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	// Wrap mode: render line as multiple screen lines
 	if m.wrap {
 		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
-			lineBg, changeBg, selected || inVisual)
+			lineBg, changeBg, selected || inVisual, &line)
 	}
 
 	// Scroll mode: apply horizontal offset, then clip
@@ -693,21 +769,42 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 	renderedGutter := gutterStyle.Render(gutter)
 
-	// Compute intra-line change ranges
-	var changes []changeRange
-	if line.pairContent != "" {
-		if line.kind == types.DiffLineRemoved {
-			changes, _ = computeChangeRanges(line.content, line.pairContent)
-		} else if line.kind == types.DiffLineAdded {
-			_, changes = computeChangeRanges(line.pairContent, line.content)
-		}
-		if m.hOffset > 0 {
-			changes = shiftChangeRanges(changes, m.hOffset)
-		}
-		changes = clipChangeRanges(changes, contentWidth)
-	}
+	// Render content: markdown styling or syntax highlighting
+	isMd := isMarkdownFile(m.path)
+	var renderedContent string
 
-	renderedContent := m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentWidth)
+	if isMd && line.mdIsFence {
+		// Code fence markers → horizontal rule with diff background
+		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
+		renderedContent = applyBgAndPad(rule, lineBg, contentWidth)
+	} else if isMd && line.mdInCodeBlock && line.mdCodeLang != "" {
+		// Code block with language → Chroma syntax highlighting
+		fakePath := "code." + line.mdCodeLang
+		renderedContent = m.hl.highlightLine(fakePath, content, lineBg, changeBg, nil, contentWidth)
+	} else if isMd && line.mdInCodeBlock {
+		// Code block without language → code block style with diff background
+		styled := m.mdStyler.theme.MarkdownCodeBlock.Render(content)
+		renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
+	} else if isMd {
+		// Regular markdown line with diff background
+		styled := m.mdStyler.StyleLine(content)
+		renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
+	} else {
+		// Non-markdown → syntax highlighting with intra-line changes
+		var changes []changeRange
+		if line.pairContent != "" {
+			if line.kind == types.DiffLineRemoved {
+				changes, _ = computeChangeRanges(line.content, line.pairContent)
+			} else if line.kind == types.DiffLineAdded {
+				_, changes = computeChangeRanges(line.pairContent, line.content)
+			}
+			if m.hOffset > 0 {
+				changes = shiftChangeRanges(changes, m.hOffset)
+			}
+			changes = clipChangeRanges(changes, contentWidth)
+		}
+		renderedContent = m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentWidth)
+	}
 
 	return renderedGutter + renderedContent
 }
@@ -793,14 +890,14 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	}
 
 	// Render each side
-	leftStyled := m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW)
-	rightStyled := m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW)
+	leftStyled := m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line)
+	rightStyled := m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
 }
 
-func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int) string {
+func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine) string {
 	if empty {
 		full := strings.Repeat(" ", gutterW) + strings.Repeat(" ", contentW)
 		return lipgloss.NewStyle().Faint(true).Render(full)
@@ -827,8 +924,25 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	}
 	renderedGutter := gutterStyle.Render(gutter)
 
-	// Render content with syntax highlighting
-	renderedContent := m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentW)
+	// Render content: markdown styling or syntax highlighting
+	isMd := isMarkdownFile(m.path)
+	var renderedContent string
+
+	if isMd && line.mdIsFence {
+		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentW)))
+		renderedContent = applyBgAndPad(rule, lineBg, contentW)
+	} else if isMd && line.mdInCodeBlock && line.mdCodeLang != "" {
+		fakePath := "code." + line.mdCodeLang
+		renderedContent = m.hl.highlightLine(fakePath, content, lineBg, changeBg, nil, contentW)
+	} else if isMd && line.mdInCodeBlock {
+		styled := m.mdStyler.theme.MarkdownCodeBlock.Render(content)
+		renderedContent = applyBgAndPad(styled, lineBg, contentW)
+	} else if isMd {
+		styled := m.mdStyler.StyleLine(content)
+		renderedContent = applyBgAndPad(styled, lineBg, contentW)
+	} else {
+		renderedContent = m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentW)
+	}
 
 	return renderedGutter + renderedContent
 }
@@ -845,11 +959,13 @@ func padToWidth(s string, width int) string {
 
 // renderWrappedLine renders a single logical line wrapped across multiple screen lines.
 // Used by both renderDiffLine and renderContentLine in wrap mode.
+// When mdLine is non-nil and the file is markdown, markdown styling is used instead of syntax highlighting.
 func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, contentWidth int,
-	lineBg, changeBg color.Color, highlight bool) string {
+	lineBg, changeBg color.Color, highlight bool, mdLine *diffViewLine) string {
 
 	chunks := wrapContent(content, contentWidth)
 	blankGutter := strings.Repeat(" ", gutterWidth)
+	isMd := mdLine != nil && isMarkdownFile(m.path)
 
 	var parts []string
 	for ci, chunk := range chunks {
@@ -874,8 +990,23 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		}
 		renderedGutter := gutterStyle.Render(chunkGutter)
 
-		// Highlight each chunk independently (change ranges not mapped across chunks)
-		renderedContent := m.hl.highlightLine(m.path, chunk, lineBg, changeBg, nil, contentWidth)
+		// Render content: markdown styling or syntax highlighting
+		var renderedContent string
+		if isMd && mdLine.mdIsFence {
+			rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
+			renderedContent = applyBgAndPad(rule, lineBg, contentWidth)
+		} else if isMd && mdLine.mdInCodeBlock && mdLine.mdCodeLang != "" {
+			fakePath := "code." + mdLine.mdCodeLang
+			renderedContent = m.hl.highlightLine(fakePath, chunk, lineBg, changeBg, nil, contentWidth)
+		} else if isMd && mdLine.mdInCodeBlock {
+			styled := m.mdStyler.theme.MarkdownCodeBlock.Render(chunk)
+			renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
+		} else if isMd {
+			styled := m.mdStyler.StyleLine(chunk)
+			renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
+		} else {
+			renderedContent = m.hl.highlightLine(m.path, chunk, lineBg, changeBg, nil, contentWidth)
+		}
 
 		parts = append(parts, renderedGutter+renderedContent)
 	}

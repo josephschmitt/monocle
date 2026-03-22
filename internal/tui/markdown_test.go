@@ -132,7 +132,7 @@ func TestIsMarkdownContent(t *testing.T) {
 		{"content.MD", true},
 		{"content.go", false},
 		{"content.ts", false},
-		{"some-uuid-id", true},    // no extension = plan default
+		{"some-uuid-id", true}, // no extension = plan default
 		{"content.py", false},
 	}
 
@@ -141,6 +141,32 @@ func TestIsMarkdownContent(t *testing.T) {
 			got := isMarkdownContent(tt.input)
 			if got != tt.want {
 				t.Errorf("isMarkdownContent(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsMarkdownFile(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"README.md", true},
+		{"docs/guide.markdown", true},
+		{"CHANGELOG.MD", true},
+		{"src/main.go", false},
+		{"Makefile", false},      // extensionless — must NOT match
+		{"LICENSE", false},       // extensionless — must NOT match
+		{"some-uuid-id", false},  // unlike isMarkdownContent, this is false
+		{"Dockerfile", false},
+		{"notes.txt", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isMarkdownFile(tt.input)
+			if got != tt.want {
+				t.Errorf("isMarkdownFile(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
