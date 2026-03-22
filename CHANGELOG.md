@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.11.0](https://github.com/josephschmitt/monocle/compare/v0.10.1...v0.11.0) (2026-03-22)
+
+
+### Features
+
+* add --version flag with goreleaser-injected version ([3fb32d2](https://github.com/josephschmitt/monocle/commit/3fb32d29b914677be16f6b9ab15763e683f02413))
+* **tui:** add connection indicator, info modal, and manual socket override ([6696954](https://github.com/josephschmitt/monocle/commit/6696954de25f237e2dfd4590b37c1f3fc5e8aec8))
+* **tui:** add copy review to clipboard in submit modal ([8e37677](https://github.com/josephschmitt/monocle/commit/8e376772a6a6515d3d327bec1a18481f06eb7432))
+* **tui:** add line-preserving markdown styling for plans ([47b8774](https://github.com/josephschmitt/monocle/commit/47b8774342fd267adfc2c6396e2e915c1085307e))
+* **tui:** apply markdown styling to changed markdown files in diff view ([70b0408](https://github.com/josephschmitt/monocle/commit/70b04087468868c7e79fbeac2ad13e0d20a99fa0))
+* **tui:** wrap at word boundaries instead of character boundaries ([8a550f6](https://github.com/josephschmitt/monocle/commit/8a550f6205f0b1a0025c07d9787033c029058cf9))
+
+
+### Bug Fixes
+
+* remove version from goreleaser archive names to fix release-please URLs ([041b270](https://github.com/josephschmitt/monocle/commit/041b270d170bc6dca15755511bdf51e8f9932899))
+* **tui:** clear visual mode after saving a comment ([a4f4363](https://github.com/josephschmitt/monocle/commit/a4f4363175aeec743458cbbe4aab80112c5b8b58))
+* **tui:** clear visual mode only on comment submit, not on reload ([26829ca](https://github.com/josephschmitt/monocle/commit/26829ca7ff9bb2a18bf5901064e42994063b8043))
+* **tui:** fix plan review feedback flow and content view stability ([dda4bab](https://github.com/josephschmitt/monocle/commit/dda4bab279bcdfde660121626b0efb763de88dd9))
+* **tui:** integrate markdown styling, inline comments, and scroll fixes ([86446d6](https://github.com/josephschmitt/monocle/commit/86446d6ef47fc5699f8bf0950e870494ae49ee8f))
+* **tui:** recalculate stacked layout when files or content items change ([89c5b26](https://github.com/josephschmitt/monocle/commit/89c5b26532b5e958fbec4a7692bf7b8437fbcc29))
+* **tui:** show devicons for content items and reorder sidebar sections ([dbc179c](https://github.com/josephschmitt/monocle/commit/dbc179c32a57d0097c0f75d589e4657f4665a5cd))
+* **tui:** use OSC 52 for clipboard and fix yank keybind casing ([a12e99b](https://github.com/josephschmitt/monocle/commit/a12e99b50e051020e0197211c14555dfe1148f03))
+* wire ContentItemProvider on formatter for plan content snippets ([daa02eb](https://github.com/josephschmitt/monocle/commit/daa02eb0095c6d3b72ede0514527f3ca77c465bf))
+
 ## [0.10.1](https://github.com/josephschmitt/monocle/compare/v0.10.0...v0.10.1) (2026-03-22)
 
 
