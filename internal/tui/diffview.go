@@ -218,6 +218,12 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			if m.path != "" {
 				return m, openFileCommentCmd(m.path, types.TargetFile)
 			}
+		case key == "x":
+			// Toggle resolved on comment under cursor
+			if m.cursor >= 0 && m.cursor < len(m.lines) && m.lines[m.cursor].isComment && m.lines[m.cursor].comment != nil {
+				commentID := m.lines[m.cursor].comment.ID
+				return m, func() tea.Msg { return resolveCommentMsg{commentID: commentID} }
+			}
 		}
 	}
 	return m, nil
@@ -495,6 +501,9 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 	}
 
 	style := lipgloss.NewStyle().Foreground(clr)
+	if line.comment != nil && line.comment.Resolved {
+		style = style.Faint(true)
+	}
 	if selected {
 		style = style.Reverse(true)
 	}
@@ -1173,7 +1182,10 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 func formatInlineComment(c *types.ReviewComment) string {
 	typeLabel := strings.ToUpper(string(c.Type))
 	prefix := "│"
-	if c.Outdated {
+	if c.Resolved {
+		prefix = "│ ✓"
+		typeLabel = "✓ " + typeLabel
+	} else if c.Outdated {
 		prefix = "│ ⚠"
 	}
 	body := c.Body

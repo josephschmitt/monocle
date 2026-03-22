@@ -66,6 +66,10 @@ type commentsClearedMsg struct {
 	isContent  bool
 }
 
+type resolveCommentMsg struct {
+	commentID string
+}
+
 type openConfirmMsg struct {
 	title   string
 	message string
@@ -434,6 +438,30 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil
+
+	case resolveCommentMsg:
+		engine := m.engine
+		id := msg.commentID
+		currentPath := m.diffView.path
+		isContent := m.diffView.contentMode
+		return m, func() tea.Msg {
+			_ = engine.ResolveComment(id)
+			if isContent {
+				return fileChangedMsg{}
+			}
+			// Reload diff to update comment display
+			result, _ := engine.GetFileDiff(currentPath)
+			session := engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == currentPath {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+		}
 
 	// Review summary overlay open
 	case openReviewMsg:

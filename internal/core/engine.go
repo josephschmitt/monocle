@@ -74,6 +74,7 @@ type EngineAPI interface {
 	AddComment(target CommentTarget, commentType types.CommentType, body string) (*types.ReviewComment, error)
 	EditComment(commentID string, body string) (*types.ReviewComment, error)
 	DeleteComment(commentID string) error
+	ResolveComment(commentID string) error
 	DismissOutdated() error
 	ClearComments() error
 

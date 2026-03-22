@@ -236,6 +236,15 @@ func (d *DB) GetComments(sessionID string) ([]types.ReviewComment, error) {
 	return comments, rows.Err()
 }
 
+// ResolveComment sets the resolved flag for a comment.
+func (d *DB) ResolveComment(id string, resolved bool) error {
+	_, err := d.Exec(
+		`UPDATE comments SET resolved = ?, updated_at = ? WHERE id = ?`,
+		boolToInt(resolved), time.Now(), id,
+	)
+	return err
+}
+
 // MarkOutdated marks all non-outdated comments in the session as outdated.
 func (d *DB) MarkOutdated(sessionID string) error {
 	_, err := d.Exec(

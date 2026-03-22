@@ -315,6 +315,35 @@ func (e *Engine) DeleteComment(commentID string) error {
 	return nil
 }
 
+func (e *Engine) ResolveComment(commentID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.current == nil {
+		return fmt.Errorf("no active session")
+	}
+
+	var found *types.ReviewComment
+	for i := range e.current.Comments {
+		if e.current.Comments[i].ID == commentID {
+			found = &e.current.Comments[i]
+			break
+		}
+	}
+	if found == nil {
+		return fmt.Errorf("comment %s not found", commentID)
+	}
+
+	found.Resolved = !found.Resolved
+	found.UpdatedAt = time.Now()
+
+	if err := e.database.ResolveComment(commentID, found.Resolved); err != nil {
+		return fmt.Errorf("resolve comment: %w", err)
+	}
+
+	return nil
+}
+
 func (e *Engine) DismissOutdated() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
