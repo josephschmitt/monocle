@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/josephschmitt/monocle/compare/v0.14.0...v0.14.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* wrap goreleaser before hook in sh -c for shell builtin support ([48c1746](https://github.com/josephschmitt/monocle/commit/48c1746b03884c6c7518aed718eddb30ca0c5d5f))
+
 ## [0.14.0](https://github.com/josephschmitt/monocle/compare/v0.13.0...v0.14.0) (2026-03-23)
 
 
