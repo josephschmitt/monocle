@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/josephschmitt/monocle/compare/v0.15.0...v0.16.0) (2026-03-23)
+
+
+### Features
+
+* **tui:** add clear_after_submit config option with session override ([d18620c](https://github.com/josephschmitt/monocle/commit/d18620c9faaf173cb1e71923a7eb40581b9410f4))
+
 ## [0.15.0](https://github.com/josephschmitt/monocle/compare/v0.14.1...v0.15.0) (2026-03-23)
 
 
