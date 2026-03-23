@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.0](https://github.com/josephschmitt/monocle/compare/v0.16.0...v0.17.0) (2026-03-23)
+
+
+### Features
+
+* **tui:** add file view mode to diff style cycle ([6dca8c3](https://github.com/josephschmitt/monocle/commit/6dca8c3706d1be6b7a3b35e050bf89993e86d49e))
+
+
+### Bug Fixes
+
+* **channel:** stop redundant get_feedback call after feedback submission ([8dcdf93](https://github.com/josephschmitt/monocle/commit/8dcdf93e61fccdb71fd4daec15351159734287d3))
+* **core:** include untracked files in diff view ([592f852](https://github.com/josephschmitt/monocle/commit/592f85272500bed748be551a5c63672fba66c9c0))
+* **tui:** preserve markdown styling when word-wrap is toggled on ([ee7eb05](https://github.com/josephschmitt/monocle/commit/ee7eb059f3d09ea21be73b24f3541602f94f856c))
+* **tui:** update splash screen to use correct Claude Code channels flag ([85a5e19](https://github.com/josephschmitt/monocle/commit/85a5e19e5ac28b8a4a6d1491f0b6ec50f75a4734))
+
 ## [0.16.0](https://github.com/josephschmitt/monocle/compare/v0.15.0...v0.16.0) (2026-03-23)
 
 
