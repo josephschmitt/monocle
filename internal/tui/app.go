@@ -148,6 +148,8 @@ type appModel struct {
 
 	mcpRegisterFn    func(global bool) error
 	registerPrompt   registerPromptModel
+
+	clearAfterSubmitOverride string // session-only override: "", "always", or "never"
 }
 
 // NewApp creates the root appModel.
@@ -616,7 +618,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.commentCount = len(session.Comments)
 		}
-		// Only ask to clear if there are active comments
+		// Only consider clearing if there are active comments
 		hasActive := false
 		if session != nil {
 			for _, c := range session.Comments {
@@ -627,14 +629,39 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if hasActive {
-			m.confirm.open("Review Submitted", "Clear all comments from this review?", confirmClearAfterSubmit)
-			m.overlay = overlayConfirm
+			// Determine effective clear behavior: session override > config > default
+			clearBehavior := m.clearAfterSubmitOverride
+			if clearBehavior == "" {
+				if cfg := m.engine.GetConfig(); cfg != nil && cfg.ClearAfterSubmit != "" {
+					clearBehavior = cfg.ClearAfterSubmit
+				} else {
+					clearBehavior = "ask"
+				}
+			}
+			switch clearBehavior {
+			case "always":
+				engine := m.engine
+				currentPath := m.diffView.path
+				isContent := m.diffView.contentMode
+				return m, func() tea.Msg {
+					_ = engine.ClearComments()
+					return commentsClearedMsg{reloadPath: currentPath, isContent: isContent}
+				}
+			case "never":
+				// Do nothing — keep comments
+			default: // "ask"
+				m.confirm.openWithDontAsk("Review Submitted", "Clear all comments from this review?", confirmClearAfterSubmit)
+				m.overlay = overlayConfirm
+			}
 		}
 		return m, nil
 
 	// Confirm overlay actions
 	case confirmActionMsg:
 		m.overlay = overlayNone
+		if msg.dontAsk && msg.action == confirmClearAfterSubmit {
+			m.clearAfterSubmitOverride = "always"
+		}
 		engine := m.engine
 		currentPath := m.diffView.path
 		isContent := m.diffView.contentMode
@@ -681,6 +708,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cancelConfirmMsg:
 		m.overlay = overlayNone
+		if msg.dontAsk {
+			m.clearAfterSubmitOverride = "never"
+		}
 		return m, nil
 
 	case openHistoryMsg:

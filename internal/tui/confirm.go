@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,13 +16,15 @@ const (
 )
 
 type confirmModel struct {
-	active  bool
-	title   string
-	message string
-	action  confirmAction
-	width   int
-	height  int
-	theme   Theme
+	active      bool
+	title       string
+	message     string
+	action      confirmAction
+	showDontAsk bool
+	dontAsk     bool
+	width       int
+	height      int
+	theme       Theme
 }
 
 func newConfirmModel(theme Theme) confirmModel {
@@ -29,16 +32,26 @@ func newConfirmModel(theme Theme) confirmModel {
 }
 
 type confirmActionMsg struct {
-	action confirmAction
+	action  confirmAction
+	dontAsk bool
 }
 
-type cancelConfirmMsg struct{}
+type cancelConfirmMsg struct {
+	dontAsk bool
+}
 
 func (m *confirmModel) open(title, message string, action confirmAction) {
 	m.active = true
 	m.title = title
 	m.message = message
 	m.action = action
+	m.showDontAsk = false
+	m.dontAsk = false
+}
+
+func (m *confirmModel) openWithDontAsk(title, message string, action confirmAction) {
+	m.open(title, message, action)
+	m.showDontAsk = true
 }
 
 func (m confirmModel) Update(msg tea.Msg) (confirmModel, tea.Cmd) {
@@ -52,10 +65,16 @@ func (m confirmModel) Update(msg tea.Msg) (confirmModel, tea.Cmd) {
 		case "enter", "y":
 			m.active = false
 			action := m.action
-			return m, func() tea.Msg { return confirmActionMsg{action: action} }
+			dontAsk := m.dontAsk
+			return m, func() tea.Msg { return confirmActionMsg{action: action, dontAsk: dontAsk} }
 		case "esc", "n":
 			m.active = false
-			return m, func() tea.Msg { return cancelConfirmMsg{} }
+			dontAsk := m.dontAsk
+			return m, func() tea.Msg { return cancelConfirmMsg{dontAsk: dontAsk} }
+		case "shift+tab":
+			if m.showDontAsk {
+				m.dontAsk = !m.dontAsk
+			}
 		}
 	}
 	return m, nil
@@ -74,7 +93,20 @@ func (m confirmModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.message)
 	b.WriteString("\n\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Y/Enter: confirm  N/Esc: cancel"))
+
+	if m.showDontAsk {
+		check := " "
+		if m.dontAsk {
+			check = "x"
+		}
+		b.WriteString(fmt.Sprintf("[%s] Don't ask again this session\n\n", check))
+	}
+
+	hints := "Y/Enter: confirm  N/Esc: cancel"
+	if m.showDontAsk {
+		hints += "  Shift+Tab: don't ask again"
+	}
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render(hints))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }

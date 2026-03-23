@@ -9,7 +9,8 @@ type Config struct {
 	Wrap           bool              `json:"wrap"`
 	TabSize        int               `json:"tab_size"`
 	ContextLines   int               `json:"context_lines"`
-	ReviewFormat   ReviewFormatConfig `json:"review_format"`
+	ReviewFormat      ReviewFormatConfig `json:"review_format"`
+	ClearAfterSubmit  string             `json:"clear_after_submit"`
 }
 
 type ReviewFormatConfig struct {

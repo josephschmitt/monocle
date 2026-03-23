@@ -30,6 +30,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Wrap != false {
 		t.Errorf("Wrap: got %v, want %v", cfg.Wrap, false)
 	}
+	if cfg.ClearAfterSubmit != "ask" {
+		t.Errorf("ClearAfterSubmit: got %q, want %q", cfg.ClearAfterSubmit, "ask")
+	}
 	if cfg.IgnorePatterns == nil {
 		t.Error("IgnorePatterns: got nil, want empty slice")
 	}

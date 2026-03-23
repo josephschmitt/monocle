@@ -231,6 +231,7 @@ Monocle loads settings from JSON config files:
   "context_lines": 3,
   "ignore_patterns": [],
   "keybindings": {},
+  "clear_after_submit": "ask",
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -248,6 +249,7 @@ Monocle loads settings from JSON config files:
 | `tab_size` | integer | `4` | Spaces per tab character |
 | `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
+| `clear_after_submit` | `"ask"`, `"always"`, `"never"` | `"ask"` | Whether to clear comments after submitting a review |
 | `keybindings` | object | `{}` | Custom key overrides (see below) |
 | `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
 | `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |
