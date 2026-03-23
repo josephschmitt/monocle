@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.0](https://github.com/josephschmitt/monocle/compare/v0.13.0...v0.14.0) (2026-03-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* `monocle install` is replaced by `monocle register`. Existing .mcp.json entries will be detected as outdated and users will be prompted to re-register.
+
+### Features
+
+* replace install/uninstall with register/unregister and serve-mcp-channel ([2d21e6e](https://github.com/josephschmitt/monocle/commit/2d21e6e95ae94c67bbe1c119ef6dc128ef7d1799))
+
 ## [0.13.0](https://github.com/josephschmitt/monocle/compare/v0.12.0...v0.13.0) (2026-03-22)
 
 
