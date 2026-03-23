@@ -121,13 +121,13 @@ devbox run -- make build
 
 ## Quick Start
 
-### 1. Install the MCP channel
+### 1. Register the MCP channel
 
 ```bash
-monocle install
+monocle register
 ```
 
-This registers Monocle as an MCP server in your project's `.mcp.json`. Use `--global` to install to `~/.mcp.json` instead (applies to all projects).
+This registers Monocle as an MCP server in your project's `.mcp.json`. Use `--global` to register in `~/.mcp.json` instead (applies to all projects).
 
 ### 2. Start reviewing
 
@@ -144,7 +144,7 @@ claude --dangerously-load-development-channels server:monocle
 
 This tells Claude Code to load the monocle MCP server as a channel. Claude Code gets three new tools (`review_status`, `get_feedback`, `submit_plan`) and starts receiving your review feedback as push notifications.
 
-> **Note:** The `--dangerously-load-development-channels` flag is only needed during the channels research preview. Once channels are generally available, `monocle install` will be all you need.
+> **Note:** The `--dangerously-load-development-channels` flag is only needed during the channels research preview. Once channels are generally available, `monocle register` will be all you need.
 
 ### 3. The review loop
 
@@ -190,10 +190,10 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 ## CLI
 
 ```
-monocle [--socket PATH]     Start a review session
-monocle install [--global]  Install MCP channel for Claude Code
-monocle uninstall [--global] Remove MCP channel
-monocle --version           Print version
+monocle [--socket PATH]        Start a review session
+monocle register [--global]    Register MCP channel for Claude Code
+monocle unregister [--global]  Remove MCP channel registration
+monocle --version              Print version
 ```
 
 ### Manual Socket Override

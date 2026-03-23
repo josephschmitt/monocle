@@ -33,7 +33,7 @@ func splashFull() []string {
 		logo.Render("o_(◉) monocle"),
 		dim.Render("code review companion for Claude Code"),
 		"",
-		dim.Render("Run " + cmd.Render("monocle install") + dim.Render(" to set up the MCP channel.")),
+		dim.Render("Run " + cmd.Render("monocle register") + dim.Render(" to set up the MCP channel.")),
 		dim.Render("Then launch Claude Code in this repo with:"),
 		dim.Render("  " + cmd.Render("claude --dangerously-allow-channels")),
 		"",

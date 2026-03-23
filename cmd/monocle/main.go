@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/alecthomas/kong"
@@ -16,18 +17,31 @@ import (
 var version = "dev"
 
 type CLI struct {
-	Run       RunCmd            `cmd:"" default:"withargs" help:"Start a review session"`
-	Install   InstallCmd        `cmd:"" help:"Install MCP channel for Claude Code"`
-	Uninstall UninstallCmd      `cmd:"" help:"Remove MCP channel for Claude Code"`
-	Version   kong.VersionFlag  `help:"Print version" name:"version"`
+	Run             RunCmd             `cmd:"" default:"withargs" help:"Start a review session"`
+	Register        RegisterCmd        `cmd:"" help:"Register MCP channel for Claude Code"`
+	Unregister      UnregisterCmd      `cmd:"" help:"Remove MCP channel registration"`
+	ServeMcpChannel ServeMCPChannelCmd `cmd:"serve-mcp-channel" help:"Run the MCP channel server" hidden:""`
+	Install         InstallCmd         `cmd:"" help:"Install MCP channel (alias for register)" hidden:""`
+	Uninstall       UninstallCmd       `cmd:"" help:"Remove MCP channel (alias for unregister)" hidden:""`
+	Version         kong.VersionFlag   `help:"Print version" name:"version"`
 }
 
 type RunCmd struct {
 	Socket string `help:"Override socket path for MCP channel connection" env:"MONOCLE_SOCKET" default:""`
 }
 
+type RegisterCmd struct {
+	Global bool `help:"Register in user-level ~/.mcp.json instead of project" default:"false"`
+}
+
+type UnregisterCmd struct {
+	Global bool `help:"Remove from user-level ~/.mcp.json instead of project" default:"false"`
+}
+
+type ServeMCPChannelCmd struct{}
+
 type InstallCmd struct {
-	Global bool `help:"Install to user-level ~/.mcp.json instead of project" default:"false"`
+	Global bool `help:"Register in user-level ~/.mcp.json instead of project" default:"false"`
 }
 
 type UninstallCmd struct {
@@ -50,7 +64,7 @@ func (cmd *RunCmd) Run() error {
 	return runTUI(cmd.Socket)
 }
 
-func (cmd *InstallCmd) Run() error {
+func (cmd *RegisterCmd) Run() error {
 	adapter := &adapters.ClaudeAdapter{}
 
 	if !adapter.Detect() {
@@ -58,46 +72,71 @@ func (cmd *InstallCmd) Run() error {
 		return nil
 	}
 
-	installed, err := adapter.IsInstalled()
-	if err != nil {
-		return fmt.Errorf("check install: %w", err)
-	}
-	if installed {
-		fmt.Println("  ✓ claude: already installed")
+	if adapter.HasMCPConfig() {
+		fmt.Println("  ✓ claude: MCP channel already registered")
 		return nil
 	}
 
-	if err := adapter.Install(cmd.Global); err != nil {
-		return fmt.Errorf("install: %w", err)
+	if err := adapter.Register(cmd.Global); err != nil {
+		return fmt.Errorf("register: %w", err)
 	}
 
-	fmt.Println("  ✓ claude: MCP channel installed")
-	for _, detail := range adapter.InstallDetails(cmd.Global) {
+	fmt.Println("  ✓ claude: MCP channel registered")
+	for _, detail := range adapter.RegisterDetails(cmd.Global) {
 		fmt.Printf("    %s\n", detail)
 	}
 
-	fmt.Println("\nMake sure 'monocle' is in your PATH.")
 	return nil
 }
 
-func (cmd *UninstallCmd) Run() error {
+func (cmd *UnregisterCmd) Run() error {
 	adapter := &adapters.ClaudeAdapter{}
 
-	installed, err := adapter.IsInstalled()
-	if err != nil {
-		return fmt.Errorf("check install: %w", err)
-	}
-	if !installed {
+	if !adapter.HasMCPConfig() {
 		fmt.Println("  ✓ claude: nothing to remove")
 		return nil
 	}
 
-	if err := adapter.Uninstall(cmd.Global); err != nil {
-		return fmt.Errorf("uninstall: %w", err)
+	if err := adapter.Unregister(cmd.Global); err != nil {
+		return fmt.Errorf("unregister: %w", err)
 	}
 
 	fmt.Println("  ✓ claude: MCP channel removed")
 	return nil
+}
+
+func (cmd *ServeMCPChannelCmd) Run() error {
+	// Write the embedded bundle to a temp file
+	bundlePath, err := adapters.WriteChannelBundle()
+	if err != nil {
+		return err
+	}
+
+	// Detect JS runtime
+	rt, err := adapters.DetectJSRuntime()
+	if err != nil {
+		return fmt.Errorf("monocle serve-mcp-channel requires a JavaScript runtime: %w", err)
+	}
+
+	// Exec into the JS runtime, replacing this process
+	binPath, argv, err := rt.ExecArgs(bundlePath)
+	if err != nil {
+		return err
+	}
+
+	return syscall.Exec(binPath, argv, os.Environ())
+}
+
+// Deprecated: use 'monocle register' instead.
+func (cmd *InstallCmd) Run() error {
+	fmt.Fprintln(os.Stderr, "Note: 'monocle install' is deprecated, use 'monocle register' instead")
+	return (&RegisterCmd{Global: cmd.Global}).Run()
+}
+
+// Deprecated: use 'monocle unregister' instead.
+func (cmd *UninstallCmd) Run() error {
+	fmt.Fprintln(os.Stderr, "Note: 'monocle uninstall' is deprecated, use 'monocle unregister' instead")
+	return (&UnregisterCmd{Global: cmd.Global}).Run()
 }
 
 func runTUI(socketOverride string) error {
@@ -145,12 +184,12 @@ func runTUI(socketOverride string) error {
 		return fmt.Errorf("start server: %w", err)
 	}
 
-	// Check if MCP channel needs installation
+	// Check if MCP channel needs registration
 	var appOpts tui.AppOptions
 	adapter := &adapters.ClaudeAdapter{}
-	if adapter.Detect() && adapter.NeedsInstall() {
-		appOpts.MCPInstallFn = func(global bool) error {
-			return adapter.Install(global)
+	if adapter.Detect() && adapter.NeedsRegister() {
+		appOpts.MCPRegisterFn = func(global bool) error {
+			return adapter.Register(global)
 		}
 	}
 

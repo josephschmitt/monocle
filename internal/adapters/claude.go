@@ -1,14 +1,15 @@
 package adapters
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
-// ClaudeAdapter handles Claude Code MCP channel installation.
+// ClaudeAdapter handles Claude Code MCP channel registration.
 type ClaudeAdapter struct{}
 
 func (a *ClaudeAdapter) Name() string { return "claude" }
@@ -28,53 +29,26 @@ func (a *ClaudeAdapter) Detect() bool {
 	return false
 }
 
-// Install writes channel.ts and configures .mcp.json.
+// Register adds monocle to .mcp.json.
 // If global is true, .mcp.json is written to ~/.mcp.json instead of the project.
-func (a *ClaudeAdapter) Install(global bool) error {
-	if err := a.installChannel(); err != nil {
-		return fmt.Errorf("install channel: %w", err)
-	}
+func (a *ClaudeAdapter) Register(global bool) error {
 	if err := a.configureMCP(global); err != nil {
 		return fmt.Errorf("configure mcp: %w", err)
 	}
 	return nil
 }
 
-// Uninstall removes channel.ts, deps, and unconfigures .mcp.json.
+// Unregister removes monocle from .mcp.json.
 // If global is true, removes from ~/.mcp.json instead of the project.
-func (a *ClaudeAdapter) Uninstall(global bool) error {
-	channelPath := channelTSPath()
-	if channelPath != "" {
-		dir := filepath.Dir(channelPath)
-		// Remove the entire channel directory (channel.ts, package.json, node_modules, lock files)
-		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("remove channel directory: %w", err)
-		}
-	}
-
+func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
 	}
 	return nil
 }
 
-// IsInstalled checks if the MCP channel is configured.
-func (a *ClaudeAdapter) IsInstalled() (bool, error) {
-	channelPath := channelTSPath()
-	if channelPath == "" {
-		return false, nil
-	}
-	_, err := os.Stat(channelPath)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-// HasMCPConfig checks if monocle is configured in any .mcp.json (global or local).
+// HasMCPConfig checks if monocle is correctly configured in any .mcp.json (global or local).
+// Returns true only if the entry uses the serve-mcp-channel subcommand (not old-style bun/node configs).
 func (a *ClaudeAdapter) HasMCPConfig() bool {
 	for _, global := range []bool{true, false} {
 		path := mcpJSONPath(global)
@@ -86,125 +60,91 @@ func (a *ClaudeAdapter) HasMCPConfig() bool {
 		if !ok {
 			continue
 		}
-		if _, ok := servers["monocle"]; ok {
-			return true
+		entry, ok := servers["monocle"].(map[string]any)
+		if !ok {
+			continue
+		}
+		// Validate the entry points to serve-mcp-channel
+		args, _ := entry["args"].([]any)
+		if len(args) > 0 {
+			if arg, ok := args[0].(string); ok && arg == "serve-mcp-channel" {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// NeedsInstall returns true if the MCP channel is not fully set up.
-// It checks that both channel.ts exists AND at least one .mcp.json has a monocle entry.
-func (a *ClaudeAdapter) NeedsInstall() bool {
-	installed, err := a.IsInstalled()
-	if err != nil || !installed {
-		return true
-	}
+// NeedsRegister returns true if the MCP channel is not correctly configured in any .mcp.json.
+// This includes cases where an old-style config exists (e.g., pointing to bun/node directly).
+func (a *ClaudeAdapter) NeedsRegister() bool {
 	return !a.HasMCPConfig()
 }
 
-// InstallDetails returns additional info about what was installed.
-func (a *ClaudeAdapter) InstallDetails(global bool) []string {
+// RegisterDetails returns info about what was registered.
+func (a *ClaudeAdapter) RegisterDetails(global bool) []string {
 	var details []string
-	channelPath := channelTSPath()
-	if channelPath != "" {
-		details = append(details, fmt.Sprintf("channel → %s", channelPath))
-	}
 	details = append(details, fmt.Sprintf("mcp → %s", mcpJSONPath(global)))
 
-	rt, err := detectJSRuntime()
+	rt, err := DetectJSRuntime()
 	if err != nil {
-		details = append(details, "⚠ no JavaScript runtime found — install bun, deno, or node")
+		details = append(details, "warning: no JavaScript runtime found — install bun, deno, or node")
 	} else {
-		details = append(details, fmt.Sprintf("runtime → %s", rt.name))
+		details = append(details, fmt.Sprintf("runtime → %s", rt.Name))
 	}
 
 	return details
 }
 
-// jsRuntime represents a detected JavaScript runtime.
-type jsRuntime struct {
-	name string // "bun", "deno", "node"
+// JSRuntime represents a detected JavaScript runtime.
+type JSRuntime struct {
+	Name string // "bun", "deno", "node"
 }
 
-// detectJSRuntime finds the first available runtime in preference order: bun, deno, node.
-func detectJSRuntime() (*jsRuntime, error) {
+// DetectJSRuntime finds the first available runtime in preference order: bun, deno, node.
+func DetectJSRuntime() (*JSRuntime, error) {
 	for _, name := range []string{"bun", "deno", "node"} {
 		if _, err := exec.LookPath(name); err == nil {
-			return &jsRuntime{name: name}, nil
+			return &JSRuntime{Name: name}, nil
 		}
 	}
 	return nil, fmt.Errorf("no JavaScript runtime found (install bun, deno, or node)")
 }
 
-// installDeps runs the runtime-appropriate dependency install command.
-func (r *jsRuntime) installDeps(dir string) error {
-	var cmd *exec.Cmd
-	switch r.name {
-	case "bun":
-		cmd = exec.Command("bun", "install")
-	case "deno":
-		cmd = exec.Command("deno", "install")
-	case "node":
-		cmd = exec.Command("npm", "install")
-	}
-	cmd.Dir = dir
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s install failed: %w\n%s", r.name, err, output)
-	}
-	return nil
-}
-
-// mcpCommand returns the command and args for .mcp.json.
-func (r *jsRuntime) mcpCommand(channelPath string) (string, []any) {
-	switch r.name {
-	case "deno":
-		return "deno", []any{"run", "--allow-all", channelPath}
-	case "node":
-		return "npx", []any{"tsx", channelPath}
-	default: // bun
-		return "bun", []any{channelPath}
-	}
-}
-
-// packageJSON is the package.json for the channel's npm dependencies.
-// tsx is included for Node.js compatibility (bun/deno ignore it).
-const packageJSON = `{
-  "name": "monocle-channel",
-  "private": true,
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "tsx": "^4.0.0"
-  }
-}
-`
-
-// installChannel writes channel.ts, package.json, and installs deps.
-func (a *ClaudeAdapter) installChannel() error {
-	path := channelTSPath()
-	if path == "" {
-		return fmt.Errorf("cannot determine config directory")
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(ChannelContent), 0644); err != nil {
-		return err
-	}
-
-	// Write package.json for channel dependencies
-	pkgPath := filepath.Join(dir, "package.json")
-	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
-		return fmt.Errorf("write package.json: %w", err)
-	}
-
-	// Detect runtime and install dependencies
-	rt, err := detectJSRuntime()
+// ExecArgs returns the binary path and argv for running the given script file.
+// The binary path is an absolute path suitable for syscall.Exec.
+func (r *JSRuntime) ExecArgs(scriptPath string) (string, []string, error) {
+	binPath, err := exec.LookPath(r.Name)
 	if err != nil {
-		return err
+		return "", nil, fmt.Errorf("lookup %s: %w", r.Name, err)
 	}
-	return rt.installDeps(dir)
+	switch r.Name {
+	case "deno":
+		return binPath, []string{"deno", "run", "--allow-all", scriptPath}, nil
+	default: // bun, node
+		return binPath, []string{r.Name, scriptPath}, nil
+	}
+}
+
+// ChannelBundlePath returns the path where the channel bundle should be written.
+// Uses a content hash so the file is only written once per version.
+func ChannelBundlePath() string {
+	hash := sha256.Sum256(ChannelBundle)
+	hexHash := hex.EncodeToString(hash[:])[:8]
+	return filepath.Join(os.TempDir(), fmt.Sprintf("monocle-channel-%s.mjs", hexHash))
+}
+
+// WriteChannelBundle writes the embedded channel bundle to its temp path if needed.
+// Returns the path to the written file.
+func WriteChannelBundle() (string, error) {
+	path := ChannelBundlePath()
+	if _, err := os.Stat(path); err == nil {
+		return path, nil // already exists with correct hash
+	}
+	if err := os.WriteFile(path, ChannelBundle, 0644); err != nil {
+		return "", fmt.Errorf("write channel bundle: %w", err)
+	}
+	return path, nil
 }
 
 // configureMCP adds monocle to .mcp.json.
@@ -222,14 +162,17 @@ func (a *ClaudeAdapter) configureMCP(global bool) error {
 		data["mcpServers"] = servers
 	}
 
-	rt, err := detectJSRuntime()
-	if err != nil {
-		return err
+	command := "monocle"
+	if global {
+		// Use absolute path for global config (machine-specific)
+		if exePath, err := os.Executable(); err == nil {
+			command = exePath
+		}
 	}
-	command, args := rt.mcpCommand(channelTSPathPortable())
+
 	servers["monocle"] = map[string]any{
 		"command": command,
-		"args":    args,
+		"args":    []any{"serve-mcp-channel"},
 	}
 
 	return WriteJSONFile(mcpPath, data)
@@ -271,32 +214,3 @@ func mcpJSONPath(global bool) string {
 	return ".mcp.json"
 }
 
-// channelTSPath returns the path for channel.ts in the XDG config directory.
-func channelTSPath() string {
-	cfgDir := os.Getenv("XDG_CONFIG_HOME")
-	if cfgDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		cfgDir = filepath.Join(home, ".config")
-	}
-	return filepath.Join(cfgDir, "monocle", "channel.ts")
-}
-
-// channelTSPathPortable returns the channel.ts path with ${HOME} instead of
-// the resolved home directory, so .mcp.json can be committed to git.
-func channelTSPathPortable() string {
-	abs := channelTSPath()
-	if abs == "" {
-		return ""
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return abs
-	}
-	if rel, ok := strings.CutPrefix(abs, home); ok {
-		return "${HOME}" + rel
-	}
-	return abs
-}

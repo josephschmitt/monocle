@@ -2,6 +2,7 @@ version: 2
 
 before:
   hooks:
+    - cd channel && bun install && bun run build.mjs
     - go mod tidy
     - go mod download
 

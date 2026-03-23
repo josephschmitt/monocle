@@ -23,6 +23,11 @@ jobs:
           go-version: ${{ steps.go-version.outputs.version }}
           cache: true
 
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Bundle MCP channel
+        run: cd channel && bun install && bun run build.mjs
+
       - name: Build
         run: go build ./...
 

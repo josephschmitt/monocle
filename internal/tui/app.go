@@ -42,7 +42,7 @@ const (
 	overlayHelp
 	overlayRefPicker
 	overlayConfirm
-	overlayInstallPrompt
+	overlayRegisterPrompt
 	overlayConnectionInfo
 	overlayHistory
 )
@@ -98,9 +98,9 @@ type openConfirmMsg struct {
 	action  confirmAction
 }
 
-type mcpInstallPromptMsg struct{}
+type mcpRegisterPromptMsg struct{}
 
-type mcpInstallResultMsg struct {
+type mcpRegisterResultMsg struct {
 	err error
 }
 
@@ -114,7 +114,7 @@ func refreshTick() tea.Cmd {
 
 // AppOptions configures optional behavior for the TUI app.
 type AppOptions struct {
-	MCPInstallFn func(global bool) error // if non-nil, offer MCP auto-install on startup
+	MCPRegisterFn func(global bool) error // if non-nil, offer MCP auto-registration on startup
 }
 
 // appModel is the root model that composes all sub-models.
@@ -146,8 +146,8 @@ type appModel struct {
 	theme Theme
 	keys  KeyMap
 
-	mcpInstallFn    func(global bool) error
-	installPrompt   installPromptModel
+	mcpRegisterFn    func(global bool) error
+	registerPrompt   registerPromptModel
 }
 
 // NewApp creates the root appModel.
@@ -199,13 +199,13 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		confirm:        newConfirmModel(theme),
 		connectionInfo: newConnectionInfoModel(theme),
 		history:        newHistoryModel(theme),
-		installPrompt: newInstallPromptModel(theme),
+		registerPrompt: newRegisterPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
 		theme:         theme,
 		keys:          keys,
-		mcpInstallFn:  o.MCPInstallFn,
+		mcpRegisterFn:  o.MCPRegisterFn,
 	}
 }
 
@@ -219,9 +219,9 @@ func (m appModel) Init() tea.Cmd {
 		},
 		refreshTick(),
 	}
-	if m.mcpInstallFn != nil {
+	if m.mcpRegisterFn != nil {
 		cmds = append(cmds, func() tea.Msg {
-			return mcpInstallPromptMsg{}
+			return mcpRegisterPromptMsg{}
 		})
 	}
 	return tea.Batch(cmds...)
@@ -318,8 +318,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help.height = m.height
 		m.confirm.width = m.width
 		m.confirm.height = m.height
-		m.installPrompt.width = m.width
-		m.installPrompt.height = m.height
+		m.registerPrompt.width = m.width
+		m.registerPrompt.height = m.height
 		m.connectionInfo.width = m.width
 		m.connectionInfo.height = m.height
 		return m, nil
@@ -647,30 +647,30 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case mcpInstallPromptMsg:
-		m.installPrompt.open()
-		m.overlay = overlayInstallPrompt
+	case mcpRegisterPromptMsg:
+		m.registerPrompt.open()
+		m.overlay = overlayRegisterPrompt
 		return m, nil
 
-	case installMCPMsg:
+	case registerMCPMsg:
 		m.overlay = overlayNone
-		installFn := m.mcpInstallFn
+		registerFn := m.mcpRegisterFn
 		global := msg.global
-		m.statusBar.feedbackStatus = "Installing MCP channel..."
+		m.statusBar.feedbackStatus = "Registering MCP channel..."
 		return m, func() tea.Msg {
-			return mcpInstallResultMsg{err: installFn(global)}
+			return mcpRegisterResultMsg{err: registerFn(global)}
 		}
 
-	case cancelInstallMsg:
+	case cancelRegisterMsg:
 		m.overlay = overlayNone
 		return m, nil
 
-	case mcpInstallResultMsg:
+	case mcpRegisterResultMsg:
 		if msg.err != nil {
-			m.statusBar.feedbackStatus = "MCP install failed"
+			m.statusBar.feedbackStatus = "MCP registration failed"
 		} else {
-			m.statusBar.feedbackStatus = "MCP channel installed"
-			m.mcpInstallFn = nil
+			m.statusBar.feedbackStatus = "MCP channel registered"
+			m.mcpRegisterFn = nil
 		}
 		return m, nil
 
@@ -764,9 +764,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.confirm, cmd = m.confirm.Update(msg)
 		return m, cmd
 	}
-	if m.overlay == overlayInstallPrompt {
+	if m.overlay == overlayRegisterPrompt {
 		var cmd tea.Cmd
-		m.installPrompt, cmd = m.installPrompt.Update(msg)
+		m.registerPrompt, cmd = m.registerPrompt.Update(msg)
 		return m, cmd
 	}
 	if m.overlay == overlayConnectionInfo {
@@ -1453,8 +1453,8 @@ func (m appModel) View() tea.View {
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}
-	} else if m.overlay == overlayInstallPrompt {
-		overlayContent := m.installPrompt.View()
+	} else if m.overlay == overlayRegisterPrompt {
+		overlayContent := m.registerPrompt.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

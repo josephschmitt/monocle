@@ -2,9 +2,9 @@
   "mcpServers": {
     "monocle": {
       "args": [
-        "${HOME}/.config/monocle/channel.ts"
+        "serve-mcp-channel"
       ],
-      "command": "bun"
+      "command": "monocle"
     }
   }
 }

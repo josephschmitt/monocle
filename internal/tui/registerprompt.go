@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-type installPromptModel struct {
+type registerPromptModel struct {
 	active bool
 	global bool
 	width  int
@@ -16,22 +16,22 @@ type installPromptModel struct {
 	theme  Theme
 }
 
-func newInstallPromptModel(theme Theme) installPromptModel {
-	return installPromptModel{theme: theme}
+func newRegisterPromptModel(theme Theme) registerPromptModel {
+	return registerPromptModel{theme: theme}
 }
 
-type installMCPMsg struct {
+type registerMCPMsg struct {
 	global bool
 }
 
-type cancelInstallMsg struct{}
+type cancelRegisterMsg struct{}
 
-func (m *installPromptModel) open() {
+func (m *registerPromptModel) open() {
 	m.active = true
 	m.global = false
 }
 
-func (m installPromptModel) Update(msg tea.Msg) (installPromptModel, tea.Cmd) {
+func (m registerPromptModel) Update(msg tea.Msg) (registerPromptModel, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
@@ -42,10 +42,10 @@ func (m installPromptModel) Update(msg tea.Msg) (installPromptModel, tea.Cmd) {
 		case "enter":
 			m.active = false
 			global := m.global
-			return m, func() tea.Msg { return installMCPMsg{global: global} }
+			return m, func() tea.Msg { return registerMCPMsg{global: global} }
 		case "esc":
 			m.active = false
-			return m, func() tea.Msg { return cancelInstallMsg{} }
+			return m, func() tea.Msg { return cancelRegisterMsg{} }
 		case "tab":
 			m.global = !m.global
 		}
@@ -53,7 +53,7 @@ func (m installPromptModel) Update(msg tea.Msg) (installPromptModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m installPromptModel) View() string {
+func (m registerPromptModel) View() string {
 	if !m.active {
 		return ""
 	}
@@ -62,9 +62,9 @@ func (m installPromptModel) View() string {
 
 	var b strings.Builder
 
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Install MCP Channel"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Register MCP Channel"))
 	b.WriteString("\n\n")
-	b.WriteString("Monocle's MCP channel is not installed. This is needed to directly communicate with Claude Code during reviews.")
+	b.WriteString("Monocle's MCP channel is not registered. This is needed to directly communicate with Claude Code during reviews.")
 	b.WriteString("\n\n")
 
 	// Scope selector (Tab to cycle)
@@ -101,7 +101,7 @@ func (m installPromptModel) View() string {
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render("(Tab)"))
 	b.WriteString("\n\n")
 
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: install  Tab: cycle scope  Esc: skip"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: register  Tab: cycle scope  Esc: skip"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }

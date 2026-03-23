@@ -30,6 +30,8 @@ jobs:
           go-version: ${{ steps.go-version.outputs.version }}
           cache: true
 
+      - uses: oven-sh/setup-bun@v2
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: latest

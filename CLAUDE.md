@@ -17,12 +17,13 @@ devbox run -- make lint               # Vet + build check
 
 Single binary with CLI subcommands:
 - **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
-- **`monocle install`** — Install MCP channel for Claude Code (channel.ts + .mcp.json).
-- **`monocle uninstall`** — Remove MCP channel configuration.
+- **`monocle register`** — Register MCP channel for Claude Code (.mcp.json entry).
+- **`monocle unregister`** — Remove MCP channel registration.
+- **`monocle serve-mcp-channel`** — (hidden) Run the MCP channel server. Called by Claude Code, not users.
 
 ### Integration Model: MCP Channel
 
-Claude Code integrates with Monocle via an **MCP channel** — a stdio MCP server (`channel.ts`) that connects to Monocle's Unix domain socket. The channel exposes MCP tools (`review_status`, `get_feedback`, `submit_plan`) and pushes review feedback to Claude Code via notifications.
+Claude Code integrates with Monocle via an **MCP channel** — a stdio MCP server (bundled JS, served by `monocle serve-mcp-channel`) that connects to Monocle's Unix domain socket. The channel exposes MCP tools (`review_status`, `get_feedback`, `submit_plan`) and pushes review feedback to Claude Code via notifications.
 
 **Key design:**
 - **Push-based** — Monocle pushes feedback to Claude Code via MCP notifications, no polling needed
@@ -33,12 +34,13 @@ Claude Code integrates with Monocle via an **MCP channel** — a stdio MCP serve
 
 ```
 cmd/monocle/          Main CLI entry point (Kong commands)
+channel/              MCP channel source (TypeScript) + esbuild bundling
 internal/
   types/              Domain types (ReviewSession, ChangedFile, ReviewComment, Config)
   protocol/           NDJSON message types + marshal/unmarshal (GetReviewStatus, PollFeedback, SubmitContent)
   db/                 SQLite layer (schema, migrations, typed queries)
   core/               Engine, git client, feedback queue, formatter, session manager, socket server
-  adapters/           Claude Code MCP channel installer, repo/socket utilities
+  adapters/           Claude Code MCP channel registration, repo/socket utilities
   tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, plan view, modals, theme)
 ```
 
