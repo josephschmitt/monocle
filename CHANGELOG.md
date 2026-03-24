@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.0](https://github.com/josephschmitt/monocle/compare/v0.17.0...v0.18.0) (2026-03-24)
+
+
+### Features
+
+* add additional files support for external file review ([ab3b257](https://github.com/josephschmitt/monocle/commit/ab3b257b7bbf5e3fa80b711ffc3d2c1f910790f6))
+* **channel:** add Claude Code plugin for channel registration ([60522a5](https://github.com/josephschmitt/monocle/commit/60522a531a52b7c21ef20dd573241f480667532c))
+* **channel:** add submit_plan_and_wait blocking tool for plan mode ([8e4ffc9](https://github.com/josephschmitt/monocle/commit/8e4ffc973fd7d74ccbe9ebca76ec75773d6a8e5f))
+
+
+### Bug Fixes
+
+* **tui:** sync sidebar cursor with diff viewer and enable content review toggle ([af7ae5a](https://github.com/josephschmitt/monocle/commit/af7ae5a8dc84e050d7aca4d92adec0072f5c1f37))
+
 ## [0.17.0](https://github.com/josephschmitt/monocle/compare/v0.16.0...v0.17.0) (2026-03-23)
 
 
