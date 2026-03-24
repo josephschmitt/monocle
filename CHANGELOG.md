@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.19.0](https://github.com/josephschmitt/monocle/compare/v0.18.1...v0.19.0) (2026-03-24)
+
+
+### Features
+
+* **tui:** add global keybindings, section navigation, sidebar toggle, and refresh ([c628c25](https://github.com/josephschmitt/monocle/commit/c628c25ef6c2618a3eabfcfa78f467d43600cf37))
+* **tui:** add plan review mode for comfortable plan reviewing ([8635d37](https://github.com/josephschmitt/monocle/commit/8635d37813a48317812f3d38923054c2f51fabb8))
+* **tui:** add vim-style horizontal scroll keybinds (0, ^, $) ([e5376bf](https://github.com/josephschmitt/monocle/commit/e5376bf7ccfe5fee97612db6f0611463815f5281))
+
+
+### Bug Fixes
+
+* **core:** clear content items on round advance ([3717b91](https://github.com/josephschmitt/monocle/commit/3717b91293a7290b02651c901607d5009fb4cc02))
+* **tui:** clear diff view when file list becomes empty ([d317af7](https://github.com/josephschmitt/monocle/commit/d317af730245998e6a99a27d9f8bcbe394c31e48))
+* **tui:** refresh diff view and content items during periodic tick ([8267128](https://github.com/josephschmitt/monocle/commit/8267128f6b50b1ff2da21474d6b493780ca5ecc9))
+* **tui:** snap cursor to viewport edge when off-screen on j/k press ([177d9d0](https://github.com/josephschmitt/monocle/commit/177d9d0407d06e3e6e7b8e68ae026aa9e4113fcc))
+
 ## [0.18.1](https://github.com/josephschmitt/monocle/compare/v0.18.0...v0.18.1) (2026-03-24)
 
 
