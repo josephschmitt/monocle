@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.1](https://github.com/josephschmitt/monocle/compare/v0.18.0...v0.18.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* add required owner field to marketplace.json ([6124e1e](https://github.com/josephschmitt/monocle/commit/6124e1ed73036735408ec0cb6ba76b2ec1a5c3c7))
+* **tui:** increase stacked layout sidebar minimum height and lower max cap ([25e2c00](https://github.com/josephschmitt/monocle/commit/25e2c008b2bf4b5c41708b7335f61694db95f1b1))
+
 ## [0.18.0](https://github.com/josephschmitt/monocle/compare/v0.17.0...v0.18.0) (2026-03-24)
 
 
