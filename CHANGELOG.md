@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/josephschmitt/monocle/compare/v0.19.0...v0.20.0) (2026-03-24)
+
+
+### Features
+
+* **tui:** add mouse mode support ([7469023](https://github.com/josephschmitt/monocle/commit/74690230dc1b354213efcb88b41b8337f1ef25fd))
+
+
+### Bug Fixes
+
+* **tui:** add mouseOriginY offset for Bubble Tea v2 alt-screen rendering ([4081a78](https://github.com/josephschmitt/monocle/commit/4081a787bd0b9e9ef4432d06159ee6c92624044e))
+* **tui:** correct mouse click offset for multi-line comments ([0c70949](https://github.com/josephschmitt/monocle/commit/0c7094968cbbaab6e4a5fda0d0fd32d392b9ea38))
+* **tui:** prevent terminal-level line wrapping in diff view ([4509651](https://github.com/josephschmitt/monocle/commit/45096513ed22ac6a6031a7e9113cb26729a0d3fd))
+
 ## [0.19.0](https://github.com/josephschmitt/monocle/compare/v0.18.1...v0.19.0) (2026-03-24)
 
 
