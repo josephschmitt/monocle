@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/josephschmitt/monocle/compare/v0.20.0...v0.21.0) (2026-03-24)
+
+
+### Features
+
+* add session continue/resume with --continue, --resume, and --session flags ([a9672e5](https://github.com/josephschmitt/monocle/commit/a9672e5a3ee1ae2fbf8a0d055408104735d3fbe7))
+
 ## [0.20.0](https://github.com/josephschmitt/monocle/compare/v0.19.0...v0.20.0) (2026-03-24)
 
 
