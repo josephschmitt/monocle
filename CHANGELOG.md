@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0](https://github.com/josephschmitt/monocle/compare/v0.23.0...v0.24.0) (2026-03-25)
+
+
+### Features
+
+* **tui:** add XML syntax highlighting for plist, xmp, and other XML dialects ([df93611](https://github.com/josephschmitt/monocle/commit/df936116a68066ea4a47e9055c91e4c882cd31d8))
+* **tui:** support opening monocle in non-git directories ([cd4833f](https://github.com/josephschmitt/monocle/commit/cd4833f59da08677dc3092182558d90798e63561))
+
 ## [0.23.0](https://github.com/josephschmitt/monocle/compare/v0.22.0...v0.23.0) (2026-03-25)
 
 
