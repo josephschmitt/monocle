@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/josephschmitt/monocle/compare/v0.21.0...v0.22.0) (2026-03-25)
+
+
+### Features
+
+* **channel:** add file_path parameter to submit_plan tools ([a6646a6](https://github.com/josephschmitt/monocle/commit/a6646a6cded017026a0489c256c7142feb053882))
+* **channel:** exit when Monocle not running, advance round on submit ([ed1a0e2](https://github.com/josephschmitt/monocle/commit/ed1a0e22a2be7968266b62d0e8b626bb82c742b6))
+* **tui:** add focus mode with indicator badge and F keybind ([1b91078](https://github.com/josephschmitt/monocle/commit/1b910783fbbee019b5cd119b38f5cf978b8a50e4))
+
+
+### Bug Fixes
+
+* **adapters:** detect Claude Code plugin registration in NeedsRegister ([1539e79](https://github.com/josephschmitt/monocle/commit/1539e79de602bc541462bd284bcd2c4876ca5129))
+
 ## [0.21.0](https://github.com/josephschmitt/monocle/compare/v0.20.0...v0.21.0) (2026-03-24)
 
 
