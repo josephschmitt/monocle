@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.23.0](https://github.com/josephschmitt/monocle/compare/v0.22.0...v0.23.0) (2026-03-25)
+
+
+### Features
+
+* **tui:** add :mark-all-reviewed and :mark-all-unreviewed commands ([b7496d6](https://github.com/josephschmitt/monocle/commit/b7496d62312ca149b0becf912019fcf92af60ddb))
+* **tui:** add configurable min_diff_width for side-by-side layout ([bb2f6c3](https://github.com/josephschmitt/monocle/commit/bb2f6c3d608cc7d8ea329d51463b30dab80cb29a))
+* **tui:** add cursor navigation to comment editor modal ([2d2b577](https://github.com/josephschmitt/monocle/commit/2d2b577eb07567f409d3703c82690b76faa11b6b))
+* **tui:** add emacs keybindings and smart home to comment editor ([0b1f474](https://github.com/josephschmitt/monocle/commit/0b1f474f9582a8945916960a5331426b9f455dd5))
+* **tui:** add plugin install instructions to splash screen ([80ff8d3](https://github.com/josephschmitt/monocle/commit/80ff8d35182e90855a3a8f5bf0710b94994b3de2))
+* **tui:** add suggested edits with GitHub-style suggestion blocks ([c68a2fb](https://github.com/josephschmitt/monocle/commit/c68a2fba8c43801331898f11bd14f3d811c01bd2))
+* **tui:** cycle sidebar filter through all, unreviewed only, reviewed only ([910c22f](https://github.com/josephschmitt/monocle/commit/910c22f895f33d0f51e79e048b292bf271511a36))
+* **tui:** enhance review marking with auto-advance, reset on submit, and filter ([54954c7](https://github.com/josephschmitt/monocle/commit/54954c7a29e88ee6a16a250423b5ecb420d5f9c2))
+
+
+### Bug Fixes
+
+* **channel:** remove ExitPlanMode references from MCP instructions ([454d548](https://github.com/josephschmitt/monocle/commit/454d5484bc5d7ef3aba1c499dc2df9a9a2d4477a))
+* **channel:** simplify plan review instructions to avoid conflicting with native plan mode ([2c7e378](https://github.com/josephschmitt/monocle/commit/2c7e378ee3e660bb0f3c996439370eabf8d5ed2a))
+
 ## [0.22.0](https://github.com/josephschmitt/monocle/compare/v0.21.0...v0.22.0) (2026-03-25)
 
 
