@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.0](https://github.com/josephschmitt/monocle/compare/v0.24.0...v0.25.0) (2026-03-25)
+
+
+### Features
+
+* **channel:** start MCP server without blocking on engine connection ([4666dd9](https://github.com/josephschmitt/monocle/commit/4666dd9a7ca768cfa8b0efb47daee62b6de67427))
+* **plugin:** add slash command skills for sending plans to Monocle ([e41a86b](https://github.com/josephschmitt/monocle/commit/e41a86b356f636216476f02eec1f014e498178f7))
+
+
+### Bug Fixes
+
+* **channel:** simplify review approval text and propagate action in protocol ([9236c81](https://github.com/josephschmitt/monocle/commit/9236c81b218bd7852a092bf35948854731696a9b))
+* **tui:** use visual-width truncation for non-wrap mode cutoff ([f494ef2](https://github.com/josephschmitt/monocle/commit/f494ef2dd86f5703e336a7955fc439e957e99ebe))
+
 ## [0.24.0](https://github.com/josephschmitt/monocle/compare/v0.23.0...v0.24.0) (2026-03-25)
 
 
