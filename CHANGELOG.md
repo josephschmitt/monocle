@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.0](https://github.com/josephschmitt/monocle/compare/v0.26.0...v0.27.0) (2026-03-26)
+
+
+### Features
+
+* **core:** auto-identify agent name via MCP channel ([3202d81](https://github.com/josephschmitt/monocle/commit/3202d81d702409ec0c032990ff3a12726ce3354b))
+* **db:** add MONOCLE_DB env var to override database path ([170d1e1](https://github.com/josephschmitt/monocle/commit/170d1e13314d478e8508d2df098bd9c0262fba5d))
+* **tui:** add clear review command to reset in-progress review ([5a7d2ab](https://github.com/josephschmitt/monocle/commit/5a7d2aba119e801b335dadd86f9b448c2da99da7))
+* **tui:** add Ctrl+G to open external editor in comment and submit modals ([872cd90](https://github.com/josephschmitt/monocle/commit/872cd9055e9d1cbd6d9ff15f320713926545af42))
+* **tui:** show agent name alongside connection status ([40e8f0c](https://github.com/josephschmitt/monocle/commit/40e8f0cbeefbdbdff2caed53aad040de5e42f041))
+
+
+### Bug Fixes
+
+* **tui:** keep agent name in default color next to connection status ([4d196ba](https://github.com/josephschmitt/monocle/commit/4d196baa63c22b4dcd91ff46baac6172297d59d7))
+
 ## [0.26.0](https://github.com/josephschmitt/monocle/compare/v0.25.0...v0.26.0) (2026-03-26)
 
 
