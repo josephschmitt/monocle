@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.0](https://github.com/josephschmitt/monocle/compare/v0.25.0...v0.26.0) (2026-03-26)
+
+
+### Features
+
+* **tui:** remove clear-after-submit confirmation dialog ([7845287](https://github.com/josephschmitt/monocle/commit/7845287746955c4925206f08d298e51ff67a901a))
+
+
+### Bug Fixes
+
+* **channel:** prevent zombie MCP processes when Claude Code exits ([b5d6ddc](https://github.com/josephschmitt/monocle/commit/b5d6ddcf3094172eedd4d1bfd034956277d1c715))
+* **core:** clear pending feedback after push delivery ([6277703](https://github.com/josephschmitt/monocle/commit/62777038e7fd36cf92fefb285809d1c8e8bd5877))
+* **tui:** stop clearing files and base ref on submit ([98aa7a2](https://github.com/josephschmitt/monocle/commit/98aa7a2aabd6932c6b074e8ccbf3b74c3e2687e2))
+
 ## [0.25.0](https://github.com/josephschmitt/monocle/compare/v0.24.0...v0.25.0) (2026-03-25)
 
 
