@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0](https://github.com/josephschmitt/monocle/compare/v0.29.0...v0.30.0) (2026-03-27)
+
+
+### Features
+
+* **tui:** open file in external editor at cursor line with Ctrl+g ([3d9dd87](https://github.com/josephschmitt/monocle/commit/3d9dd87c2ad25dc57efe1269354df3b094fe5d62))
+
+
+### Bug Fixes
+
+* **tui:** recalculate sidebar layout after feedback submission ([c9204b6](https://github.com/josephschmitt/monocle/commit/c9204b660b82e1a61333da6374cd455f2c480954))
+
 ## [0.29.0](https://github.com/josephschmitt/monocle/compare/v0.28.0...v0.29.0) (2026-03-27)
 
 
