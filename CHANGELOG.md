@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/josephschmitt/monocle/compare/v0.28.0...v0.29.0) (2026-03-27)
+
+
+### Features
+
+* **tui:** auto-switch to preferred diff style for plan versions 2+ ([9e7cb6e](https://github.com/josephschmitt/monocle/commit/9e7cb6ef67554b9629bbcf15adf2152ec0b4cd44))
+
 ## [0.28.0](https://github.com/josephschmitt/monocle/compare/v0.27.1...v0.28.0) (2026-03-27)
 
 
