@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.31.0](https://github.com/josephschmitt/monocle/compare/v0.30.0...v0.31.0) (2026-03-27)
+
+
+### Features
+
+* add MCP configs and slash commands for third-party agents ([029a14a](https://github.com/josephschmitt/monocle/commit/029a14a33f4841af930533bb28a7bcb60079fffa))
+* **cli:** add multi-agent register command with interactive picker ([c95a9df](https://github.com/josephschmitt/monocle/commit/c95a9df29c0607b28376b9a4577b122263ab6a11))
+* **core:** add queued feedback delivery with pull-based retrieval ([0699dff](https://github.com/josephschmitt/monocle/commit/0699dff7d4e790a0c52cc3791877ffbd61838cf8))
+* **tui:** update splash screen for multi-agent support ([388e9ea](https://github.com/josephschmitt/monocle/commit/388e9ea4a35af682b37cbc71d2c4dc7ae8af9887))
+
+
+### Bug Fixes
+
+* **channel:** restrict submit_plan tools to top-level agent only ([76ba7f6](https://github.com/josephschmitt/monocle/commit/76ba7f6b3ba94ffbe6eeeb89a943edf1611770c6))
+* **cli:** fix picker space key and use context-aware title ([eb0c2e1](https://github.com/josephschmitt/monocle/commit/eb0c2e15b66fc2f435b9e6adca246e9d86cc8b83))
+* **cli:** scope HasConfig check to local/global and fix OpenCode path ([288b963](https://github.com/josephschmitt/monocle/commit/288b9639c492bbc2ff1fa8bbb154fd575b388234))
+* **core:** reset lastKnownHead when re-enabling auto-advance base ref ([a52cc28](https://github.com/josephschmitt/monocle/commit/a52cc2890c9861763b1f79aaf8851a53f679930b))
+* **tui:** prevent status bar cutoff in stacked layout when sidebar fills height ([ac3e018](https://github.com/josephschmitt/monocle/commit/ac3e01802b279135ec0722bf4529c9704bbcaecb))
+* **tui:** show user-selected ref in status bar and picker, not diff parent ([712658c](https://github.com/josephschmitt/monocle/commit/712658ce4d0b3bb36a1f48357601a074e3914ac3))
+
 ## [0.27.0](https://github.com/josephschmitt/monocle/compare/v0.26.0...v0.27.0) (2026-03-26)
 
 
