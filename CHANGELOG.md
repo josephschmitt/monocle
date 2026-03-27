@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.0](https://github.com/josephschmitt/monocle/compare/v0.27.1...v0.28.0) (2026-03-27)
+
+
+### Features
+
+* **tui:** add diff support for content item versions ([6e0d221](https://github.com/josephschmitt/monocle/commit/6e0d221d80542a8c0ff8b8027f2e3da49fdef0c5))
+
+
+### Bug Fixes
+
+* **tui:** prevent content diff view from being overridden by refresh ([a29e09f](https://github.com/josephschmitt/monocle/commit/a29e09f059ca96bb30eeff3ab5914bad5cfe475c))
+* **tui:** show full content in plan diff view, not just changed hunks ([af75908](https://github.com/josephschmitt/monocle/commit/af75908f42bccf0ee8de8fa03a03e52956c81d96))
+
 ## [0.27.1](https://github.com/josephschmitt/monocle/compare/v0.27.0...v0.27.1) (2026-03-27)
 
 
