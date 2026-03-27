@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.27.1](https://github.com/josephschmitt/monocle/compare/v0.27.0...v0.27.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* add make run target so MONOCLE_DB stays set via devbox ([3be6572](https://github.com/josephschmitt/monocle/commit/3be6572b834628cf06a62f2915d0eaa9d332e43a))
+* **channel:** suppress duplicate feedback notification when blocking tool is active ([6affcc0](https://github.com/josephschmitt/monocle/commit/6affcc07349cca96701138d2bd83123f848b6b0c))
+* **channel:** wait up to 10s for engine connection on first tool fetch ([e17db00](https://github.com/josephschmitt/monocle/commit/e17db008ce4d6d9d61625fb90486ae96a020c24e))
+* **tui:** preserve visual block selection during content reload ([f1a86d4](https://github.com/josephschmitt/monocle/commit/f1a86d4fe892bc33ac7e7f845196f2e515967e6b))
+
 ## [0.27.0](https://github.com/josephschmitt/monocle/compare/v0.26.0...v0.27.0) (2026-03-26)
 
 
