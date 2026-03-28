@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.33.0](https://github.com/josephschmitt/monocle/compare/v0.32.0...v0.33.0) (2026-03-28)
+
+
+### Features
+
+* **channel:** remove prescriptive workflow advice from MCP instructions ([c8025af](https://github.com/josephschmitt/monocle/commit/c8025afe6238444e6a88d82f84c979d98218671d))
+* **core:** enforce request_changes reviews must include comments or body ([2b3d2eb](https://github.com/josephschmitt/monocle/commit/2b3d2eb526cb4f26fa7a65915a86eca0cd4213d7))
+* **register:** overwrite existing config instead of no-oping ([8aa9257](https://github.com/josephschmitt/monocle/commit/8aa925775b92ab7a107f15910dfb79e9d9819a1e))
+
+
+### Bug Fixes
+
+* **channel:** make subagent tool restrictions more prominent in MCP descriptions ([5febd5f](https://github.com/josephschmitt/monocle/commit/5febd5f16ac756f2b0d6886174cae5fbae9240d4))
+
 ## [0.32.0](https://github.com/josephschmitt/monocle/compare/v0.31.0...v0.32.0) (2026-03-28)
 
 
