@@ -1,0 +1,9 @@
+{
+  "name": "monocle",
+  "version": "1.0.0",
+  "mcpServers": {
+    "monocle": {
+      "command": "monocle serve-mcp-channel"
+    }
+  }
+}
