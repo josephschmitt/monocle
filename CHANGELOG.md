@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.32.0](https://github.com/josephschmitt/monocle/compare/v0.31.0...v0.32.0) (2026-03-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **channel:** MCP tool names changed from submit_plan/submit_plan_and_wait to submit_for_review/submit_for_review_and_wait
+
+### Features
+
+* **opencode:** enable monocle MCP tools in plan mode during register ([b5a3fc1](https://github.com/josephschmitt/monocle/commit/b5a3fc1e07e354070fa8040e1129d78475674ce5))
+
+
+### Code Refactoring
+
+* **channel:** rename submit_plan tools to submit_for_review and simplify instructions ([680b529](https://github.com/josephschmitt/monocle/commit/680b529fd7f6b313a789d117b240e3b3a9864de7))
+
 ## [0.31.0](https://github.com/josephschmitt/monocle/compare/v0.30.0...v0.31.0) (2026-03-27)
 
 
