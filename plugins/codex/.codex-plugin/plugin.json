@@ -1,0 +1,10 @@
+{
+  "name": "monocle",
+  "version": "1.0.0",
+  "description": "Terminal-based code review companion for AI coding agents. Review diffs, leave structured feedback, and submit reviews — all from a TUI running alongside your agent.",
+  "author": {
+    "name": "Joe Schmitt"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

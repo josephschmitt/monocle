@@ -9,7 +9,7 @@
       "name": "monocle",
       "description": "Terminal-based code review companion for Claude Code. Review diffs, leave structured feedback, and submit reviews — all from a TUI running alongside Claude.",
       "category": "development",
-      "source": "./plugin",
+      "source": "./plugins/claude",
       "homepage": "https://github.com/josephschmitt/monocle"
     }
   ]

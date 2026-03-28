@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "monocle": {
+      "command": "monocle",
+      "args": ["serve-mcp-channel"]
+    }
+  }
+}

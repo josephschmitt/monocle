@@ -125,30 +125,54 @@ Claude Code gets tools for checking review status, retrieving feedback, submitti
 
 > **Tip:** If you start or restart Monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select Monocle to reconnect.
 
-### Other agents (pull-based feedback)
+### Codex CLI
 
-Monocle works with any agent that supports MCP tool servers. The agent gets the same review tools — it just retrieves feedback by calling `get_feedback` instead of receiving push notifications.
+Install the Monocle plugin from the Codex CLI plugin browser:
 
-#### 1. Register the MCP server
+```
+/plugins
+```
+
+Search for "monocle" and install. Then start Monocle in a separate terminal:
+
+```bash
+monocle
+```
+
+### Gemini CLI
+
+Install the Monocle extension:
+
+```bash
+gemini extensions install josephschmitt/monocle
+```
+
+Then start Monocle in a separate terminal:
+
+```bash
+monocle
+```
+
+### OpenCode / other agents (manual registration)
+
+For agents without a plugin system, use `monocle register` to write MCP config and slash commands directly:
 
 ```bash
 monocle register opencode   # or: codex, gemini, all
 ```
 
-This writes the agent's MCP server config and slash commands. You can also run `monocle register` with no argument to get an interactive picker. Each agent writes to its own config location:
+You can also run `monocle register` with no argument to get an interactive picker. Each agent writes to its own config location:
 
 | Agent | Config file | Slash commands |
 |-------|-------------|----------------|
-| Claude Code | `.mcp.json` | `plugin/commands/` |
+| Claude Code | `.mcp.json` | `plugins/claude/commands/` |
 | OpenCode | `opencode.json` | `.opencode/commands/` |
-| Codex CLI | `.codex/config.toml` | — |
+| Codex CLI | `.codex/config.toml` | `.codex-plugin/skills/` |
 | Gemini CLI | `.gemini/settings.json` | `.gemini/commands/` |
 
-#### 2. Start reviewing
+> **Note:** `monocle register` is also available as a fallback for Claude Code, Codex CLI, and Gemini CLI if you prefer direct config over the plugin/extension system.
 
-Start your agent and Monocle in separate terminals. Review and submit feedback the same way — the only difference is how the agent picks it up.
-
-When you submit a review, Monocle queues it for delivery. The agent retrieves it by calling the `get_feedback` tool, either via the `/get-feedback` slash command or by calling the tool directly.
+Start your agent and Monocle in separate terminals. When you submit a review, Monocle queues it for delivery. The agent retrieves it by calling the `get_feedback` tool, either via the `/get-feedback` slash command or by calling the tool directly.
 
 ### The review loop
 
@@ -216,11 +240,11 @@ Monocle ships slash commands for agents that support them. These are thin wrappe
 
 | Command | Available for | Description |
 |---------|---------------|-------------|
-| `/get-feedback` | Claude Code, OpenCode, Gemini CLI | Retrieve pending review feedback |
-| `/review-plan` | Claude Code, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review` |
-| `/review-plan-wait` | Claude Code, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review_and_wait`, then iterate on feedback |
+| `/get-feedback` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Retrieve pending review feedback |
+| `/review-plan` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review` |
+| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review_and_wait`, then iterate on feedback |
 
-Slash commands live in agent-specific directories (`plugin/commands/` for Claude Code, `.opencode/commands/` for OpenCode, `.gemini/commands/` for Gemini CLI). Codex CLI does not support custom slash commands.
+Slash commands live in agent-specific directories (`plugins/claude/commands/` for Claude Code, `plugins/codex/skills/` for Codex CLI, `.opencode/commands/` for OpenCode, `plugins/gemini/commands/` for Gemini CLI).
 
 ## Keybindings
 

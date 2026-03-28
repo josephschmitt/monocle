@@ -1,0 +1,18 @@
+{
+  "name": "monocle",
+  "interface": {
+    "displayName": "Monocle"
+  },
+  "plugins": [
+    {
+      "name": "monocle",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    }
+  ]
+}
