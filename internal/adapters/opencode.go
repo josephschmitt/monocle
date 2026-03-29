@@ -160,7 +160,7 @@ var openCodeCommands = map[string]string{
 description: Retrieve review feedback from Monocle
 ---
 
-Call the monocle ` + "`get_feedback`" + ` tool to retrieve pending review feedback from your reviewer. If feedback is available, read it carefully and address the comments. If no feedback is pending, let the user know.
+Run ` + "`monocle review get-feedback`" + ` to retrieve pending review feedback from your reviewer. If feedback is available, read it carefully and address the comments. If no feedback is pending, let the user know.
 `,
 	"review-plan": `---
 description: Send a plan to Monocle for review
@@ -170,11 +170,11 @@ Submit a plan file to Monocle so your reviewer can see it. This does NOT wait fo
 
 1. If the user provided a file path as an argument, use that. Otherwise, find the most recently modified plan file in the project.
 2. Read the plan file to get its content and filename.
-3. Call the monocle ` + "`submit_for_review`" + ` tool with:
-   - ` + "`title`" + `: The first markdown heading from the plan, or the filename if no heading found
-   - ` + "`file_path`" + `: Absolute path to the plan file
-   - ` + "`id`" + `: The plan filename (so updates replace the previous version)
-   - ` + "`content_type`" + `: ` + "`\"md\"`" + `
+3. Run ` + "`monocle review send-artifact`" + ` with:
+   - ` + "`--title`" + `: The first markdown heading from the plan, or the filename if no heading found
+   - ` + "`--file`" + `: Absolute path to the plan file
+   - ` + "`--id`" + `: The plan filename (so updates replace the previous version)
+   - ` + "`--type`" + `: ` + "`md`" + `
 4. Confirm to the user that the plan was sent to Monocle.
 `,
 	"review-plan-wait": `---
@@ -185,14 +185,14 @@ Submit a plan file to Monocle and block until the reviewer responds with feedbac
 
 1. If the user provided a file path as an argument, use that. Otherwise, find the most recently modified plan file in the project.
 2. Read the plan file to get its content and filename.
-3. Call the monocle ` + "`submit_for_review_and_wait`" + ` tool with:
-   - ` + "`title`" + `: The first markdown heading from the plan, or the filename if no heading found
-   - ` + "`file_path`" + `: Absolute path to the plan file
-   - ` + "`id`" + `: The plan filename (so updates replace the previous version)
-   - ` + "`content_type`" + `: ` + "`\"md\"`" + `
+3. Run ` + "`monocle review send-artifact --wait`" + ` with:
+   - ` + "`--title`" + `: The first markdown heading from the plan, or the filename if no heading found
+   - ` + "`--file`" + `: Absolute path to the plan file
+   - ` + "`--id`" + `: The plan filename (so updates replace the previous version)
+   - ` + "`--type`" + `: ` + "`md`" + `
 4. Handle the response:
    - If approved with no comments, inform the user and continue.
-   - If feedback requests changes, act on it — update the plan, then call ` + "`submit_for_review_and_wait`" + ` again.
+   - If feedback requests changes, act on it — update the plan, then run ` + "`monocle review send-artifact --wait`" + ` again.
    - Keep iterating until the reviewer approves.
 `,
 }
