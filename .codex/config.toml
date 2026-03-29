@@ -1,3 +1,0 @@
-[mcp_servers.monocle]
-command = "./bin/monocle"
-args = ["serve-mcp-channel"]

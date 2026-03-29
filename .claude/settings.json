@@ -23,7 +23,12 @@
       "Bash(uname:*)",
       "Bash(date:*)",
       "Bash(diff:*)",
-      "Bash(devbox run -- make*)"
+      "Bash(devbox run -- make*)",
+      "Bash(monocle review:*)",
+      "Bash(./bin/monocle review:*)",
+      "Skill(get-feedback)",
+      "Skill(review-plan)",
+      "Skill(review-plan-wait)"
     ]
   },
   "hooks": {
