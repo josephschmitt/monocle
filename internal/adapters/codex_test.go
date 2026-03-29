@@ -21,16 +21,12 @@ func TestCodexRegister(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(projDir, ".codex", "config.toml"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-
-	if !strings.Contains(string(content), "[mcp_servers.monocle]") {
-		t.Fatal("expected [mcp_servers.monocle] section")
-	}
-	if !strings.Contains(string(content), `args = ["serve-mcp-channel"]`) {
-		t.Fatal("expected serve-mcp-channel args")
+	// Verify skill files are installed
+	for _, name := range SkillNames {
+		path := filepath.Join(projDir, ".codex", "skills", name, "SKILL.md")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("skill %s not found: %v", name, err)
+		}
 	}
 }
 
@@ -51,18 +47,15 @@ func TestCodexRegister_Idempotent(t *testing.T) {
 		t.Fatalf("second register: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(projDir, ".codex", "config.toml"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-
-	count := strings.Count(string(content), "[mcp_servers.monocle]")
-	if count != 1 {
-		t.Fatalf("expected exactly 1 monocle section, got %d\n%s", count, content)
+	for _, name := range SkillNames {
+		path := filepath.Join(projDir, ".codex", "skills", name, "SKILL.md")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("skill %s not found after re-register: %v", name, err)
+		}
 	}
 }
 
-func TestCodexRegister_OverwriteUpdatesConfig(t *testing.T) {
+func TestCodexRegister_CleansLegacyMCP(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "project")
 	codexDir := filepath.Join(projDir, ".codex")
@@ -72,8 +65,8 @@ func TestCodexRegister_OverwriteUpdatesConfig(t *testing.T) {
 	os.Chdir(projDir)
 	defer os.Chdir(origDir)
 
-	// Write an old config with a stale command
-	oldConfig := "[mcp_servers.monocle]\ncommand = \"old-monocle\"\nargs = [\"serve-mcp-channel\"]\n"
+	// Write legacy MCP config
+	oldConfig := "[mcp_servers.monocle]\ncommand = \"monocle\"\nargs = [\"serve-mcp-channel\"]\n"
 	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(oldConfig), 0644); err != nil {
 		t.Fatalf("write old config: %v", err)
 	}
@@ -83,18 +76,20 @@ func TestCodexRegister_OverwriteUpdatesConfig(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
+	// Legacy config should be cleaned up (file removed since it was only monocle)
+	if _, err := os.Stat(filepath.Join(codexDir, "config.toml")); !os.IsNotExist(err) {
+		content, _ := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+		if strings.Contains(string(content), "[mcp_servers.monocle]") {
+			t.Fatal("legacy MCP config should have been removed")
+		}
 	}
 
-	s := string(content)
-	if strings.Contains(s, "old-monocle") {
-		t.Fatal("old command value should have been replaced")
-	}
-	count := strings.Count(s, "[mcp_servers.monocle]")
-	if count != 1 {
-		t.Fatalf("expected exactly 1 monocle section, got %d\n%s", count, s)
+	// Skills should be installed
+	for _, name := range SkillNames {
+		path := filepath.Join(projDir, ".codex", "skills", name, "SKILL.md")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("skill %s not found: %v", name, err)
+		}
 	}
 }
 
@@ -131,11 +126,7 @@ func TestCodexRegister_PreservesOtherSections(t *testing.T) {
 	if !strings.Contains(s, `command = "other"`) {
 		t.Fatal("other_tool command should be preserved")
 	}
-	if strings.Contains(s, "old-monocle") {
-		t.Fatal("old monocle command should have been replaced")
-	}
-	count := strings.Count(s, "[mcp_servers.monocle]")
-	if count != 1 {
-		t.Fatalf("expected exactly 1 monocle section, got %d\n%s", count, s)
+	if strings.Contains(s, "[mcp_servers.monocle]") {
+		t.Fatal("monocle MCP section should have been removed")
 	}
 }

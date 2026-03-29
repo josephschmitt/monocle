@@ -1,62 +1,60 @@
 package adapters
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
 
-// GeminiAdapter handles MCP registration for Google Gemini CLI.
+// GeminiAdapter handles Monocle registration for Google Gemini CLI.
+// Installs skill files only — no MCP server needed.
 type GeminiAdapter struct{}
 
 func (a *GeminiAdapter) Name() string  { return "gemini" }
 func (a *GeminiAdapter) Label() string { return "Gemini CLI" }
 
 func (a *GeminiAdapter) ConfigPaths(global bool) []string {
-	paths := []string{geminiConfigPath(global)}
-	for _, name := range geminiCommandNames {
-		paths = append(paths, filepath.Join(geminiCommandsDir(global), name+".toml"))
-	}
-	return paths
+	return SkillPaths(geminiSkillsDir(global))
 }
 
 func (a *GeminiAdapter) HasConfig(global bool) bool {
+	// Check for skill files
+	dir := geminiSkillsDir(global)
+	for _, name := range SkillNames {
+		if _, err := os.Stat(filepath.Join(dir, name, "SKILL.md")); err == nil {
+			return true
+		}
+	}
+	// Also detect legacy MCP config
 	return hasMCPServersEntry(geminiConfigPath(global))
 }
 
 func (a *GeminiAdapter) Register(global bool) error {
-	command := ResolveCommand(global)
+	// Clean up legacy MCP config if present
+	_ = unconfigureMCPServersJSON(geminiConfigPath(global))
 
-	// Write MCP config (same mcpServers format as Claude)
-	if err := configureMCPServersJSON(geminiConfigPath(global), command); err != nil {
-		return fmt.Errorf("configure gemini: %w", err)
-	}
-
-	// Write slash commands
+	// Remove legacy command files
 	cmdDir := geminiCommandsDir(global)
-	for _, name := range geminiCommandNames {
-		content := geminiCommands[name]
-		cmdPath := filepath.Join(cmdDir, name+".toml")
-		if err := WriteFileAtomic(cmdPath, []byte(content)); err != nil {
-			return fmt.Errorf("write %s: %w", cmdPath, err)
-		}
+	for _, name := range SkillNames {
+		_ = RemoveFileIfExists(filepath.Join(cmdDir, name+".toml"))
 	}
 
-	return nil
+	// Install skill files
+	return InstallSkills(geminiSkillsDir(global))
 }
 
 func (a *GeminiAdapter) Unregister(global bool) error {
-	// Remove MCP entry
-	if err := unconfigureMCPServersJSON(geminiConfigPath(global)); err != nil {
-		return fmt.Errorf("unconfigure gemini: %w", err)
-	}
+	// Remove legacy MCP config if present
+	_ = unconfigureMCPServersJSON(geminiConfigPath(global))
 
-	// Remove command files
+	// Remove legacy command files
 	cmdDir := geminiCommandsDir(global)
-	for _, name := range geminiCommandNames {
+	for _, name := range SkillNames {
 		_ = RemoveFileIfExists(filepath.Join(cmdDir, name+".toml"))
 	}
+
+	// Remove skill files
+	RemoveSkills(geminiSkillsDir(global))
 
 	return nil
 }
@@ -70,6 +68,16 @@ func (a *GeminiAdapter) Detect() bool {
 		return true
 	}
 	return false
+}
+
+func geminiSkillsDir(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, ".gemini", "skills")
+		}
+	}
+	return filepath.Join(".gemini", "skills")
 }
 
 func geminiConfigPath(global bool) string {
@@ -90,47 +98,4 @@ func geminiCommandsDir(global bool) string {
 		}
 	}
 	return filepath.Join(".gemini", "commands")
-}
-
-var geminiCommandNames = []string{"get-feedback", "review-plan", "review-plan-wait"}
-
-var geminiCommands = map[string]string{
-	"get-feedback": `description = "Retrieve review feedback from Monocle"
-prompt = """
-Run ` + "`monocle review get-feedback`" + ` to retrieve pending review feedback from your reviewer. If feedback is available, read it carefully and address the comments. If no feedback is pending, let the user know.
-"""
-`,
-	"review-plan": `description = "Send a plan to Monocle for review"
-prompt = """
-Submit a plan file to Monocle so your reviewer can see it. This does NOT wait for feedback — use /review-plan-wait if you need to block until the reviewer responds.
-
-Find the most recently modified plan file in the project (or use the path the user provided). Read it to get the filename and first heading.
-
-Run ` + "`monocle review send-artifact`" + ` with:
-- ` + "`--title`" + `: The first markdown heading from the plan, or the filename
-- ` + "`--file`" + `: Absolute path to the plan file
-- ` + "`--id`" + `: The plan filename (so updates replace the previous version)
-- ` + "`--type`" + `: md
-
-Confirm to the user that the plan was sent.
-"""
-`,
-	"review-plan-wait": `description = "Send a plan to Monocle and wait for review feedback"
-prompt = """
-Submit a plan file to Monocle and block until the reviewer responds. Use this when you need reviewer approval before proceeding.
-
-Find the most recently modified plan file in the project (or use the path the user provided). Read it to get the filename and first heading.
-
-Run ` + "`monocle review send-artifact --wait`" + ` with:
-- ` + "`--title`" + `: The first markdown heading from the plan, or the filename
-- ` + "`--file`" + `: Absolute path to the plan file
-- ` + "`--id`" + `: The plan filename (so updates replace the previous version)
-- ` + "`--type`" + `: md
-
-Handle the response:
-- If approved, inform the user and continue.
-- If feedback requests changes, update the plan and run ` + "`monocle review send-artifact --wait`" + ` again.
-- Keep iterating until approved.
-"""
-`,
 }

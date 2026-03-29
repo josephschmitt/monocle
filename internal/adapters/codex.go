@@ -1,24 +1,86 @@
 package adapters
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-// CodexAdapter handles MCP registration for OpenAI Codex CLI.
+// CodexAdapter handles Monocle registration for OpenAI Codex CLI.
+// Installs skill files only — no MCP server needed.
 type CodexAdapter struct{}
 
 func (a *CodexAdapter) Name() string  { return "codex" }
 func (a *CodexAdapter) Label() string { return "Codex CLI" }
 
 func (a *CodexAdapter) ConfigPaths(global bool) []string {
-	return []string{codexConfigPath(global)}
+	return SkillPaths(codexSkillsDir(global))
 }
 
 func (a *CodexAdapter) HasConfig(global bool) bool {
+	// Check for skill files
+	dir := codexSkillsDir(global)
+	for _, name := range SkillNames {
+		if _, err := os.Stat(filepath.Join(dir, name, "SKILL.md")); err == nil {
+			return true
+		}
+	}
+	// Also detect legacy MCP config
+	return hasLegacyCodexMCP(global)
+}
+
+func (a *CodexAdapter) Register(global bool) error {
+	// Clean up legacy MCP config if present
+	removeLegacyCodexMCP(global)
+
+	// Install skill files
+	return InstallSkills(codexSkillsDir(global))
+}
+
+func (a *CodexAdapter) Unregister(global bool) error {
+	// Remove legacy MCP config if present
+	removeLegacyCodexMCP(global)
+
+	// Remove skill files
+	RemoveSkills(codexSkillsDir(global))
+
+	return nil
+}
+
+// Detect returns true if Codex CLI appears to be installed.
+func (a *CodexAdapter) Detect() bool {
+	if _, err := exec.LookPath("codex"); err == nil {
+		return true
+	}
+	if _, err := os.Stat(".codex"); err == nil {
+		return true
+	}
+	return false
+}
+
+func codexSkillsDir(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, ".codex", "skills")
+		}
+	}
+	return filepath.Join(".codex", "skills")
+}
+
+func codexConfigPath(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, ".codex", "config.toml")
+		}
+	}
+	return filepath.Join(".codex", "config.toml")
+}
+
+// hasLegacyCodexMCP checks for the old MCP server TOML config.
+func hasLegacyCodexMCP(global bool) bool {
 	content, err := os.ReadFile(codexConfigPath(global))
 	if err != nil {
 		return false
@@ -26,41 +88,22 @@ func (a *CodexAdapter) HasConfig(global bool) bool {
 	return strings.Contains(string(content), "[mcp_servers.monocle]")
 }
 
-func (a *CodexAdapter) Register(global bool) error {
-	command := ResolveCommand(global)
-	path := codexConfigPath(global)
-
-	content, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-
-	existing := removeMonocleTOMLSection(string(content))
-
-	block := fmt.Sprintf("\n[mcp_servers.monocle]\ncommand = %q\nargs = [\"serve-mcp-channel\"]\n", command)
-
-	if len(existing) > 0 && !strings.HasSuffix(existing, "\n") {
-		block = "\n" + block
-	}
-
-	return WriteFileAtomic(path, []byte(existing+block))
-}
-
-func (a *CodexAdapter) Unregister(global bool) error {
+// removeLegacyCodexMCP removes the old MCP server TOML section.
+func removeLegacyCodexMCP(global bool) {
 	path := codexConfigPath(global)
 	content, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read %s: %w", path, err)
+		return
 	}
-
+	if !strings.Contains(string(content), "[mcp_servers.monocle]") {
+		return
+	}
 	cleaned := strings.TrimRight(removeMonocleTOMLSection(string(content)), "\n") + "\n"
 	if strings.TrimSpace(cleaned) == "" {
-		return RemoveFileIfExists(path)
+		_ = RemoveFileIfExists(path)
+	} else {
+		_ = WriteFileAtomic(path, []byte(cleaned))
 	}
-	return WriteFileAtomic(path, []byte(cleaned))
 }
 
 // removeMonocleTOMLSection strips the [mcp_servers.monocle] section and its
@@ -87,25 +130,4 @@ func removeMonocleTOMLSection(content string) string {
 	}
 
 	return strings.Join(result, "\n")
-}
-
-// Detect returns true if Codex CLI appears to be installed.
-func (a *CodexAdapter) Detect() bool {
-	if _, err := exec.LookPath("codex"); err == nil {
-		return true
-	}
-	if _, err := os.Stat(".codex"); err == nil {
-		return true
-	}
-	return false
-}
-
-func codexConfigPath(global bool) string {
-	if global {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(home, ".codex", "config.toml")
-		}
-	}
-	return filepath.Join(".codex", "config.toml")
 }
