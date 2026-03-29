@@ -1,17 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "monocle": {
-      "type": "local",
-      "command": ["./bin/monocle", "serve-mcp-channel"],
-      "enabled": true
-    }
-  },
   "agent": {
-    "plan": {
-      "permission": {
-        "mcp__monocle": "allow"
-      }
-    }
+    "plan": {}
   }
 }
