@@ -25,5 +25,17 @@
       "Bash(diff:*)",
       "Bash(devbox run -- make*)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'export PATH=\"./bin:$PATH\"' >> \"$CLAUDE_ENV_FILE\""
+          }
+        ]
+      }
+    ]
   }
 }
