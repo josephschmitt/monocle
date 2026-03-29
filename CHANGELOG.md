@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.34.0](https://github.com/josephschmitt/monocle/compare/v0.33.0...v0.34.0) (2026-03-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **register:** embed SKILL.md files, drop MCP for non-channel agents
+* **channel:** strip MCP tools from channel, move to CLI skills
+
+### Features
+
+* add Codex and Gemini plugins, reorganize plugin structure ([8fba304](https://github.com/josephschmitt/monocle/commit/8fba304d7e6cdc3abc8ae75fb02c75630ce0778c))
+* **cli:** add monocle review subcommands for agent-facing CLI tools ([ae6a4d3](https://github.com/josephschmitt/monocle/commit/ae6a4d35825e0cf246cd5fff47e0f9827587151a))
+* **release:** add prerelease beta release support for next branch ([f27ebaa](https://github.com/josephschmitt/monocle/commit/f27ebaa387ea529b4099afaa7a9680f48a56baf4))
+* **skills:** sync root skills into plugin directories via make target ([24b6266](https://github.com/josephschmitt/monocle/commit/24b6266714bea2df381c8de7ff7af8c0fa605054))
+* **tui:** add alt-based word navigation and deletion keybindings ([57bb0ab](https://github.com/josephschmitt/monocle/commit/57bb0abdf39f5f3bb026dab285df835e7bf686e1))
+
+
+### Bug Fixes
+
+* **channel:** remove ListToolsRequestSchema handler that crashes without tools capability ([ede5d05](https://github.com/josephschmitt/monocle/commit/ede5d05d521a9b1a5de6c7c0da6f8bf5132cfcff))
+* **tui:** restore plan/artifact diff support for content item versions ([8e3b704](https://github.com/josephschmitt/monocle/commit/8e3b70400fd4546ef580789d337d55fb2cf7ede4))
+
+
+### Code Refactoring
+
+* **channel:** strip MCP tools from channel, move to CLI skills ([a516481](https://github.com/josephschmitt/monocle/commit/a516481f6191b8de427d2a6389201ce0611cd2c9))
+* **register:** embed SKILL.md files, drop MCP for non-channel agents ([c614109](https://github.com/josephschmitt/monocle/commit/c61410978b280947ae2a9289b234239ee71690bc))
+
 ## [0.33.0](https://github.com/josephschmitt/monocle/compare/v0.32.0...v0.33.0) (2026-03-28)
 
 
