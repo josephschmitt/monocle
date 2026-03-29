@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.34.0-beta](https://github.com/josephschmitt/monocle/compare/v0.33.0...v0.34.0-beta) (2026-03-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **register:** embed SKILL.md files, drop MCP for non-channel agents
+* **channel:** strip MCP tools from channel, move to CLI skills
+
+### Features
+
+* add Codex and Gemini plugins, reorganize plugin structure ([dd90dff](https://github.com/josephschmitt/monocle/commit/dd90dffbd2ecd3bb89101ad6fef48ccc7aee6b4c))
+* **cli:** add monocle review subcommands for agent-facing CLI tools ([675780a](https://github.com/josephschmitt/monocle/commit/675780a9eb76f9ca659d283adca285ac7866d4d9))
+* **release:** add prerelease beta release support for next branch ([f27ebaa](https://github.com/josephschmitt/monocle/commit/f27ebaa387ea529b4099afaa7a9680f48a56baf4))
+* **skills:** sync root skills into plugin directories via make target ([17594c1](https://github.com/josephschmitt/monocle/commit/17594c103278fd855745adcf7b13db14c1841efa))
+* **tui:** add alt-based word navigation and deletion keybindings ([57bb0ab](https://github.com/josephschmitt/monocle/commit/57bb0abdf39f5f3bb026dab285df835e7bf686e1))
+
+
+### Bug Fixes
+
+* **channel:** remove ListToolsRequestSchema handler that crashes without tools capability ([1553495](https://github.com/josephschmitt/monocle/commit/1553495fe4d4b660c5d2b6fe6f7f7ff529952b47))
+* **release:** add prerelease versioning strategy for beta releases ([1093f32](https://github.com/josephschmitt/monocle/commit/1093f32a6039b5b0fce50490d17c4c7962712023))
+* **tui:** restore plan/artifact diff support for content item versions ([8e3b704](https://github.com/josephschmitt/monocle/commit/8e3b70400fd4546ef580789d337d55fb2cf7ede4))
+
+
+### Code Refactoring
+
+* **channel:** strip MCP tools from channel, move to CLI skills ([d820171](https://github.com/josephschmitt/monocle/commit/d8201714a682c42d146bbf8e26fad4542061fe4d))
+* **register:** embed SKILL.md files, drop MCP for non-channel agents ([daa9883](https://github.com/josephschmitt/monocle/commit/daa988379ad79b89d90aee1d38c0b2a736abbe5a))
+
 ## [0.33.0](https://github.com/josephschmitt/monocle/compare/v0.32.0...v0.33.0) (2026-03-28)
 
 
