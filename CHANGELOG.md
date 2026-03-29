@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.34.0](https://github.com/josephschmitt/monocle/compare/v0.33.0...v0.34.0) (2026-03-29)
+
+
+### Features
+
+* **release:** add prerelease beta release support for next branch ([f27ebaa](https://github.com/josephschmitt/monocle/commit/f27ebaa387ea529b4099afaa7a9680f48a56baf4))
+* **tui:** add alt-based word navigation and deletion keybindings ([57bb0ab](https://github.com/josephschmitt/monocle/commit/57bb0abdf39f5f3bb026dab285df835e7bf686e1))
+
+
+### Bug Fixes
+
+* **release:** add prerelease versioning strategy for beta releases ([1093f32](https://github.com/josephschmitt/monocle/commit/1093f32a6039b5b0fce50490d17c4c7962712023))
+* **release:** use numbered prerelease-type to ensure beta.0 suffix ([1ac4bde](https://github.com/josephschmitt/monocle/commit/1ac4bde3d7cc1b49db7c900cb323821635f0d7b4))
+* **tui:** restore plan/artifact diff support for content item versions ([8e3b704](https://github.com/josephschmitt/monocle/commit/8e3b70400fd4546ef580789d337d55fb2cf7ede4))
+
 ## [0.33.0](https://github.com/josephschmitt/monocle/compare/v0.32.0...v0.33.0) (2026-03-28)
 
 
