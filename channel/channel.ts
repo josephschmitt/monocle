@@ -1,8 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+
 import { connect } from "net";
 import { createHash } from "crypto";
 import { statSync, existsSync } from "fs";
@@ -282,11 +280,6 @@ const engine = new EngineConnection(
   // onConnectionChange
   (_connected: boolean) => {},
 );
-
-// No tools — all operations are CLI commands now.
-mcp.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: [] };
-});
 
 // -- Start --
 
