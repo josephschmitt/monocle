@@ -1,5 +1,11 @@
 rc: .devboxrc
 
+pre-commit:
+  commands:
+    sync-skills:
+      glob: "skills/**"
+      run: make sync-skills && git add plugins/claude/skills plugins/codex/skills plugins/gemini/skills
+
 pre-push:
   commands:
     build:
