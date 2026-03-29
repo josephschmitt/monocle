@@ -19,9 +19,8 @@ Monocle gives you a proper review loop without slowing the agent down. It doesn'
 
 ## Requirements
 
-- An MCP-compatible coding agent: [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google/gemini-cli), or any agent that supports MCP tool servers
-- A JavaScript runtime for the MCP server: [Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org) (auto-detected in that order)
-- For push notifications: [Claude Code](https://claude.com/claude-code) v2.1.80+ with [MCP channel support](https://code.claude.com/docs/en/channels-reference) (requires claude.ai login, not API keys)
+- A coding agent: [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google/gemini-cli), or any agent that supports [agent skills](https://agentskills.io)
+- For push notifications (Claude Code only): a JavaScript runtime ([Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org)) and [MCP channel support](https://code.claude.com/docs/en/channels-reference)
 - A terminal with 256-color or true color support
 - A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
 
@@ -327,21 +326,29 @@ monocle --version                    Print version
 
 The `agent` argument is one of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you select which agents to register. The `--global` flag writes to the user-level config directory instead of the project.
 
+### Agent-Facing Commands
+
+These commands are used by agents (via skills) to interact with a running Monocle session:
+
+```
+monocle review status [--json]                          Check review status
+monocle review get-feedback [--wait] [--json]            Retrieve review feedback
+monocle review send-artifact --title T [--file F] [--id ID] [--type EXT] [--wait] [--json]
+                                                         Send content for review
+monocle review add-files <paths...> [--json]             Add files to review session
+```
+
+- `--wait` blocks until the reviewer responds (used by `/review-plan-wait` skill)
+- `--json` outputs structured JSON for programmatic use
+- `send-artifact` reads from `--file` or stdin
+
 ### Manual Socket Override
 
-If auto-pairing fails (e.g., Claude Code's working directory differs from Monocle's), you can manually specify the socket path on either side:
+If auto-pairing fails (e.g., the agent's working directory differs from Monocle's), you can manually specify the socket path:
 
 - **Monocle:** `monocle --socket /tmp/monocle-abc123.sock`
-- **Channel (env var):** Set `MONOCLE_SOCKET` in your `.mcp.json`:
-  ```json
-  {
-    "mcpServers": {
-      "monocle": {
-        "env": { "MONOCLE_SOCKET": "/tmp/monocle-abc123.sock" }
-      }
-    }
-  }
-  ```
+- **Agent commands:** `MONOCLE_SOCKET=/tmp/monocle-abc123.sock monocle review status`
+- **MCP channel (Claude):** Set `MONOCLE_SOCKET` in `.mcp.json` env
 
 Press `I` in the TUI to see the current socket path and connection status.
 

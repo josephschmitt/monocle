@@ -1,6 +1,6 @@
 # Monocle
 
-Terminal-based code review companion for AI coding agents. Developers run it alongside their agent — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle delivers that feedback via MCP.
+Terminal-based code review companion for AI coding agents. Developers run it alongside their agent — the agent writes code, the developer reviews diffs and leaves structured feedback, and Monocle delivers that feedback via CLI commands and push notifications.
 
 ## Quick Start
 
@@ -16,31 +16,38 @@ devbox run -- make lint               # Vet + build check
 ## Architecture
 
 Single binary with CLI subcommands:
-- **`monocle`** — TUI + CLI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
-- **`monocle register`** — Register MCP channel for Claude Code (.mcp.json entry).
-- **`monocle unregister`** — Remove MCP channel registration.
-- **`monocle serve-mcp-channel`** — (hidden) Run the MCP channel server. Called by Claude Code, not users.
+- **`monocle`** — TUI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
+- **`monocle review`** — Agent-facing CLI commands: `status`, `get-feedback`, `send-artifact`, `add-files`.
+- **`monocle register`** — Install skills and (for Claude) MCP channel config.
+- **`monocle unregister`** — Remove skills and MCP channel config.
+- **`monocle serve-mcp-channel`** — (hidden) Run the MCP channel server for push notifications. Called by Claude Code, not users.
 
-### Integration Model: MCP Channel
+### Integration Model: CLI + Push Notifications
 
-Claude Code integrates with Monocle via an **MCP channel** — a stdio MCP server (bundled JS, served by `monocle serve-mcp-channel`) that connects to Monocle's Unix domain socket. The channel exposes MCP tools (`review_status`, `get_feedback`, `submit_for_review`) and pushes review feedback to Claude Code via notifications.
+Agents interact with Monocle via **CLI commands** (`monocle review ...`) for pull-based operations and **MCP channel notifications** (Claude Code only) for push-based events.
+
+- **CLI commands** — `monocle review status`, `get-feedback`, `send-artifact`, `add-files` connect to the engine's Unix socket, send a request, print the response, and exit. All agents use these via skills.
+- **MCP channel** (Claude Code only) — a slim stdio MCP server that forwards push notifications (`feedback_submitted`, `pause_requested`) as channel events. No tools — all operations are CLI commands.
+- **Skills** — standardized `SKILL.md` files (agentskills.io format) embedded in the binary and installed by `monocle register`. Skills instruct agents to run the CLI commands.
 
 **Key design:**
-- **Push-based** — Monocle pushes feedback to Claude Code via MCP notifications, no polling needed
+- **Push+pull** — Claude Code gets push notifications via MCP channel, then runs CLI commands to retrieve feedback. Other agents use skills to poll.
 - **User-initiated review** — reviewer works at their own pace, submits when ready
-- **Pause flow** — reviewer can request a pause; Claude Code receives a notification and blocks on `get_feedback`
+- **Pause flow** — reviewer can request a pause; agent runs `monocle review get-feedback --wait` to block
 
 ### Package Layout
 
 ```
-cmd/monocle/          Main CLI entry point (Kong commands)
-channel/              MCP channel source (TypeScript) + esbuild bundling
+cmd/monocle/          Main CLI entry point (Kong commands, including monocle review subcommands)
+channel/              MCP channel source (TypeScript) + esbuild bundling (push notifications only)
+skills/               Embedded SKILL.md files (agentskills.io format) shared by all agents
 internal/
   types/              Domain types (ReviewSession, ChangedFile, ReviewComment, Config)
   protocol/           NDJSON message types + marshal/unmarshal (GetReviewStatus, PollFeedback, SubmitContent)
+  client/             Socket client for CLI commands (connects to engine socket)
   db/                 SQLite layer (schema, migrations, typed queries)
   core/               Engine, git client, feedback queue, formatter, session manager, socket server
-  adapters/           Claude Code MCP channel registration, repo/socket utilities
+  adapters/           Agent registration, skill installation, repo/socket utilities
   tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, plan view, modals, theme)
 ```
 
@@ -51,18 +58,20 @@ internal/
 ### Data Flow
 
 ```
-Claude Code calls MCP tool → channel.ts → Unix socket → SocketServer → Engine
+Agent runs `monocle review send-artifact` → CLI → Unix socket → SocketServer → Engine
+Agent runs `monocle review get-feedback` → CLI → Unix socket → SocketServer → Engine
 Engine → emits events → BridgeEngineEvents → tea.Program.Send() → TUI updates
-User submits review → Engine → FeedbackQueue → channel.ts sends MCP notification → Claude Code
+User submits review → Engine → FeedbackQueue → channel.ts sends MCP notification → Agent
+Agent runs `monocle review get-feedback` → retrieves feedback
 ```
 
 ### Pause Flow
 
 ```
 User presses P in TUI → Engine.RequestPause() → sets pause flag
-Claude Code calls review_status → sees "pause_requested"
-Claude Code calls get_feedback → blocks until user submits
-User reviews, adds comments, submits → FeedbackQueue releases → notification sent to Claude Code
+Agent runs `monocle review status` → sees "pause_requested"
+Agent runs `monocle review get-feedback --wait` → blocks until user submits
+User reviews, adds comments, submits → FeedbackQueue releases → notification sent → Agent retrieves
 ```
 
 ## Tech Stack
@@ -128,10 +137,11 @@ User reviews, adds comments, submits → FeedbackQueue releases → notification
 
 ## Monocle Integration
 
-When Monocle's MCP tools are available:
-- Use the `submit_for_review` MCP tool to send content (plans, decisions, summaries) for the reviewer to see
-- Use the content's filename as the `id` parameter so updates replace the previous version
-- In plan mode, use `submit_for_review_and_wait` instead — it blocks until the reviewer responds. If they request changes, update and call again until approved.
+When Monocle is running, use the `/review-plan` or `/review-plan-wait` skills to send plans for review. These skills run CLI commands under the hood:
+- `monocle review send-artifact --title "..." --file <path> --id <filename>` — send content for the reviewer to see
+- `monocle review send-artifact --title "..." --file <path> --id <filename> --wait` — send and block until the reviewer responds
+- `monocle review get-feedback` — retrieve pending feedback
+- `monocle review status` — check if feedback is pending or a pause was requested
 
 ## Release Process
 
