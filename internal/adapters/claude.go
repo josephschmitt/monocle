@@ -18,7 +18,9 @@ func (a *ClaudeAdapter) Label() string { return "Claude Code" }
 
 // ConfigPaths returns the files written by Register.
 func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
-	return []string{mcpJSONPath(global)}
+	paths := []string{mcpJSONPath(global)}
+	paths = append(paths, SkillPaths(claudeSkillsDir(global))...)
+	return paths
 }
 
 // HasConfig returns true if monocle is configured at the given scope via .mcp.json or Claude Code plugin.
@@ -48,21 +50,23 @@ func (a *ClaudeAdapter) Detect() bool {
 	return false
 }
 
-// Register adds monocle to .mcp.json.
-// If global is true, .mcp.json is written to ~/.mcp.json instead of the project.
+// Register adds monocle to .mcp.json and installs skill files.
 func (a *ClaudeAdapter) Register(global bool) error {
 	if err := a.configureMCP(global); err != nil {
 		return fmt.Errorf("configure mcp: %w", err)
 	}
+	if err := InstallSkills(claudeSkillsDir(global)); err != nil {
+		return fmt.Errorf("install skills: %w", err)
+	}
 	return nil
 }
 
-// Unregister removes monocle from .mcp.json.
-// If global is true, removes from ~/.mcp.json instead of the project.
+// Unregister removes monocle from .mcp.json and removes skill files.
 func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
 	}
+	RemoveSkills(claudeSkillsDir(global))
 	return nil
 }
 
@@ -287,6 +291,18 @@ func installedPluginsPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
+}
+
+// claudeSkillsDir returns the directory for Claude Code skill files.
+func claudeSkillsDir(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(".claude", "skills")
+		}
+		return filepath.Join(home, ".claude", "skills")
+	}
+	return filepath.Join(".claude", "skills")
 }
 
 // mcpJSONPath returns the path for .mcp.json.
