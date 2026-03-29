@@ -1,16 +1,22 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/alecthomas/kong"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
+	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/tui"
 )
 
@@ -18,12 +24,48 @@ var version = "dev"
 
 type CLI struct {
 	Run             RunCmd             `cmd:"" default:"withargs" help:"Start a review session"`
+	Review          ReviewCmd          `cmd:"review" help:"Commands for interacting with a Monocle review session"`
 	Register        RegisterCmd        `cmd:"" help:"Register Monocle for an agent"`
 	Unregister      UnregisterCmd      `cmd:"" help:"Remove Monocle registration"`
 	ServeMcpChannel ServeMCPChannelCmd `cmd:"serve-mcp-channel" help:"Run the MCP channel server" hidden:""`
 	Install         InstallCmd         `cmd:"" help:"Install MCP channel (alias for register)" hidden:""`
 	Uninstall       UninstallCmd       `cmd:"" help:"Remove MCP channel (alias for unregister)" hidden:""`
 	Version         kong.VersionFlag   `help:"Print version" name:"version"`
+}
+
+// ReviewCmd groups agent-facing subcommands for interacting with a running Monocle session.
+type ReviewCmd struct {
+	Status       ReviewStatusCmd       `cmd:"status" help:"Check the current review status"`
+	GetFeedback  ReviewGetFeedbackCmd  `cmd:"get-feedback" help:"Retrieve review feedback"`
+	SendArtifact ReviewSendArtifactCmd `cmd:"send-artifact" help:"Send content to the reviewer"`
+	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
+}
+
+type ReviewStatusCmd struct {
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+type ReviewGetFeedbackCmd struct {
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Wait   bool   `help:"Block until feedback is available" default:"false"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+type ReviewSendArtifactCmd struct {
+	Socket      string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Title       string `help:"Title for the content" required:""`
+	File        string `help:"Path to file to submit" type:"path" default:""`
+	ID          string `help:"ID for updating existing content" default:""`
+	ContentType string `help:"File extension for syntax highlighting (md, go, py, ts)" name:"type" default:""`
+	Wait        bool   `help:"Block until reviewer responds with feedback" default:"false"`
+	JSON        bool   `help:"Output as JSON" default:"false"`
+}
+
+type ReviewAddFilesCmd struct {
+	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Paths  []string `arg:"" required:"" help:"File or directory paths to add for review"`
+	JSON   bool     `help:"Output as JSON" default:"false"`
 }
 
 type RunCmd struct {
@@ -167,6 +209,207 @@ func (cmd *InstallCmd) Run() error {
 func (cmd *UninstallCmd) Run() error {
 	fmt.Fprintln(os.Stderr, "Note: 'monocle uninstall' is deprecated, use 'monocle unregister' instead")
 	return (&UnregisterCmd{Agent: cmd.Agent, Global: cmd.Global}).Run()
+}
+
+// -- Review subcommand implementations --
+
+func (cmd *ReviewStatusCmd) Run() error {
+	c, err := client.ConnectWithOverride(cmd.Socket)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.GetReviewStatusMsg{Type: protocol.TypeGetReviewStatus},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("review status: %w", err)
+	}
+
+	status := resp.(*protocol.GetReviewStatusResponse)
+	if cmd.JSON {
+		return printJSON(status)
+	}
+	if status.Summary != "" {
+		fmt.Println(status.Summary)
+	} else {
+		fmt.Println(status.Status)
+	}
+	return nil
+}
+
+func (cmd *ReviewGetFeedbackCmd) Run() error {
+	c, err := client.ConnectWithOverride(cmd.Socket)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	timeout := client.DefaultTimeout
+	if cmd.Wait {
+		timeout = 0 // no deadline — block until feedback
+	}
+
+	resp, err := c.Request(
+		&protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: cmd.Wait},
+		timeout,
+	)
+	if err != nil {
+		return fmt.Errorf("get feedback: %w", err)
+	}
+
+	feedback := resp.(*protocol.PollFeedbackResponse)
+	if cmd.JSON {
+		return printJSON(feedback)
+	}
+	if !feedback.HasFeedback {
+		fmt.Println("No feedback pending.")
+		return nil
+	}
+	fmt.Println(feedback.Feedback)
+	return nil
+}
+
+func (cmd *ReviewSendArtifactCmd) Run() error {
+	// Resolve content: --file, or stdin
+	var content string
+	if cmd.File != "" {
+		data, err := os.ReadFile(cmd.File)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+		content = string(data)
+		// Default ID to filename if not set
+		if cmd.ID == "" {
+			cmd.ID = filepath.Base(cmd.File)
+		}
+	} else {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("read stdin: %w", err)
+		}
+		content = string(data)
+		if content == "" {
+			return fmt.Errorf("no content: provide --file or pipe content to stdin")
+		}
+	}
+
+	c, err := client.ConnectWithOverride(cmd.Socket)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SubmitContentMsg{
+			Type:        protocol.TypeSubmitContent,
+			ID:          cmd.ID,
+			Title:       cmd.Title,
+			Content:     content,
+			ContentType: cmd.ContentType,
+			IsPlan:      true,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("send artifact: %w", err)
+	}
+
+	submit := resp.(*protocol.SubmitContentResponse)
+	if !cmd.Wait {
+		if cmd.JSON {
+			return printJSON(submit)
+		}
+		fmt.Println(submit.Message)
+		return nil
+	}
+
+	// --wait: open a new connection and block for feedback
+	c.Close()
+	c2, err := client.ConnectWithOverride(cmd.Socket)
+	if err != nil {
+		return fmt.Errorf("reconnect for wait: %w", err)
+	}
+	defer c2.Close()
+
+	feedbackResp, err := c2.Request(
+		&protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: true},
+		0, // no deadline
+	)
+	if err != nil {
+		return fmt.Errorf("wait for feedback: %w", err)
+	}
+
+	feedback := feedbackResp.(*protocol.PollFeedbackResponse)
+	if cmd.JSON {
+		return printJSON(feedback)
+	}
+	if !feedback.HasFeedback {
+		fmt.Println("Approved. No feedback from reviewer.")
+		return nil
+	}
+	fmt.Println(feedback.Feedback)
+	return nil
+}
+
+func (cmd *ReviewAddFilesCmd) Run() error {
+	// Resolve paths to absolute
+	absPaths := make([]string, len(cmd.Paths))
+	for i, p := range cmd.Paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return fmt.Errorf("resolve path %q: %w", p, err)
+		}
+		absPaths[i] = abs
+	}
+
+	c, err := client.ConnectWithOverride(cmd.Socket)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.AddAdditionalFilesMsg{
+			Type:  protocol.TypeAddAdditionalFiles,
+			Paths: absPaths,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("add files: %w", err)
+	}
+
+	add := resp.(*protocol.AddAdditionalFilesResponse)
+	if cmd.JSON {
+		return printJSON(add)
+	}
+	fmt.Println(add.Message)
+	return nil
+}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 func startNewSession(engine core.EngineAPI, repoRoot string) error {
