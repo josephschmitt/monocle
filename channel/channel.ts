@@ -2,11 +2,10 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
-  CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { connect } from "net";
 import { createHash } from "crypto";
-import { statSync, existsSync, readFileSync } from "fs";
+import { statSync, existsSync } from "fs";
 import { resolve, join, dirname } from "path";
 
 // -- Socket path computation (mirrors Go's FindRepoRoot + DefaultSocketPath) --
@@ -39,14 +38,13 @@ type Message = {
 };
 
 // -- Engine Connection --
+// Maintains a persistent socket connection to the Monocle engine for receiving
+// push event notifications. Pull-based operations (get-feedback, send-artifact,
+// etc.) are handled by the `monocle review` CLI commands, not this channel.
 
 class EngineConnection {
   private socketPath: string;
   private conn: ReturnType<typeof connect> | null = null;
-  private pendingRequests = new Map<
-    string,
-    { resolve: (msg: Message) => void; reject: (err: Error) => void }
-  >();
   private onEvent: (event: string, payload: Record<string, any>) => void;
   private onConnectionChange: (connected: boolean) => void;
   private lineBuffer = "";
@@ -91,9 +89,6 @@ class EngineConnection {
       }
 
       this.conn = connect(this.socketPath, () => {
-        // Always use ConnectMsg: receives event notifications for channel
-        // forwarding but does not increment subscriberCount (feedback always
-        // queues for pull delivery via get_feedback).
         const msg = JSON.stringify({
           type: "connect",
           events: [
@@ -153,36 +148,7 @@ class EngineConnection {
   private handleMessage(msg: Message) {
     if (msg.type === "event_notification") {
       this.onEvent(msg.event, msg.payload || {});
-      return;
     }
-
-    // Response to a request — match by type
-    const key = msg.type;
-    const pending = this.pendingRequests.get(key);
-    if (pending) {
-      this.pendingRequests.delete(key);
-      pending.resolve(msg);
-    }
-  }
-
-  async request(msg: Message): Promise<Message> {
-    if (!this.conn || this.conn.destroyed) {
-      throw new Error("Not connected to monocle engine");
-    }
-
-    return new Promise((resolve, reject) => {
-      const responseType = msg.type + "_response";
-      this.pendingRequests.set(responseType, { resolve, reject });
-      this.conn!.write(JSON.stringify(msg) + "\n");
-
-      // Timeout after 30s
-      setTimeout(() => {
-        if (this.pendingRequests.has(responseType)) {
-          this.pendingRequests.delete(responseType);
-          reject(new Error("Request timed out: " + msg.type));
-        }
-      }, 30000);
-    });
   }
 
   private scheduleReconnect() {
@@ -200,10 +166,8 @@ class EngineConnection {
           }
         } catch {
           if (this.hasConnected) {
-            // Reconnecting after disconnect: exponential backoff, cap at 10s
             attempt(Math.min(delay * 2, 10000));
           } else {
-            // Initial connection: fixed 2s interval for fast detection
             attempt(2000);
           }
         }
@@ -214,12 +178,10 @@ class EngineConnection {
     attempt(this.hasConnected ? 1000 : 2000);
   }
 
-  // Start trying to connect in the background. Never throws.
   connectInBackground() {
     this.scheduleReconnect();
   }
 
-  // Send agent identification (fire-and-forget, no response expected).
   identify(agent: string) {
     this.agentName = agent;
     if (this.conn && !this.conn.destroyed) {
@@ -227,7 +189,6 @@ class EngineConnection {
     }
   }
 
-  // Wait up to timeoutMs for the engine connection to be established.
   waitForConnection(timeoutMs: number): Promise<boolean> {
     if (this._connected) return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
@@ -255,47 +216,11 @@ class EngineConnection {
   }
 }
 
-// -- Blocking connection for get_feedback --wait --
-
-async function blockingGetFeedback(socketPath: string): Promise<Message> {
-  return new Promise((resolve, reject) => {
-    const conn = connect(socketPath, () => {
-      const msg = JSON.stringify({ type: "poll_feedback", wait: true });
-      conn.write(msg + "\n");
-    });
-
-    conn.setEncoding("utf8");
-    let buf = "";
-
-    conn.on("data", (chunk: string) => {
-      buf += chunk;
-      const lines = buf.split("\n");
-      buf = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          resolve(msg);
-          conn.destroy();
-        } catch {
-          // ignore
-        }
-      }
-    });
-
-    conn.on("error", (err: Error) => reject(err));
-    conn.on("close", () => reject(new Error("Connection closed")));
-  });
-}
-
 // -- Instructions --
 
 const INSTRUCTIONS = [
-  "IMPORTANT: submit_for_review and submit_for_review_and_wait are restricted to the top-level agent. Subagents and background tasks must NEVER call these tools.",
-  "",
-  "When you receive a feedback_submitted event, call the get_feedback tool to retrieve the review.",
-  "When you receive a pause_requested event, call the get_feedback tool with wait=true to block until the reviewer submits feedback.",
+  "When you receive a feedback_submitted event, run `monocle review get-feedback` to retrieve the review.",
+  "When you receive a pause_requested event, run `monocle review get-feedback --wait` to block until the reviewer submits feedback.",
 ].join("\n");
 
 // -- Main --
@@ -304,46 +229,38 @@ const cwd = process.cwd();
 const repoRoot = findRepoRoot(cwd);
 const socketPath = process.env.MONOCLE_SOCKET || defaultSocketPath(repoRoot);
 
-// When a tool (submit_for_review_and_wait, get_feedback --wait) is blocking for
-// feedback, suppress the event-based notification to avoid delivering the
-// same feedback twice.
-let waitingForFeedback = false;
-
-// Create MCP server with channel capability (fire-and-forget: if the client
-// supports channels, notifications arrive as channel events; if not, they're
-// silently ignored and the agent uses get_feedback manually).
+// MCP server with channel capability for push notifications only.
+// Pull-based operations are handled by `monocle review` CLI commands.
 const mcp = new Server(
   { name: "monocle", version: "1.0.0" },
   {
     capabilities: {
       experimental: { "claude/channel": {} },
-      tools: {},
     },
     instructions: INSTRUCTIONS,
   },
 );
 
-// Engine connection with event handler that tries to push channel notifications.
-// These are fire-and-forget: if channels are active, the agent gets prompted
-// to call get_feedback. If not, the notification is silently dropped.
+// Engine connection — forwards push events as channel notifications.
+// These are fire-and-forget hints: the agent runs `monocle review get-feedback`
+// to actually retrieve the feedback.
 const engine = new EngineConnection(
   socketPath,
   // onEvent
   (event, payload) => {
     switch (event) {
       case "feedback_submitted":
-        if (waitingForFeedback) break; // Tool call will deliver this feedback
         mcp
           .notification({
             method: "notifications/claude/channel",
             params: {
               content:
                 payload.message ||
-                "Your reviewer has submitted feedback. Call get_feedback to retrieve it.",
+                "Your reviewer has submitted feedback. Run `monocle review get-feedback` to retrieve it.",
               meta: { event: "feedback_submitted" },
             },
           })
-          .catch(() => { /* channel not available — agent uses /get-feedback manually */ });
+          .catch(() => {});
         break;
       case "pause_changed":
         if (payload.status === "pause_requested") {
@@ -353,333 +270,41 @@ const engine = new EngineConnection(
               params: {
                 content:
                   "Your reviewer has requested you pause and wait for feedback. " +
-                  "Use the get_feedback tool with wait=true to block until feedback is ready.",
+                  "Run `monocle review get-feedback --wait` to block until feedback is ready.",
                 meta: { event: "pause_requested" },
               },
             })
-            .catch(() => { /* channel not available */ });
+            .catch(() => {});
         }
-        break;
-      case "content_item_added":
-        // Informational — no push needed, the agent submitted this
-        break;
-      case "additional_file_added":
-        // Informational — no push needed, the agent added this
         break;
     }
   },
-  // onConnectionChange — notify Claude Code to re-fetch tools
-  (_connected: boolean) => {
-    mcp
-      .notification({ method: "notifications/tools/list_changed" })
-      .catch(() => {});
-  },
+  // onConnectionChange
+  (_connected: boolean) => {},
 );
 
-// -- Tools --
-
-const TOOLS = [
-    {
-      name: "review_status",
-      description:
-        "Check the current review status, including whether feedback is pending or a pause has been requested.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {},
-      },
-    },
-    {
-      name: "get_feedback",
-      description:
-        "Retrieve queued review feedback. When wait is true, blocks until feedback is available.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
-          wait: {
-            type: "boolean",
-            description: "Block until feedback is available",
-          },
-        },
-      },
-    },
-    {
-      name: "submit_for_review",
-      description:
-        "Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
-          title: {
-            type: "string",
-            description: "Title for the plan or content",
-          },
-          content: {
-            type: "string",
-            description: "The plan or content body (markdown supported). Ignored if file_path is provided.",
-          },
-          file_path: {
-            type: "string",
-            description: "Absolute path to a file whose content to submit. Takes precedence over content.",
-          },
-          id: {
-            type: "string",
-            description: "Optional ID for updating existing content",
-          },
-          content_type: {
-            type: "string",
-            description:
-              "File extension for syntax highlighting (e.g. 'md', 'go', 'py', 'ts')",
-          },
-        },
-        required: ["title"],
-      },
-    },
-    {
-      name: "add_files",
-      description:
-        "Add files or directories to the review session in Monocle. Accepts absolute paths.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
-          paths: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Absolute file or directory paths to add for review",
-          },
-        },
-        required: ["paths"],
-      },
-    },
-    {
-      name: "submit_for_review_and_wait",
-      description:
-        "Submit content for review in Monocle and block until the reviewer responds. " +
-        "Accepts inline content or a file path. An empty response means no comments were left.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
-          title: {
-            type: "string",
-            description: "Title for the plan or content",
-          },
-          content: {
-            type: "string",
-            description: "The plan or content body (markdown supported). Ignored if file_path is provided.",
-          },
-          file_path: {
-            type: "string",
-            description: "Absolute path to a file whose content to submit. Takes precedence over content.",
-          },
-          id: {
-            type: "string",
-            description: "Optional ID for updating existing content",
-          },
-          content_type: {
-            type: "string",
-            description:
-              "File extension for syntax highlighting (e.g. 'md', 'go', 'py', 'ts')",
-          },
-        },
-        required: ["title"],
-      },
-    },
-];
-
-let initialWaitDone = false;
-
+// No tools — all operations are CLI commands now.
 mcp.setRequestHandler(ListToolsRequestSchema, async () => {
-  if (!engine.isConnected && !initialWaitDone) {
-    initialWaitDone = true;
-    await engine.waitForConnection(10000);
-  }
-  return { tools: engine.isConnected ? TOOLS : [] };
-});
-
-mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const args = (req.params.arguments || {}) as Record<string, any>;
-
-  switch (req.params.name) {
-    case "review_status": {
-      try {
-        const resp = await engine.request({ type: "get_review_status" });
-        return {
-          content: [
-            { type: "text" as const, text: resp.summary || "No reviewer connected." },
-          ],
-        };
-      } catch {
-        return {
-          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
-        };
-      }
-    }
-
-    case "get_feedback": {
-      try {
-        let resp: Message;
-        if (args.wait) {
-          waitingForFeedback = true;
-          try {
-            resp = await blockingGetFeedback(socketPath);
-          } finally {
-            // Defer flag reset: the Go engine wakes the blocking poll before
-            // emitting the event notification, so the event may still be
-            // in-flight on the subscription socket when this resolves.
-            setTimeout(() => { waitingForFeedback = false; }, 200);
-          }
-        } else {
-          resp = await engine.request({ type: "poll_feedback", wait: false });
-        }
-
-        if (resp.has_feedback) {
-          return {
-            content: [{ type: "text" as const, text: resp.feedback }],
-          };
-        }
-        return {
-          content: [{ type: "text" as const, text: "No feedback pending." }],
-        };
-      } catch {
-        return {
-          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
-        };
-      }
-    }
-
-    case "submit_for_review": {
-      try {
-        let content = args.content || "";
-        if (args.file_path) {
-          content = readFileSync(args.file_path, "utf-8");
-        }
-        if (!content) {
-          return {
-            content: [{ type: "text" as const, text: "Either content or file_path must be provided." }],
-          };
-        }
-        const resp = await engine.request({
-          type: "submit_content",
-          id: args.id || "",
-          title: args.title,
-          content,
-          content_type: args.content_type || "",
-          is_plan: true,
-        });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: resp.message || "Content submitted for review.",
-            },
-          ],
-        };
-      } catch {
-        return {
-          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
-        };
-      }
-    }
-
-    case "submit_for_review_and_wait": {
-      try {
-        // Resolve content from file_path or inline content
-        let content = args.content || "";
-        if (args.file_path) {
-          content = readFileSync(args.file_path, "utf-8");
-        }
-        if (!content) {
-          return {
-            content: [{ type: "text" as const, text: "Either content or file_path must be provided." }],
-          };
-        }
-
-        // Step 1: Submit the plan
-        await engine.request({
-          type: "submit_content",
-          id: args.id || "",
-          title: args.title,
-          content,
-          content_type: args.content_type || "",
-          is_plan: true,
-        });
-
-        // Step 2: Block until reviewer submits feedback
-        waitingForFeedback = true;
-        let feedback: Message;
-        try {
-          feedback = await blockingGetFeedback(socketPath);
-        } finally {
-          // Defer flag reset: the Go engine wakes the blocking poll before
-          // emitting the event notification, so the event may still be
-          // in-flight on the subscription socket when this resolves.
-          setTimeout(() => { waitingForFeedback = false; }, 200);
-        }
-
-        if (feedback.has_feedback) {
-          return {
-            content: [{ type: "text" as const, text: feedback.feedback }],
-          };
-        }
-        return {
-          content: [{ type: "text" as const, text: "Approved. No feedback from reviewer." }],
-        };
-      } catch {
-        return {
-          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
-        };
-      }
-    }
-
-    case "add_files": {
-      try {
-        const resp = await engine.request({
-          type: "add_additional_files",
-          paths: args.paths || [],
-        });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: resp.message || "Files added for review.",
-            },
-          ],
-        };
-      } catch {
-        return {
-          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
-        };
-      }
-    }
-
-    default:
-      throw new Error(`Unknown tool: ${req.params.name}`);
-  }
+  return { tools: [] };
 });
 
 // -- Start --
 
 async function main() {
-  // Try connecting to engine immediately — fails fast if socket doesn't exist.
-  // This ensures tools are available on Claude's first fetch when Monocle is running.
   try {
     await engine.connect();
   } catch {
-    // Monocle not running yet — retry in background; tools appear via list_changed.
     engine.connectInBackground();
   }
 
-  // Connect to Claude Code via stdio
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
 
-  // Identify the connecting agent to Monocle
   const clientVersion = mcp.getClientVersion();
   if (clientVersion?.name) {
     engine.identify(clientVersion.name);
   }
 
-  // Handle graceful shutdown
   process.on("SIGINT", () => {
     engine.close();
     process.exit(0);
@@ -689,8 +314,6 @@ async function main() {
     process.exit(0);
   });
 
-  // Detect parent death: when Claude Code exits, stdin's write end closes.
-  // The MCP SDK does not handle this, so we listen directly.
   const exitOnStdinClose = () => {
     engine.close();
     process.exit(0);

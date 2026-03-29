@@ -4,7 +4,7 @@ Retrieve pending review feedback from your Monocle reviewer. Use this when your 
 
 ## Instructions
 
-1. **Call the `get_feedback` MCP tool** with no arguments (non-blocking poll)
+1. **Run `monocle review get-feedback`** using the Bash tool (non-blocking poll)
 
 2. **Handle the response:**
    - If feedback is available, read it carefully and act on it — the feedback contains your reviewer's comments, issues, and suggestions about your code changes
