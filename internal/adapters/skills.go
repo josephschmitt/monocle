@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anthropics/monocle/skills"
+	"github.com/josephschmitt/monocle/skills"
 )
 
 // SkillNames lists the skill directories embedded in the binary.
