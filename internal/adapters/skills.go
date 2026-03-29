@@ -1,23 +1,21 @@
 package adapters
 
 import (
-	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/anthropics/monocle/skills"
 )
 
-//go:embed all:skills
-var skillsFS embed.FS
-
 // SkillNames lists the skill directories embedded in the binary.
-var SkillNames = []string{"get-feedback", "review-plan", "review-plan-wait"}
+var SkillNames = skills.Names
 
 // InstallSkills writes the embedded skill directories to the given parent directory.
 // Each skill is written as skillsDir/<name>/SKILL.md.
 func InstallSkills(skillsDir string) error {
 	for _, name := range SkillNames {
-		content, err := skillsFS.ReadFile(filepath.Join("skills", name, "SKILL.md"))
+		content, err := skills.FS.ReadFile(filepath.Join(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("read embedded skill %s: %w", name, err)
 		}
