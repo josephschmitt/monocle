@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.1](https://github.com/josephschmitt/monocle/compare/v0.36.0...v0.36.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* **tui:** preserve visual selection during file view refresh ([972192b](https://github.com/josephschmitt/monocle/commit/972192bae9ff36665566cd0fa47ecc82a2daff65))
+
 ## [0.36.0](https://github.com/josephschmitt/monocle/compare/v0.35.0...v0.36.0) (2026-03-30)
 
 
