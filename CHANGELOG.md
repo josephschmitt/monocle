@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.35.0](https://github.com/josephschmitt/monocle/compare/v0.34.0...v0.35.0) (2026-03-30)
+
+
+### Features
+
+* add Codex and Gemini plugins, reorganize plugin structure ([1c482e8](https://github.com/josephschmitt/monocle/commit/1c482e8c3c5723bd6dd99ebf1373581083aa49f6))
+* **plugin:** add side-by-side old and new plugin directories for testing ([d44db21](https://github.com/josephschmitt/monocle/commit/d44db2125aeb7604f825e6efe3a9cfd73d2611f2))
+
+
+### Bug Fixes
+
+* **tui:** prevent refresh timer from clobbering content diff view ([b39c555](https://github.com/josephschmitt/monocle/commit/b39c555fc04f1264689b64dd8c09b2fe4c6daf07))
+
 ## [0.34.0](https://github.com/josephschmitt/monocle/compare/v0.33.0...v0.34.0) (2026-03-29)
 
 
