@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.37.0-beta.0](https://github.com/josephschmitt/monocle/compare/v0.36.0...v0.37.0-beta.0) (2026-03-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **register:** embed SKILL.md files, drop MCP for non-channel agents
+* **channel:** strip MCP tools from channel, move to CLI skills
+
+### Features
+
+* **cli:** add `monocle status` command and gate skills on running state ([c47e4a6](https://github.com/josephschmitt/monocle/commit/c47e4a671d7159b8eda7bdba74dff05641cb1d32))
+* **cli:** add monocle review subcommands for agent-facing CLI tools ([048af44](https://github.com/josephschmitt/monocle/commit/048af44f048827a62ef944799ec169af6b065d56))
+* **plugin:** make new claude plugin the default ([076bb39](https://github.com/josephschmitt/monocle/commit/076bb39f7fc7c21b7fd0911a5adb0c4c4b6398cb))
+* **skills:** download skills from GitHub releases instead of embedding ([124e392](https://github.com/josephschmitt/monocle/commit/124e3925ba7bd38f9c256fb2f524502aa44b0a6c))
+* **skills:** sync root skills into plugin directories via make target ([3017ec2](https://github.com/josephschmitt/monocle/commit/3017ec2dff8ebaba05922f1444a2a1c61288e4f7))
+* **skills:** sync root skills into plugin directories via make target ([8b7dc9b](https://github.com/josephschmitt/monocle/commit/8b7dc9b6e7c3fe2099c81a92aa460c9a9d0688fe))
+* **tui:** update splash screen to prefer `monocle register` for setup ([f72f079](https://github.com/josephschmitt/monocle/commit/f72f07908eafd78b0b2518af3b16af18cdf52a3b))
+
+
+### Bug Fixes
+
+* **channel:** remove ListToolsRequestSchema handler that crashes without tools capability ([50342c3](https://github.com/josephschmitt/monocle/commit/50342c39d5f4af2841c0e3ff769343544a3f281f))
+
+
+### Code Refactoring
+
+* **channel:** strip MCP tools from channel, move to CLI skills ([dd40533](https://github.com/josephschmitt/monocle/commit/dd40533ca4bda9ae85c19b5ae77db84bffe69837))
+* **register:** embed SKILL.md files, drop MCP for non-channel agents ([a7b4810](https://github.com/josephschmitt/monocle/commit/a7b4810e3f4523354a51ed7745b89a48af9ce7b3))
+
 ## [0.36.0](https://github.com/josephschmitt/monocle/compare/v0.35.0...v0.36.0) (2026-03-30)
 
 
