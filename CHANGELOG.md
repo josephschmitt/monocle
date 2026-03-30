@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0-beta.1](https://github.com/josephschmitt/monocle/compare/v0.37.0-beta.0...v0.37.0-beta.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* **ci:** move skills tarball out of dist/ to avoid goreleaser conflict ([cc743f6](https://github.com/josephschmitt/monocle/commit/cc743f692fa432b55aac9df09fdbbcba79ed6d42))
+
 ## [0.37.0-beta.0](https://github.com/josephschmitt/monocle/compare/v0.36.0...v0.37.0-beta.0) (2026-03-30)
 
 
