@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.38.0](https://github.com/josephschmitt/monocle/compare/v0.37.0...v0.38.0) (2026-03-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **register:** embed SKILL.md files, drop MCP for non-channel agents
+* **channel:** strip MCP tools from channel, move to CLI skills
+
+### Features
+
+* **cli:** add `monocle status` command and gate skills on running state ([169d053](https://github.com/josephschmitt/monocle/commit/169d0530e1ee96f9031ba0ca3510d1eb4b770c29))
+* **cli:** add monocle review subcommands for agent-facing CLI tools ([d8fb933](https://github.com/josephschmitt/monocle/commit/d8fb9330abe7ad503767152e72e55139fc5161a8))
+* **plugin:** make new claude plugin the default ([cb1f013](https://github.com/josephschmitt/monocle/commit/cb1f013c2a920db47815bd010d46a92d0a8dd5f6))
+* **register:** auto-allow monocle permissions during agent registration ([5b5a1ff](https://github.com/josephschmitt/monocle/commit/5b5a1ff925faa072cf4afee2a1d76a6250cda232))
+* **skills:** download skills from GitHub releases instead of embedding ([51e8758](https://github.com/josephschmitt/monocle/commit/51e87580186fcdb1d45901bdb8ba89f13be3bcd6))
+* **skills:** sync root skills into plugin directories via make target ([a865a94](https://github.com/josephschmitt/monocle/commit/a865a9468f839468af72b11a22edf07d074ac971))
+* **skills:** sync root skills into plugin directories via make target ([50fc456](https://github.com/josephschmitt/monocle/commit/50fc4569a7c053b035c5a66d488236b84c409179))
+* **tui:** update splash screen to prefer `monocle register` for setup ([fae8aab](https://github.com/josephschmitt/monocle/commit/fae8aab01d4773b764d6c328da394d25b4359746))
+
+
+### Bug Fixes
+
+* **channel:** remove ListToolsRequestSchema handler that crashes without tools capability ([66bb0ae](https://github.com/josephschmitt/monocle/commit/66bb0aec42aae1775cde6462ee7ea903497cd2d1))
+* **channel:** restore 10s engine connection wait after MCP handshake ([ed8d09c](https://github.com/josephschmitt/monocle/commit/ed8d09c994a8b0366db888f7a85896db32a8edf7))
+* **ci:** move skills tarball out of dist/ to avoid goreleaser conflict ([b2b0dcd](https://github.com/josephschmitt/monocle/commit/b2b0dcd359981f3deb82535e86c4450a0045f0f5))
+
+
+### Code Refactoring
+
+* **channel:** strip MCP tools from channel, move to CLI skills ([b7e6402](https://github.com/josephschmitt/monocle/commit/b7e64022c42d17ae2f6bb26ca480ea221937982f))
+* **register:** embed SKILL.md files, drop MCP for non-channel agents ([72ccb9e](https://github.com/josephschmitt/monocle/commit/72ccb9ee369cb06e573200056ceae2d69b156048))
+
 ## [0.37.0](https://github.com/josephschmitt/monocle/compare/v0.36.1...v0.37.0) (2026-03-30)
 
 
