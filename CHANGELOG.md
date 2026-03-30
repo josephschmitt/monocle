@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/josephschmitt/monocle/compare/v0.35.0...v0.36.0) (2026-03-30)
+
+
+### Features
+
+* **tui:** auto-hide sidebar when empty, auto-show when items arrive ([28d3edf](https://github.com/josephschmitt/monocle/commit/28d3edf342fead450514fa64227e76ebe96eb3dc))
+
 ## [0.35.0](https://github.com/josephschmitt/monocle/compare/v0.34.0...v0.35.0) (2026-03-30)
 
 
