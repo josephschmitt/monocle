@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/josephschmitt/monocle/compare/v0.38.0...v0.39.0) (2026-03-30)
+
+
+### Features
+
+* **skills:** add get-feedback-wait skill for blocking review feedback ([4c9ccee](https://github.com/josephschmitt/monocle/commit/4c9cceebee43aac76905710d1069b4a53c8dadaa))
+
 ## [0.38.0](https://github.com/josephschmitt/monocle/compare/v0.37.0...v0.38.0) (2026-03-30)
 
 
