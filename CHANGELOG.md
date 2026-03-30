@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.37.0](https://github.com/josephschmitt/monocle/compare/v0.36.1...v0.37.0) (2026-03-30)
+
+
+### Features
+
+* **tui:** show yellow "Waiting for Review" in status bar when agent is blocked ([8eb31bd](https://github.com/josephschmitt/monocle/commit/8eb31bd37a9f0be098dff6af3aeafe05653512f2))
+
+
+### Bug Fixes
+
+* **tui:** make diff toggle a no-op on first-version plans ([ce5a00a](https://github.com/josephschmitt/monocle/commit/ce5a00a7b1ebdbab18226e49418544147d06b82f))
+* **tui:** show correct delivery status in submit modal for queue-mode connections ([3afcd95](https://github.com/josephschmitt/monocle/commit/3afcd95070eca313b7aa9972dc81ac24ae2b8343))
+
 ## [0.36.1](https://github.com/josephschmitt/monocle/compare/v0.36.0...v0.36.1) (2026-03-30)
 
 
