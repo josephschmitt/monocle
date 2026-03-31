@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.40.0](https://github.com/josephschmitt/monocle/compare/v0.39.0...v0.40.0) (2026-03-31)
+
+
+### Features
+
+* **website:** add "keeps you in the loop" tagline to hero ([4e429c8](https://github.com/josephschmitt/monocle/commit/4e429c80d4a2d92c1163dd3d64312ec093cc9eb8))
+* **website:** expand features grid and fix install command wrapping ([eea4442](https://github.com/josephschmitt/monocle/commit/eea444204660b949ee24d9eb7e06aeb475d0e68c))
+
+
+### Bug Fixes
+
+* **website:** center-align hero columns in alt landing page ([f3b4175](https://github.com/josephschmitt/monocle/commit/f3b4175d3bbebe89127d4d518d0c0d9ba7cfab6a))
+* **website:** highlight "Review" in hero headline ([636bfe2](https://github.com/josephschmitt/monocle/commit/636bfe258abc800cfdc684f51e033ded7cc36b1c))
+* **website:** improve mobile layout and prevent text orphans ([402d956](https://github.com/josephschmitt/monocle/commit/402d956450604dd21f8b0a8cd75684afcb69ec4e))
+* **website:** link install hint to README installation section ([ba434f3](https://github.com/josephschmitt/monocle/commit/ba434f360e2aa98baa54c645846e966ca5681e2e))
+* **website:** replace hallucinated content with accurate product info ([1ad74a6](https://github.com/josephschmitt/monocle/commit/1ad74a602206f89db5613f7f4b149237493e6e46))
+* **website:** simplify nav to Docs + GitHub on the right ([17b2aa0](https://github.com/josephschmitt/monocle/commit/17b2aa0af3b0321593ac2803ab822ea01b2af441))
+
 ## [0.39.0](https://github.com/josephschmitt/monocle/compare/v0.38.0...v0.39.0) (2026-03-30)
 
 
