@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.40.0](https://github.com/josephschmitt/monocle/compare/v0.39.0...v0.40.0) (2026-03-31)
+
+
+### Features
+
+* **tui:** add {/} comment jumping with wrap-around in viewer pane ([cc38630](https://github.com/josephschmitt/monocle/commit/cc3863000f7c3ad6f9f76345a860c699e43e0e55))
+* **tui:** add space to toggle comment expand and increase delay to 2s ([f7974cd](https://github.com/josephschmitt/monocle/commit/f7974cd10f052f28b9268b53550bc7dbebac6281))
+* **tui:** expand inline comments on hover after a short delay ([450c6bf](https://github.com/josephschmitt/monocle/commit/450c6bf091ee05a625c8ae5c12261c8725d9cd6d))
+* **tui:** use thick border for expanded comments and add syntax highlighting ([a364af6](https://github.com/josephschmitt/monocle/commit/a364af6f6277876ff1fc7b2b03bae81a6e419c2e))
+* **website:** add interactive asciinema demos to feature cards ([0b23320](https://github.com/josephschmitt/monocle/commit/0b233200ecca1cd1a29b75a4f0ec0e76f50f6ac5))
+
+
+### Bug Fixes
+
+* persist comment type changes when editing a drafted comment ([f38ce31](https://github.com/josephschmitt/monocle/commit/f38ce31533c83c358f250a9aa69855ae60de4ea7))
+
 ## [0.39.0](https://github.com/josephschmitt/monocle/compare/v0.38.0...v0.39.0) (2026-03-30)
 
 
