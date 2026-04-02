@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.41.0](https://github.com/josephschmitt/monocle/compare/v0.40.0...v0.41.0) (2026-04-02)
+
+
+### Features
+
+* **tui:** add artifact version history browser ([a7154c0](https://github.com/josephschmitt/monocle/commit/a7154c045123c41c381b5bfcd21391f3618fd45e))
+* **tui:** add B keybind for artifact versions and new base commands ([6430d6b](https://github.com/josephschmitt/monocle/commit/6430d6b57620485090a369b1711cf6e8f8ef620c))
+* **tui:** add comment_expand and comment_expand_delay config settings ([272854a](https://github.com/josephschmitt/monocle/commit/272854a68c0958aaa74605651cc63984fcde125d))
+* **tui:** add diff preview for suggestion comments in expanded state ([62f08ca](https://github.com/josephschmitt/monocle/commit/62f08caabe42d1dd98ca7e3ad56fc4ba32ddad2d))
+* **tui:** auto-select saved comment in diff view ([d6519ea](https://github.com/josephschmitt/monocle/commit/d6519ea57ed4fe56d08bc75857da917ee9694626))
+
+
+### Bug Fixes
+
+* **tui:** respect wrap toggle and fix syntax highlighting in suggestion diffs ([b4acec4](https://github.com/josephschmitt/monocle/commit/b4acec43cd5df7249ed3f974200b985e645e5c6f))
+
 ## [0.40.0](https://github.com/josephschmitt/monocle/compare/v0.39.0...v0.40.0) (2026-03-31)
 
 
