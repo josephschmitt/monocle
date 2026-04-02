@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.41.1](https://github.com/josephschmitt/monocle/compare/v0.41.0...v0.41.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **db:** scope plan version history to session ([c1b096c](https://github.com/josephschmitt/monocle/commit/c1b096c56b4784a9b37a7009006de199b254dfdf))
+* **tui:** auto-select latest content item in viewer when artifact arrives ([7496e3b](https://github.com/josephschmitt/monocle/commit/7496e3b6aaff74a009292bed6ad2fc0e0437c29f))
+* **tui:** correct sidebar height calculation for section headers ([62a9e4b](https://github.com/josephschmitt/monocle/commit/62a9e4bec548fa73fc59a2881d1c92e160b41fb4))
+
 ## [0.41.0](https://github.com/josephschmitt/monocle/compare/v0.40.0...v0.41.0) (2026-04-02)
 
 
