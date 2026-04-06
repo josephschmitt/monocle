@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.42.0-beta.1](https://github.com/josephschmitt/monocle/compare/v0.42.0-beta.0...v0.42.0-beta.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* **ci:** bundle MCP channel before desktop builds ([4704b44](https://github.com/josephschmitt/monocle/commit/4704b44d2e5ec11390ab0599a074b1c468fae3f6))
+* make vet depend on frontend-dist so go vet works without a prior desktop build ([efde219](https://github.com/josephschmitt/monocle/commit/efde21987d1f32b002c75b8761f44ec766c744c5))
+
 ## [0.42.0-beta.0](https://github.com/josephschmitt/monocle/compare/v0.41.1...v0.42.0-beta.0) (2026-04-06)
 
 
