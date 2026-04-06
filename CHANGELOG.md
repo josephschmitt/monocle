@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.42.0-beta.0](https://github.com/josephschmitt/monocle/compare/v0.41.1...v0.42.0-beta.0) (2026-04-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* Desktop app
+
+### Features
+
+* Desktop app ([34c7e9b](https://github.com/josephschmitt/monocle/commit/34c7e9b50da7bada3ed409145ab4ce361910078e))
+
 ## [0.41.1](https://github.com/josephschmitt/monocle/compare/v0.41.0...v0.41.1) (2026-04-02)
 
 
