@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0-beta.3](https://github.com/josephschmitt/monocle/compare/v0.42.0-beta.2...v0.42.0-beta.3) (2026-04-06)
+
+
+### Bug Fixes
+
+* **ci:** replace macos-13 matrix with cross-compilation on macos-latest ([4c68c12](https://github.com/josephschmitt/monocle/commit/4c68c12fa34e593ac22066af2366525898f4b357))
+
 ## [0.42.0-beta.2](https://github.com/josephschmitt/monocle/compare/v0.42.0-beta.1...v0.42.0-beta.2) (2026-04-06)
 
 
