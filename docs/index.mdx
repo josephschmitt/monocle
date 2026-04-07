@@ -27,7 +27,7 @@ monocle is a terminal UI that runs alongside your AI coding agent. You review di
     Download monocle and install it on your system with a single command.
   </Step>
   <Step title="Register with your agent">
-    Run `monocle register` to install skills and (for Claude Code) the MCP channel config.
+    Run `monocle register` to connect monocle to your agent — via MCP tools (default for Claude Code) or skill files (default for other agents).
   </Step>
   <Step title="Start reviewing">
     Run `monocle` in a separate terminal alongside your agent. Review diffs as they appear, leave comments, and submit.
@@ -39,14 +39,14 @@ monocle is a terminal UI that runs alongside your AI coding agent. You review di
 
 ## Supported agents
 
-monocle works with any agent that supports [agent skills](https://agentskills.io), with enhanced push notification support for Claude Code.
+monocle works with any agent that supports [agent skills](https://agentskills.io) or MCP tools, with enhanced push notification support for Claude Code.
 
-| Agent | Skills | Push notifications |
-|-------|--------|-------------------|
-| Claude Code | Yes | Yes (via MCP channels) |
-| OpenCode | Yes | No (pull-based) |
-| Codex CLI | Yes | No (pull-based) |
-| Gemini CLI | Yes | No (pull-based) |
+| Agent | Integration mode | Push notifications |
+|-------|-----------------|-------------------|
+| Claude Code | MCP tools (default) or skills | Yes (via MCP channels) |
+| OpenCode | Skills (default) or MCP tools | No (pull-based) |
+| Codex CLI | Skills (default) or MCP tools | No (pull-based) |
+| Gemini CLI | Skills (default) or MCP tools | No (pull-based) |
 
 <Note>
   Push notifications are currently only supported with Claude Code via experimental MCP channels.

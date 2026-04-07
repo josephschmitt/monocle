@@ -44,27 +44,32 @@ This skill is what enables [review gating](/guides/review-gating): the agent can
 
 ## Where skills are installed
 
-`monocle register` writes skills into the agent's designated skill directory. Run it once per project, or with `--global` to apply across all projects.
+In **skills mode**, `monocle register` writes skill files into the agent's designated skill directory. In **MCP tools mode** (the default for Claude Code), slash commands are installed instead — the agent calls MCP tools directly rather than running CLI commands via skills. See the [CLI reference](/reference/cli#monocle-register) for the full list of config paths per mode.
+
+Run `monocle register` once per project, or with `--global` to apply across all projects.
 
 <CodeGroup>
 
 ```bash Claude Code
-# Skills go to .claude/skills/
+# Default: MCP tools mode — configures .mcp.json and .claude/commands/
 monocle register claude
+
+# To use skills mode instead:
+monocle register claude --integration-mode skills
 ```
 
 ```bash OpenCode
-# Skills go to .opencode/skills/
+# Default: skills mode — installs to .opencode/skills/
 monocle register opencode
 ```
 
 ```bash Codex CLI
-# Skills go to .codex/skills/
+# Default: skills mode — installs to .codex/skills/
 monocle register codex
 ```
 
 ```bash Gemini CLI
-# Skills go to .gemini/skills/
+# Default: skills mode — installs to .gemini/skills/
 monocle register gemini
 ```
 
@@ -74,13 +79,6 @@ monocle register all
 ```
 
 </CodeGroup>
-
-| Agent | Skills directory |
-|-------|-----------------|
-| Claude Code | `.claude/skills/` |
-| OpenCode | `.opencode/skills/` |
-| Codex CLI | `.codex/skills/` |
-| Gemini CLI | `.gemini/skills/` |
 
 ## Making skills automatic
 
