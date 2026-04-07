@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0-beta.4](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.3...v0.43.0-beta.4) (2026-04-07)
+
+
+### Bug Fixes
+
+* **ci:** rename beta Homebrew formula/cask to next and fix class name ([b7ece3d](https://github.com/josephschmitt/monocle/commit/b7ece3defb23142ba566010b50d9f83445e31e16))
+
 ## [0.43.0-beta.3](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.2...v0.43.0-beta.3) (2026-04-07)
 
 
