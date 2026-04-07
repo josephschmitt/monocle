@@ -105,6 +105,26 @@ monocle unregister [agent] [--global]
 
 ---
 
+## `monocle serve-mcp`
+
+Start the built-in MCP server over stdio. This exposes monocle's review operations (`review_status`, `get_feedback`, `send_artifact`, `add_files`) as MCP tools that any stdio-compatible agent can call.
+
+```bash
+monocle serve-mcp [--socket PATH]
+```
+
+Use this command when your agent isn't natively supported by `monocle register`. Add it as an MCP server in your agent's config, pointing at `monocle serve-mcp` as the stdio command.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+See [agent setup for unsupported agents](/guides/agent-setup#other-agents) for a step-by-step walkthrough.
+
+---
+
 ## `monocle --version`
 
 Print the installed monocle version and exit.
