@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.43.0-beta.2](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.1...v0.43.0-beta.2) (2026-04-07)
+
+
+### Features
+
+* **desktop:** add custom app icon with monocle logotype ([14fafbc](https://github.com/josephschmitt/monocle/commit/14fafbcda0d8ed8c1ab1ba12814344c58ea98e58))
+* **desktop:** publish Homebrew cask on release ([8a92f6c](https://github.com/josephschmitt/monocle/commit/8a92f6cc11cf6d20a850ebb05bfbb145c6e61074))
+
 ## [0.43.0-beta.1](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.0...v0.43.0-beta.1) (2026-04-07)
 
 

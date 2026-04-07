@@ -42,14 +42,14 @@ Download from [GitHub Releases](https://github.com/josephschmitt/monocle/release
 ```bash
 # Apple Silicon
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.1/monocle_darwin_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.2/monocle_darwin_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # Intel
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.1/monocle_darwin_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.2/monocle_darwin_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
@@ -59,14 +59,14 @@ sudo mv monocle /usr/local/bin/
 ```bash
 # x86_64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.1/monocle_linux_amd64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.2/monocle_linux_amd64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
 
 # ARM64
 # x-release-please-start-version
-curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.1/monocle_linux_arm64.tar.gz
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.43.0-beta.2/monocle_linux_arm64.tar.gz
 # x-release-please-end
 tar xzf monocle.tar.gz
 sudo mv monocle /usr/local/bin/
