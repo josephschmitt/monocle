@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0-beta.3](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.2...v0.43.0-beta.3) (2026-04-07)
+
+
+### Bug Fixes
+
+* **desktop:** rename app bundle to Monocle.app and fix icon transparency ([d1033bd](https://github.com/josephschmitt/monocle/commit/d1033bdd1ab86987d3574951565710a99c08b33d))
+
 ## [0.43.0-beta.2](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.1...v0.43.0-beta.2) (2026-04-07)
 
 
