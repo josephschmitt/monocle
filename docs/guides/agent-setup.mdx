@@ -3,11 +3,12 @@ title: "Agent Setup"
 description: "Connect monocle to Claude Code, OpenCode, Codex CLI, or Gemini CLI."
 ---
 
-monocle connects to your agent by installing skills — small instruction files that tell the agent how to check review status, retrieve feedback, and submit content for review. Run `monocle register` to install them.
+monocle connects to your agent through one of two integration modes: **MCP tools** or **skills**. Run `monocle register` to configure the connection.
+
+- **MCP tools mode** configures an MCP server that exposes monocle's review operations as tools the agent can call directly. This is the default for Claude Code.
+- **Skills mode** installs skill files — small instruction files that tell the agent which CLI commands to run. This is the default for all other agents.
 
 ## Register monocle with your agent
-
-The `register` command installs skills into your agent's skill directory and, for Claude Code, writes the MCP channel config for push notifications.
 
 ```bash
 monocle register          # interactive picker
@@ -20,12 +21,14 @@ Add `--global` to install at the user level instead of the current project:
 monocle register claude --global
 ```
 
-| Agent | Skills directory | MCP config |
-|-------|-----------------|------------|
-| Claude Code | `.claude/skills/` | `.mcp.json` |
-| OpenCode | `.opencode/skills/` | — |
-| Codex CLI | `.codex/skills/` | — |
-| Gemini CLI | `.gemini/skills/` | — |
+Override the default integration mode with `--integration-mode`:
+
+```bash
+monocle register claude --integration-mode skills   # force skills mode
+monocle register opencode --integration-mode mcp    # force MCP tools mode
+```
+
+See the [CLI reference](/reference/cli#monocle-register) for a full list of flags and config paths per mode.
 
 ## Set up each agent
 
@@ -37,7 +40,13 @@ monocle register claude --global
     monocle register claude
     ```
 
-    This installs skills into `.claude/skills/` and writes the MCP channel config to `.mcp.json` for push notifications.
+    By default, this configures an MCP server in `.mcp.json` that exposes monocle's review tools directly, and installs slash commands in `.claude/commands/`. Claude Code calls the MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) instead of running CLI commands.
+
+    To use skills mode instead (the previous default), pass `--integration-mode skills`:
+
+    ```bash
+    monocle register claude --integration-mode skills
+    ```
 
     ### Enable push notifications
 

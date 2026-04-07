@@ -7,6 +7,10 @@ Skills are standardized instruction files in the [agentskills.io](https://agents
 
 When you run `monocle register`, monocle installs its skills into the correct directory for each agent you've registered with. The agent picks them up automatically.
 
+<Note>
+  When registered in **MCP tools mode** (the default for Claude Code), agents call monocle's operations as MCP tools instead of running CLI commands via skills. The slash commands (`/get-feedback`, `/review-plan`, etc.) remain available as convenience wrappers. See [agent setup](/guides/agent-setup) for details on integration modes.
+</Note>
+
 ## Available skills
 
 | Skill | Available for | Description |

@@ -32,10 +32,10 @@ Monocle detects the Git repository root from the current working directory and o
 
 ## `monocle register`
 
-Register monocle with an agent. This installs skills into the agent's skill directory and, for Claude Code, the MCP channel config needed for push notifications.
+Register monocle with an agent. Depending on the integration mode, this either configures an MCP server with tools or installs skill files into the agent's skill directory.
 
 ```bash
-monocle register [agent] [--global]
+monocle register [agent] [--global] [--integration-mode MODE]
 ```
 
 ### Arguments
@@ -49,8 +49,30 @@ monocle register [agent] [--global]
 | Flag | Description |
 |------|-------------|
 | `--global` | Write configuration to the user-level config directory instead of the current project directory. |
+| `--integration-mode MODE` | Override the default integration mode. One of `auto`, `mcp`, or `skills`. Defaults to `auto`. |
+
+### Integration modes
+
+| Mode | Description |
+|------|-------------|
+| `auto` | Uses the recommended default for each agent. Claude Code uses `mcp`; all other agents use `skills`. |
+| `mcp` | Configures an MCP server that exposes monocle's review tools directly. No skill files are installed. |
+| `skills` | Installs skill files that wrap monocle CLI commands. For Claude Code, also configures MCP channels for push notifications. |
 
 ### Agent config paths
+
+The files written by `register` depend on the integration mode:
+
+**MCP tools mode** (default for Claude Code)
+
+| Agent | MCP config | Commands |
+|-------|------------|----------|
+| Claude Code | `.mcp.json` | `.claude/commands/` |
+| OpenCode | `opencode.json` | `.opencode/commands/` |
+| Codex CLI | `.codex/config.toml` | — |
+| Gemini CLI | `.gemini/settings.json` | `.gemini/commands/` |
+
+**Skills mode** (default for OpenCode, Codex CLI, Gemini CLI)
 
 | Agent | Skills directory | MCP config |
 |-------|-----------------|------------|

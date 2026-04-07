@@ -3,7 +3,11 @@ title: "Agent Commands"
 description: "CLI commands for agents to interact with a running monocle session."
 ---
 
-These commands are used by agents — via installed skills or directly from the command line — to communicate with a running monocle session. Each command connects to monocle's Unix socket, sends a request, prints the response, and exits.
+These commands are used by agents — via installed skills, MCP tools, or directly from the command line — to communicate with a running monocle session.
+
+When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
+
+When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
 <Note>
   Set the `MONOCLE_SOCKET` environment variable when the agent's working directory differs from monocle's working directory. Without it, commands look for a socket based on the current directory and may not find a running session. Press `I` in the monocle TUI to see the active socket path.
@@ -30,6 +34,10 @@ monocle review status [--json] [--socket PATH]
 
 Without `--json`, prints a status string or summary. The status reflects whether feedback is pending, a pause has been requested, or the session is idle.
 
+### MCP tool equivalent
+
+In MCP tools mode, call the `review_status` tool with no parameters.
+
 ---
 
 ## `monocle review get-feedback`
@@ -51,6 +59,14 @@ Without `--wait`, the command returns immediately. If no feedback is pending it 
 | `--wait` | Block until feedback is available. The command does not return until the reviewer submits a review. Used by the `/review-plan-wait` skill. |
 | `--json` | Output the result as structured JSON. |
 | `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `get_feedback` tool:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `wait` | boolean | No | When `true`, blocks until feedback is available. |
 
 ---
 
@@ -90,6 +106,18 @@ echo "## Plan\n- Step 1\n- Step 2" | monocle review send-artifact --title "My pl
 monocle review send-artifact --title "Architecture" --file docs/architecture.md --id architecture.md
 ```
 
+### MCP tool equivalent
+
+When using MCP tools mode, the `send_artifact` tool accepts these parameters:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Identifier for the artifact. Use the same ID on subsequent calls to update the content in place. |
+| `title` | string | Yes | Title displayed in the monocle sidebar. |
+| `content` | string | No | The artifact content. Either `content` or `file_path` must be provided. |
+| `file_path` | string | No | Absolute path to a file to read as the artifact content. If `id` is empty, defaults to the filename. |
+| `content_type` | string | No | File extension for syntax highlighting (e.g. `md`, `go`, `py`). |
+
 ---
 
 ## `monocle review add-files`
@@ -112,6 +140,14 @@ monocle review add-files <paths...> [--json] [--socket PATH]
 |------|-------------|
 | `--json` | Output the result as structured JSON. |
 | `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `add_files` tool:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `paths` | string array | Yes | File or directory paths to add to the session. |
 
 ### Example
 
