@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0-beta.1](https://github.com/josephschmitt/monocle/compare/v0.43.0-beta.0...v0.43.0-beta.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* **ci:** remove MCP channel bundle step from desktop workflows ([ab038ef](https://github.com/josephschmitt/monocle/commit/ab038efea090c65ee549570402a223c969199ce0))
+
 ## [0.43.0-beta.0](https://github.com/josephschmitt/monocle/compare/v0.42.0...v0.43.0-beta.0) (2026-04-07)
 
 
