@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.42.0](https://github.com/josephschmitt/monocle/compare/v0.41.1...v0.42.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* serve-mcp-channel no longer starts a channel server. Use serve-mcp --experimental-channels instead (coming next).
+
+### Features
+
+* **adapters:** add embedded command definitions and install functions ([6828946](https://github.com/josephschmitt/monocle/commit/6828946f57792a7b89f9f0961078e0f0dcc3369a))
+* **adapters:** add integration mode selection for Claude registration ([78a9af7](https://github.com/josephschmitt/monocle/commit/78a9af711d39d2b22904f3f2591f0536ad31628a))
+* **adapters:** add MCP mode support to OpenCode and Gemini adapters ([addabb7](https://github.com/josephschmitt/monocle/commit/addabb76f328e97a4e69f6fec5e8f40de1831dcb))
+* **adapters:** configure MCP server for all agents in MCP mode ([0e234b0](https://github.com/josephschmitt/monocle/commit/0e234b0c9bf3e7e8b7be7c1c9f322a8b632db101))
+* **adapters:** install commands in MCP mode for Claude registration ([cb0c95c](https://github.com/josephschmitt/monocle/commit/cb0c95cae2e573d0634d8acab44a0693f3421e81))
+* **adapters:** update registration to use serve-mcp ([3eb2569](https://github.com/josephschmitt/monocle/commit/3eb2569d36991285de02f56b3d5ba03aa2b251ad))
+* **mcp:** add experimental channel support for push notifications ([eb6af21](https://github.com/josephschmitt/monocle/commit/eb6af21f5a487c989426c72324fcb3b0dcd0f5f1))
+* **mcp:** add file_path param to send_artifact tool ([23d2043](https://github.com/josephschmitt/monocle/commit/23d2043f815c6c1dc3d793c693a853645d513c7d))
+* **mcp:** add Go MCP server with review tools ([755dc24](https://github.com/josephschmitt/monocle/commit/755dc249318028ba56260f7e030cc2ee93bf6884))
+* **mcp:** resolve engine socket from MCP client roots ([0092d78](https://github.com/josephschmitt/monocle/commit/0092d780301b08b5f5d3065b43d260e145abd366))
+
+
+### Bug Fixes
+
+* **adapters:** expand config paths on hover in agent picker ([63be593](https://github.com/josephschmitt/monocle/commit/63be59361c58c93cc996610014af9877b59400f1))
+* **adapters:** fall back to latest release when exact skills version not found ([d1dad74](https://github.com/josephschmitt/monocle/commit/d1dad74859f11d9490f2ac53003ec3e9ece8dde9))
+* **adapters:** set integration mode before picker shows config paths ([4488f68](https://github.com/josephschmitt/monocle/commit/4488f68de7eef32ad579f2b0cf14ebdb486c8c34))
+* **adapters:** truncate long config paths in agent picker ([d30683f](https://github.com/josephschmitt/monocle/commit/d30683f4f465504ea1ce69eed7924b683eae39fd))
+* **mcp:** make optional tool params non-required in schema ([9b89711](https://github.com/josephschmitt/monocle/commit/9b897112bf00735a621ef4f07fdc26e760ccb284))
+* pass version ldflags in make install ([c5aaceb](https://github.com/josephschmitt/monocle/commit/c5aaceb10e61f047f564b5312652070546df532b))
+
+
+### Code Refactoring
+
+* remove TypeScript MCP channel server and JS build chain ([494f114](https://github.com/josephschmitt/monocle/commit/494f1149d7c82f9eb7cdb5e0f218862f1ffe7d32))
+
 ## [0.41.1](https://github.com/josephschmitt/monocle/compare/v0.41.0...v0.41.1) (2026-04-02)
 
 
