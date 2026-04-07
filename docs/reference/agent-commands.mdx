@@ -112,7 +112,7 @@ When using MCP tools mode, the `send_artifact` tool accepts these parameters:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | string | Yes | Identifier for the artifact. Use the same ID on subsequent calls to update the content in place. |
+| `id` | string | No | Identifier for the artifact. Use the same ID on subsequent calls to update the content in place. Defaults to the filename when `file_path` is provided. |
 | `title` | string | Yes | Title displayed in the monocle sidebar. |
 | `content` | string | No | The artifact content. Either `content` or `file_path` must be provided. |
 | `file_path` | string | No | Absolute path to a file to read as the artifact content. If `id` is empty, defaults to the filename. |

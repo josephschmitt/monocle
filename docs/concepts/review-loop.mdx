@@ -7,10 +7,10 @@ The review loop is the core interaction pattern in monocle: your agent writes co
 
 ## Architecture
 
-Monocle connects to your agent over a Unix socket. For Claude Code, a lightweight MCP server (`channel.ts`) sits in between and enables push notifications:
+Monocle connects to your agent over a Unix socket. For Claude Code, a native MCP server sits in between and enables push notifications:
 
 ```
-Agent <--stdio/MCP--> channel.ts (MCP server) <---socket---> monocle (TUI)
+Agent <--stdio/MCP--> monocle serve-mcp (MCP server) <---socket---> monocle (TUI)
 ```
 
 For all other agents, the connection goes directly over the socket, and feedback is retrieved on demand via the `/get-feedback` skill or `monocle review get-feedback`.
