@@ -1,0 +1,104 @@
+---
+title: "Review State"
+description: "How monocle tracks what you've reviewed, detects changes between rounds, and helps you focus on what's new."
+---
+
+When you review code with monocle, you're not just reading diffs — you're building up a picture of the codebase as the agent modifies it. Monocle tracks this picture so that when the agent makes more changes, you can see exactly what's new since you last looked.
+
+## Sessions, reviews, and rounds
+
+A **session** holds all of your review state for a working directory: comments, reviewed marks, plans, and submission history. Sessions persist to disk so your work survives restarts.
+
+A **review** is the full arc from when you start looking at code to when you approve it. Within a review, you go through multiple **rounds** of back-and-forth feedback:
+
+1. You review the diffs and leave comments
+2. You submit with **Request Changes** — this creates a snapshot of the current state
+3. The agent addresses your feedback and makes more changes
+4. You review just the new changes (round 2) and submit again
+5. Repeat until you're satisfied, then submit with **Approve**
+
+Each round builds on the last. Monocle remembers what the code looked like when you last reviewed it, so you don't have to re-examine everything from scratch.
+
+## Reviewed state
+
+Every file in the sidebar has a reviewed state: either reviewed (green checkmark) or unreviewed (empty circle). You toggle this with `r`, and filter the sidebar with `/` to show only unreviewed or reviewed files.
+
+There are two layers to reviewed state:
+
+- **Draft** — while you're working through files, pressing `r` is a working indicator. It helps you track your progress during a round. The sidebar filter works with it immediately.
+- **Committed** — when you submit a review, monocle captures a snapshot. This snapshot is the "real" reviewed state that drives automatic change detection on the next round.
+
+Until you submit, reviewed marks are ephemeral. They help you work, but they don't affect what happens next round.
+
+## Snapshots and change detection
+
+When you submit a review with **Request Changes**, monocle creates a **snapshot** — a record of every file's content at that moment. On the next round, monocle compares each file against the snapshot:
+
+- **File changed** since the snapshot — automatically marked as unreviewed
+- **File unchanged** since the snapshot — stays marked as reviewed
+- **New file** not in the snapshot — marked as unreviewed
+- **Deleted file** — removed from reviewed state
+
+This happens automatically during file refresh. You don't need to do anything — just open monocle and the sidebar shows you exactly what needs your attention.
+
+<Tip>
+  Filter to **Unreviewed** with `/` to see only the files that changed since your last review. This is the fastest way to focus on what's new.
+</Tip>
+
+### How snapshots are stored
+
+Monocle uses git's object store to efficiently track file state. When a snapshot is created, each file's content is written to git's object store via `git hash-object`, and the resulting SHA is stored in monocle's database. This means:
+
+- Only a 40-character hash is stored per file, not the full content
+- Git handles compression and deduplication automatically
+- Works with both committed and uncommitted files — the snapshot captures whatever is on disk
+
+### What marks files as reviewed on submit
+
+You can control which files are marked as reviewed when you submit a review with the `mark_reviewed_on_submit` config option:
+
+| Value | Behavior |
+|-------|----------|
+| `"all"` (default) | All files are marked as reviewed. Assumes you've seen everything. |
+| `"commented"` | Only files you left comments on are marked as reviewed. |
+| `"manual"` | Only files you explicitly toggled with `r` are marked as reviewed. |
+
+## Snapshot lifecycle
+
+Snapshots accumulate across rounds within a review:
+
+- **Request Changes** — creates a new snapshot for the current round
+- **Approve** — wipes all snapshots. The review is complete.
+- **Change base ref** — wipes all snapshots. You've changed context, so old snapshots are no longer meaningful. Monocle shows a confirmation dialog if you have active snapshots.
+
+Snapshots are preserved when the base ref auto-advances (HEAD moves because the agent made new commits). This is the normal flow — the agent pushes code, and you want to see what changed since your last review.
+
+## Viewing changes since a prior round
+
+Open the ref picker with `g` `b` and you'll see a **Since Review** section listing your prior review rounds:
+
+```
+Select Base Ref
+
+  Latest Changes ✓
+  ──────────────────
+  Since Review
+  Round 3 (2h ago)
+  Round 2 (1d ago)
+  ──────────────────
+  Recent Commits
+  abc1234  Fix the widget
+  def5678  Add new feature
+```
+
+Select a round to view only the changes since that review. The status bar updates to show which round you're diffing against. Select **Latest Changes** or a specific commit to return to normal git-based diffing.
+
+<Note>
+  Snapshots only appear in the ref picker after you've submitted at least one review with **Request Changes**. If you haven't submitted yet, you'll only see commits.
+</Note>
+
+## Edge cases
+
+- **Rebases and force-pushes** — snapshots store content hashes, not commit references. They are completely immune to rebases, unlike GitHub's "changes since last review" which breaks on force-push.
+- **File renames** — the old path shows as deleted, the new path shows as new. Both are marked as unreviewed so you can review the rename.
+- **Binary files** — content hashes detect changes, but monocle shows "binary file changed" instead of a diff.

@@ -64,6 +64,7 @@
 ### TUI features (diff viewer, commenting, review flow)
 - **Docs to update**:
   - `docs/concepts/review-loop.mdx` — diff modes, comment types, feedback queue, submit flow
+  - `docs/concepts/review-state.mdx` — review state tracking, snapshots, rounds, change detection
   - `docs/guides/plan-review.mdx` — plan/artifact review, version history, focus mode
   - `docs/guides/review-gating.mdx` — plan gating and pause flow
   - `docs/guides/sessions.mdx` — session management, file tracking, commands

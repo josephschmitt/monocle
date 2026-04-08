@@ -47,7 +47,7 @@ To mark every file at once, use the command palette:
 - `:mark-all-reviewed` — mark all files as reviewed
 - `:mark-all-unreviewed` — mark all files as unreviewed
 
-Reviewed states reset automatically when you submit a review.
+When you submit a review with **Request Changes**, monocle creates a snapshot of all file states. On the next round, files that changed since the snapshot are automatically marked as unreviewed, so you can filter to just what's new. See [Review State](/concepts/review-state) for the full details on how snapshots, rounds, and change detection work.
 
 ## Submission history
 

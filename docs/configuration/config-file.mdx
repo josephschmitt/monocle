@@ -31,6 +31,7 @@ Create either or both files — you only need to include the settings you want t
   "auto_focus_mode": false,
   "comment_expand": true,
   "comment_expand_delay": 2000,
+  "mark_reviewed_on_submit": "all",
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -55,6 +56,7 @@ Create either or both files — you only need to include the settings you want t
 | `auto_focus_mode` | `true`, `false` | `false` | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans |
 | `comment_expand` | `true`, `false` | `true` | Auto-expand comments when the cursor hovers over them |
 | `comment_expand_delay` | integer (ms) | `2000` | Delay in milliseconds before a comment auto-expands on hover |
+| `mark_reviewed_on_submit` | `"all"`, `"commented"`, `"manual"` | `"all"` | Which files to mark as reviewed when submitting (see [Review State](/concepts/review-state)) |
 | `keybindings` | object | `{}` | Custom key overrides (see [Keybindings](/configuration/keybindings)) |
 | `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
 | `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |

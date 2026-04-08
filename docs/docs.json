@@ -31,6 +31,7 @@
             "group": "Core Concepts",
             "pages": [
               "concepts/review-loop",
+              "concepts/review-state",
               "concepts/agent-integration",
               "concepts/push-notifications"
             ]

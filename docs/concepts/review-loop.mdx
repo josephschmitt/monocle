@@ -88,7 +88,7 @@ How the agent learns about queued feedback depends on your setup. See [Push Noti
 
 Press `S` to open the submit modal. From here:
 
-- **Submit**: Formats your comments into a structured review and queues it for delivery. All reviewed states reset so you can start fresh on the next round.
+- **Submit**: Formats your comments into a structured review and queues it for delivery. When you submit with **Request Changes**, monocle creates a snapshot so it can track what changed on the next round. See [Review State](/concepts/review-state) for details.
 - **Copy to clipboard**: Toggle the checkbox with `Shift+Tab` to also copy the formatted review to your clipboard when submitting.
 - **Yank without submitting**: Press `Ctrl+y` in the submit modal to copy the formatted review to your clipboard and close the modal without queuing it.
 - **External editor**: Press `Ctrl+g` in the submit modal (or any comment modal) to open the current text in your `$VISUAL` or `$EDITOR`. Edit, save, and quit — the text comes back into monocle.
