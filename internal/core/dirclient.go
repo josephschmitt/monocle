@@ -119,8 +119,13 @@ func (d *DirClient) ResolveRef(ref string) (string, error) {
 	return "", fmt.Errorf("no git repository: cannot resolve ref %q", ref)
 }
 
-// HashObject is not supported in non-git mode. Returns empty string.
+// HashObject is not supported in non-git mode.
 func (d *DirClient) HashObject(_ string) (string, error) {
+	return "", fmt.Errorf("no git repository: cannot hash object")
+}
+
+// HashObjectDry is not supported in non-git mode.
+func (d *DirClient) HashObjectDry(_ string) (string, error) {
 	return "", fmt.Errorf("no git repository: cannot hash object")
 }
 

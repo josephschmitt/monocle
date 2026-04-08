@@ -1994,7 +1994,7 @@ type baseRefChangedMsg struct {
 // the parent commit used for git diff).
 func (m appModel) displayBaseRef(session *types.ReviewSession) string {
 	if snap := m.engine.GetActiveSnapshot(); snap != nil {
-		return fmt.Sprintf("R%d (%s)", snap.ReviewRound, formatTimeAgo(snap.CreatedAt))
+		return fmt.Sprintf("R%d (%s)", snap.ReviewRound, relativeTime(snap.CreatedAt))
 	}
 	if selected := m.engine.SelectedBaseRef(); selected != "" {
 		return selected

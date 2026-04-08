@@ -552,7 +552,17 @@ func (d *DB) GetSnapshot(snapshotID int) (*types.ReviewSnapshot, error) {
 		f.Reviewed = reviewed != 0
 		s.Files = append(s.Files, f)
 	}
-	return s, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Build path lookup map for O(1) access
+	s.FilesByPath = make(map[string]*types.SnapshotFile, len(s.Files))
+	for i := range s.Files {
+		s.FilesByPath[s.Files[i].Path] = &s.Files[i]
+	}
+
+	return s, nil
 }
 
 // DeleteSnapshots removes all snapshots and their files for a session.

@@ -159,6 +159,7 @@ type ReviewSnapshot struct {
 	HeadRef      string
 	BaseRef      string
 	Files        []SnapshotFile
+	FilesByPath  map[string]*SnapshotFile // built at load time for O(1) lookup
 	CreatedAt    time.Time
 }
 

@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -11,33 +10,6 @@ import (
 	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/types"
 )
-
-// formatTimeAgo returns a human-readable relative time string.
-func formatTimeAgo(t time.Time) string {
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		m := int(d.Minutes())
-		if m == 1 {
-			return "1m ago"
-		}
-		return fmt.Sprintf("%dm ago", m)
-	case d < 24*time.Hour:
-		h := int(d.Hours())
-		if h == 1 {
-			return "1h ago"
-		}
-		return fmt.Sprintf("%dh ago", h)
-	default:
-		days := int(d.Hours() / 24)
-		if days == 1 {
-			return "1d ago"
-		}
-		return fmt.Sprintf("%dd ago", days)
-	}
-}
 
 const refPickerPageSize = 20
 
@@ -184,7 +156,7 @@ func (m refPickerModel) View() string {
 		faintSep := lipgloss.NewStyle().Faint(true)
 		b.WriteString(faintSep.Render("  Since Review") + "\n")
 		for i, snap := range m.snapshots {
-			label := fmt.Sprintf("  Round %d (%s)", snap.ReviewRound, formatTimeAgo(snap.CreatedAt))
+			label := fmt.Sprintf("  Round %d (%s)", snap.ReviewRound, relativeTime(snap.CreatedAt))
 			cursorPos := 1 + i
 			if m.cursor == cursorPos {
 				b.WriteString(lipgloss.NewStyle().Reverse(true).Render(label))

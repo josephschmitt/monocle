@@ -35,6 +35,8 @@ type Engine struct {
 
 	// activeSnapshot: when non-nil, diffs are computed against this snapshot's stored state
 	activeSnapshot *types.ReviewSnapshot
+	// latestSnapshot: cached latest snapshot for auto-unmark comparison (avoids DB queries per refresh)
+	latestSnapshot *types.ReviewSnapshot
 
 	// event subscribers: EventKind -> subscriber ID -> callback
 	subscribers map[EventKind]map[int]EventCallback
@@ -195,17 +197,12 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 		return nil, err
 	}
 
-	// Auto-unmark reviewed files that changed since the latest snapshot
-	snapshots, snapErr := e.database.GetSnapshots(session.ID)
-	if snapErr == nil && len(snapshots) > 0 {
-		latest, loadErr := e.database.GetSnapshot(snapshots[0].ID) // most recent (sorted desc)
-		if loadErr == nil {
-			e.autoUnmarkChangedFiles(session, files, latest)
-		}
-	}
-
 	e.mu.Lock()
 	if e.current != nil && e.current.ID == session.ID {
+		// Auto-unmark reviewed files that changed since the latest snapshot
+		if e.latestSnapshot != nil {
+			e.autoUnmarkChangedFiles(session, files, e.latestSnapshot)
+		}
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
@@ -897,13 +894,19 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 	}
 	_ = e.database.CreateSubmission(session.ID, sub)
 
-	// Snapshot lifecycle: request_changes creates a snapshot, approve wipes all
+	// Snapshot lifecycle: request_changes creates a snapshot, approve wipes all.
+	// markReviewedOnSubmit and ResetAllReviewed acquire e.mu internally,
+	// so snapshot operations that access e.current/e.activeSnapshot must
+	// run under a separate lock scope.
 	if action == types.ActionRequestChanges {
 		e.markReviewedOnSubmit(session)
+		e.mu.Lock()
 		_ = e.createSnapshot(session, sub.ID)
+		e.mu.Unlock()
 	} else {
-		// Approve: wipe all snapshots (review is done)
+		e.mu.Lock()
 		e.deleteSnapshots()
+		e.mu.Unlock()
 	}
 
 	// Reset all reviewed states after submitting
@@ -1167,19 +1170,29 @@ func (e *Engine) createSnapshot(session *types.ReviewSession, submissionID strin
 		snapshotFiles = append(snapshotFiles, sf)
 	}
 
-	_, err = e.database.CreateSnapshot(
+	snapshotID, err := e.database.CreateSnapshot(
 		session.ID, submissionID, session.ReviewRound,
 		headRef, session.BaseRef, snapshotFiles,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Cache the latest snapshot for auto-unmark comparison
+	snap, loadErr := e.database.GetSnapshot(int(snapshotID))
+	if loadErr == nil {
+		e.latestSnapshot = snap
+	}
+	return nil
 }
 
-// deleteSnapshots removes all snapshots for the current session and clears active snapshot.
+// deleteSnapshots removes all snapshots for the current session and clears cached state.
 func (e *Engine) deleteSnapshots() {
 	if e.current != nil {
 		_ = e.database.DeleteSnapshots(e.current.ID)
 	}
 	e.activeSnapshot = nil
+	e.latestSnapshot = nil
 }
 
 // markReviewedOnSubmit marks files as reviewed based on the config setting.
@@ -1248,8 +1261,8 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 			continue
 		}
 
-		// Compare current content hash against snapshot
-		currentSHA, err := e.git.HashObject(f.Path)
+		// Compare current content hash against snapshot (dry: don't write to object store)
+		currentSHA, err := e.git.HashObjectDry(f.Path)
 		if err != nil {
 			continue // can't hash, skip
 		}
@@ -1273,13 +1286,7 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 // snapshotFileDiff computes a diff between the snapshot's stored content and the current working tree.
 func (e *Engine) snapshotFileDiff(snapshot *types.ReviewSnapshot, path string) (*types.DiffResult, error) {
 	// Find the file in the snapshot
-	var snapshotFile *types.SnapshotFile
-	for i := range snapshot.Files {
-		if snapshot.Files[i].Path == path {
-			snapshotFile = &snapshot.Files[i]
-			break
-		}
-	}
+	snapshotFile := snapshot.FilesByPath[path]
 
 	// Get current working tree content
 	currentContent, currentErr := e.git.FileContent("", path)

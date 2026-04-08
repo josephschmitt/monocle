@@ -44,6 +44,10 @@ func (g *gitStub) HashObject(_ string) (string, error) {
 	return "deadbeef1234567890abcdef1234567890abcdef", nil
 }
 
+func (g *gitStub) HashObjectDry(_ string) (string, error) {
+	return "deadbeef1234567890abcdef1234567890abcdef", nil
+}
+
 func (g *gitStub) CatFile(_ string) (string, error) {
 	return "", nil
 }
