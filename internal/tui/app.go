@@ -655,6 +655,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case openRefPickerMsg:
 		m.refPicker.entries = msg.entries
+		m.refPicker.snapshots = msg.snapshots
 		m.refPicker.autoActive = msg.autoActive
 		m.refPicker.active = true
 		m.refPicker.width = m.width
@@ -663,9 +664,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refPicker.hasMore = len(msg.entries) >= refPickerPageSize
 		m.refPicker.loading = false
 
-		// Pre-select the currently active ref
+		// Pre-select the currently active ref or snapshot
 		m.refPicker.cursor = 0
-		if !msg.autoActive {
+		if snap := m.engine.GetActiveSnapshot(); snap != nil {
+			// Find the active snapshot in the list
+			for i, s := range msg.snapshots {
+				if s.ID == snap.ID {
+					m.refPicker.cursor = 1 + i
+					break
+				}
+			}
+		} else if !msg.autoActive {
 			// Use the user's selected ref for matching (not the parent used for diffing)
 			displayRef := m.engine.SelectedBaseRef()
 			if displayRef == "" {
@@ -674,9 +683,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if displayRef != "" {
+				commitStart := m.refPicker.commitStartCursor()
 				for i, entry := range msg.entries {
 					if strings.HasPrefix(entry.Hash, displayRef) || strings.HasPrefix(displayRef, entry.Hash) {
-						m.refPicker.cursor = i + 1
+						m.refPicker.cursor = commitStart + i
 						break
 					}
 				}
@@ -689,10 +699,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case selectRefMsg:
 		m.overlay = overlayNone
 		m.refPicker.active = false
+		// Selecting a git ref clears snapshot mode
+		m.engine.ClearSnapshotBase()
 		if msg.auto {
 			return m, m.executeCommand("ref auto")
 		}
 		return m, m.executeCommand("ref " + msg.hash)
+
+	case selectSnapshotMsg:
+		m.overlay = overlayNone
+		m.refPicker.active = false
+		if err := m.engine.SetSnapshotBase(msg.snapshotID); err != nil {
+			return m, nil
+		}
+		// Refresh to show snapshot-based diff
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.baseRef = m.displayBaseRef(session)
+		}
+		return m, m.refreshFiles()
 
 	case loadMoreRefsMsg:
 		m.refPicker, _ = m.refPicker.Update(msg)
@@ -1607,8 +1632,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return nil
 			}
+			snapshots, _ := engine.GetSnapshots()
 			return openRefPickerMsg{
 				entries:    entries,
+				snapshots:  snapshots,
 				autoActive: engine.IsAutoAdvanceRef(),
 			}
 		}
@@ -1928,8 +1955,10 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			if err != nil {
 				return nil
 			}
+			snapshots, _ := engine.GetSnapshots()
 			return openRefPickerMsg{
 				entries:    entries,
+				snapshots:  snapshots,
 				autoActive: engine.IsAutoAdvanceRef(),
 			}
 		}
@@ -1964,6 +1993,9 @@ type baseRefChangedMsg struct {
 // Prefers the user's selected ref over the internal diff baseline (which is
 // the parent commit used for git diff).
 func (m appModel) displayBaseRef(session *types.ReviewSession) string {
+	if snap := m.engine.GetActiveSnapshot(); snap != nil {
+		return fmt.Sprintf("R%d (%s)", snap.ReviewRound, formatTimeAgo(snap.CreatedAt))
+	}
 	if selected := m.engine.SelectedBaseRef(); selected != "" {
 		return selected
 	}

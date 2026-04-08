@@ -38,6 +38,11 @@ func (s *stubEngine) GetContentItem(id string) (*types.ContentItem, error) {
 	}
 	return nil, fmt.Errorf("not found")
 }
+func (s *stubEngine) GetSnapshots() ([]types.ReviewSnapshot, error)   { return nil, nil }
+func (s *stubEngine) SetSnapshotBase(snapshotID int) error             { return nil }
+func (s *stubEngine) ClearSnapshotBase()                               {}
+func (s *stubEngine) GetActiveSnapshot() *types.ReviewSnapshot         { return nil }
+func (s *stubEngine) HasSnapshots() (bool, error)                      { return false, nil }
 func (s *stubEngine) ClearComments() error {
 	s.cleared = true
 	return nil

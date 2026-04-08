@@ -1,18 +1,49 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/josephschmitt/monocle/internal/core"
+	"github.com/josephschmitt/monocle/internal/types"
 )
+
+// formatTimeAgo returns a human-readable relative time string.
+func formatTimeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	}
+}
 
 const refPickerPageSize = 20
 
 type refPickerModel struct {
 	entries    []core.LogEntry
+	snapshots  []types.ReviewSnapshot
 	cursor     int
 	offset     int // scroll offset for visible entries
 	width      int
@@ -30,12 +61,17 @@ func newRefPickerModel(theme Theme) refPickerModel {
 
 type openRefPickerMsg struct {
 	entries    []core.LogEntry
+	snapshots  []types.ReviewSnapshot
 	autoActive bool
 }
 
 type selectRefMsg struct {
 	hash string
 	auto bool
+}
+
+type selectSnapshotMsg struct {
+	snapshotID int
 }
 
 type cancelRefPickerMsg struct{}
@@ -45,8 +81,18 @@ type loadMoreRefsMsg struct {
 	hasMore bool
 }
 
+// snapshotCount returns the number of snapshot entries in the picker.
+func (m refPickerModel) snapshotCount() int {
+	return len(m.snapshots)
+}
+
+// commitStartCursor returns the cursor position of the first commit entry.
+func (m refPickerModel) commitStartCursor() int {
+	return 1 + m.snapshotCount() // 0=auto, then snapshots
+}
+
 func (m refPickerModel) maxCursor() int {
-	n := len(m.entries) // last commit is at cursor position len(entries)
+	n := m.commitStartCursor() + len(m.entries) - 1
 	if m.hasMore {
 		n++ // "Load more..." option
 	}
@@ -75,16 +121,23 @@ func (m refPickerModel) Update(msg tea.Msg) (refPickerModel, tea.Cmd) {
 			m.ensureVisible()
 		case "enter":
 			if m.cursor == 0 {
-				// "Auto (HEAD)" option
+				// "Latest Changes" option
 				return m, func() tea.Msg { return selectRefMsg{auto: true} }
 			}
+			// Snapshot entries
+			if m.cursor >= 1 && m.cursor <= m.snapshotCount() {
+				snapIdx := m.cursor - 1
+				id := m.snapshots[snapIdx].ID
+				return m, func() tea.Msg { return selectSnapshotMsg{snapshotID: id} }
+			}
 			// "Load more..." option
-			if m.hasMore && m.cursor == len(m.entries)+1 {
+			commitStart := m.commitStartCursor()
+			if m.hasMore && m.cursor == commitStart+len(m.entries) {
 				m.loading = true
 				return m, nil // app.go handles the actual fetch
 			}
-			idx := m.cursor - 1
-			if idx < len(m.entries) {
+			idx := m.cursor - commitStart
+			if idx >= 0 && idx < len(m.entries) {
 				return m, func() tea.Msg { return selectRefMsg{hash: m.entries[idx].Hash} }
 			}
 		case "esc", "q":
@@ -113,17 +166,35 @@ func (m refPickerModel) View() string {
 	title := lipgloss.NewStyle().Bold(true).Render("Select Base Ref")
 	b.WriteString(title + "\n\n")
 
-	// Auto option
-	autoLabel := "  Auto (follow HEAD)"
+	// "Latest Changes" option (was "Auto (follow HEAD)")
+	autoLabel := "  Latest Changes"
 	if m.autoActive {
-		autoLabel = "  Auto (follow HEAD) ✓"
+		autoLabel = "  Latest Changes ✓"
 	}
 	if m.cursor == 0 {
 		b.WriteString(lipgloss.NewStyle().Reverse(true).Render(autoLabel))
 	} else {
 		b.WriteString(autoLabel)
 	}
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+
+	// Snapshot entries
+	if len(m.snapshots) > 0 {
+		b.WriteString("\n")
+		faintSep := lipgloss.NewStyle().Faint(true)
+		b.WriteString(faintSep.Render("  Since Review") + "\n")
+		for i, snap := range m.snapshots {
+			label := fmt.Sprintf("  Round %d (%s)", snap.ReviewRound, formatTimeAgo(snap.CreatedAt))
+			cursorPos := 1 + i
+			if m.cursor == cursorPos {
+				b.WriteString(lipgloss.NewStyle().Reverse(true).Render(label))
+			} else {
+				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(label))
+			}
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
 
 	// Commit entries with scrolling
 	vh := m.viewportHeight()
@@ -152,10 +223,11 @@ func (m refPickerModel) View() string {
 	subjectStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Width(subjectW)
 	plainHashStyle := lipgloss.NewStyle().Width(hashColW).PaddingLeft(2).PaddingRight(1)
 	plainSubjectStyle := lipgloss.NewStyle().Width(subjectW)
+	commitStart := m.commitStartCursor()
 	for i := m.offset; i < end; i++ {
 		entry := m.entries[i]
 		var line string
-		if m.cursor == i+1 {
+		if m.cursor == commitStart+i {
 			// Render without foreground colors so Reverse works cleanly
 			hashBlock := plainHashStyle.Render(entry.Hash)
 			subjectBlock := plainSubjectStyle.Render(entry.Subject)
@@ -181,7 +253,7 @@ func (m refPickerModel) View() string {
 		if m.loading {
 			loadMoreLabel = "  Loading..."
 		}
-		if m.cursor == len(m.entries)+1 {
+		if m.cursor == commitStart+len(m.entries) {
 			b.WriteString(lipgloss.NewStyle().Reverse(true).Render(loadMoreLabel))
 		} else {
 			b.WriteString(faintStyle.Render(loadMoreLabel))
@@ -208,24 +280,42 @@ func (m *refPickerModel) handleClick(contentY int) (tea.Cmd, bool) {
 	// Content layout:
 	// Line 0: "Select Base Ref"
 	// Line 1: blank
-	// Line 2: Auto option
-	// Line 3: blank
-	// Line 4+: "▲ more" (if scrolled), then entries, then "Load more..."/"▼ more"
+	// Line 2: Latest Changes option
+	// Line 3: blank (or snapshot header if snapshots exist)
+	// Then: snapshot entries, blank, commit entries
 
-	// Auto option
+	// Latest Changes option
 	if contentY == 2 {
 		m.cursor = 0
 		return func() tea.Msg { return selectRefMsg{auto: true} }, true
 	}
 
-	entryStartLine := 4
+	// Snapshot entries (if any)
+	if len(m.snapshots) > 0 {
+		// Line 3: blank, Line 4: "Since Review" header, Lines 5+: snapshot entries
+		snapStartLine := 5
+		for i := range m.snapshots {
+			if contentY == snapStartLine+i {
+				m.cursor = 1 + i
+				id := m.snapshots[i].ID
+				return func() tea.Msg { return selectSnapshotMsg{snapshotID: id} }, true
+			}
+		}
+	}
+
+	// Commit entries
+	commitHeaderLines := 4 // title + blank + auto + blank
+	if len(m.snapshots) > 0 {
+		commitHeaderLines += 1 + len(m.snapshots) + 1 // header + entries + blank
+	}
+	entryStartLine := commitHeaderLines
 	if m.offset > 0 {
 		entryStartLine++ // "▲ more" indicator line
 	}
 
 	clickedIdx := contentY - entryStartLine + m.offset
 	if clickedIdx >= 0 && clickedIdx < len(m.entries) {
-		m.cursor = clickedIdx + 1
+		m.cursor = m.commitStartCursor() + clickedIdx
 		hash := m.entries[clickedIdx].Hash
 		return func() tea.Msg { return selectRefMsg{hash: hash} }, true
 	}
@@ -255,13 +345,15 @@ func (m refPickerModel) viewportHeight() int {
 // ensureVisible adjusts the scroll offset so the cursor stays within the
 // visible viewport.
 func (m *refPickerModel) ensureVisible() {
-	// cursor 0 is the "Auto" option which is always visible above the list
-	if m.cursor <= 0 {
+	// cursor 0 is the "Latest Changes" option which is always visible above the list
+	// Snapshot entries are also always visible (not scrollable)
+	commitStart := m.commitStartCursor()
+	if m.cursor < commitStart {
 		m.offset = 0
 		return
 	}
-	// entries use 0-based indexing, cursor 1 = entries[0]
-	entryIdx := m.cursor - 1
+	// entries use 0-based indexing relative to commitStart
+	entryIdx := m.cursor - commitStart
 	if entryIdx < m.offset {
 		m.offset = entryIdx
 	}
