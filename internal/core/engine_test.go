@@ -1027,3 +1027,248 @@ func TestFormatSkipsResolvedComments(t *testing.T) {
 		t.Error("summary should only count active (non-resolved) comments")
 	}
 }
+
+func TestSnapshotCreatedOnRequestChanges(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: "head123",
+	}
+
+	formatter := NewReviewFormatter(func(path string, start, end int) string {
+		return ""
+	}, types.ReviewFormatConfig{})
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		formatter:   formatter,
+		cfg:         &types.Config{},
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID:           "sess-1",
+		Agent:        "claude",
+		RepoRoot:     "/tmp/repo",
+		BaseRef:      "base123",
+		ReviewRound:  1,
+		FileStatuses: make(map[string]bool),
+		ChangedFiles: []types.ChangedFile{
+			{Path: "main.go", Status: types.FileModified},
+		},
+		Comments: []types.ReviewComment{
+			{ID: "c1", TargetType: types.TargetFile, TargetRef: "main.go", Type: types.CommentIssue, Body: "fix"},
+		},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	// Submit request_changes
+	if _, err := e.Submit(types.ActionRequestChanges, "please fix"); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	// Verify snapshot was created
+	snapshots, err := database.GetSnapshots("sess-1")
+	if err != nil {
+		t.Fatalf("GetSnapshots: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(snapshots))
+	}
+	if snapshots[0].ReviewRound != 1 {
+		t.Errorf("expected round 1, got %d", snapshots[0].ReviewRound)
+	}
+	if snapshots[0].HeadRef != "head123" {
+		t.Errorf("expected head ref head123, got %q", snapshots[0].HeadRef)
+	}
+
+	// Verify snapshot files
+	snap, _ := database.GetSnapshot(snapshots[0].ID)
+	if len(snap.Files) != 1 {
+		t.Fatalf("expected 1 file in snapshot, got %d", len(snap.Files))
+	}
+	if snap.Files[0].Path != "main.go" {
+		t.Errorf("expected main.go, got %q", snap.Files[0].Path)
+	}
+}
+
+func TestSnapshotWipedOnApprove(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: "head123",
+	}
+
+	formatter := NewReviewFormatter(func(path string, start, end int) string {
+		return ""
+	}, types.ReviewFormatConfig{})
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		formatter:   formatter,
+		cfg:         &types.Config{},
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID:           "sess-1",
+		Agent:        "claude",
+		RepoRoot:     "/tmp/repo",
+		BaseRef:      "base123",
+		ReviewRound:  1,
+		FileStatuses: make(map[string]bool),
+		ChangedFiles: []types.ChangedFile{
+			{Path: "main.go", Status: types.FileModified},
+		},
+		Comments: []types.ReviewComment{
+			{ID: "c1", TargetType: types.TargetFile, TargetRef: "main.go", Type: types.CommentIssue, Body: "fix"},
+		},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	// First, submit request_changes to create a snapshot
+	e.Submit(types.ActionRequestChanges, "fix please")
+
+	// Verify snapshot exists
+	has, _ := database.HasSnapshots("sess-1")
+	if !has {
+		t.Fatal("expected snapshot after request_changes")
+	}
+
+	// Now submit approve
+	e.current.Comments = nil // clear comments for approve
+	e.Submit(types.ActionApprove, "")
+
+	// Verify snapshots were wiped
+	has, _ = database.HasSnapshots("sess-1")
+	if has {
+		t.Error("expected snapshots to be wiped after approve")
+	}
+}
+
+func TestSnapshotWipedOnSetBaseRef(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: "resolved123",
+	}
+
+	now := time.Now()
+	e := &Engine{
+		feedback:       NewFeedbackQueue(),
+		database:       database,
+		git:            stub,
+		autoAdvanceRef: true,
+		subscribers:    make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID: "sess-1", Agent: "claude",
+		RepoRoot: "/tmp/repo", BaseRef: "old-base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	// Manually insert a snapshot
+	database.CreateSubmission("sess-1", &types.ReviewSubmission{
+		ID: "sub-1", SessionID: "sess-1", Action: types.ActionRequestChanges,
+		FormattedReview: "review", ReviewRound: 1, SubmittedAt: now,
+	})
+	database.CreateSnapshot("sess-1", "sub-1", 1, "head1", "base1", []types.SnapshotFile{
+		{Path: "main.go", Status: types.FileModified, BlobSHA: "sha1"},
+	})
+
+	has, _ := database.HasSnapshots("sess-1")
+	if !has {
+		t.Fatal("expected snapshot to exist")
+	}
+
+	// Change base ref
+	if err := e.SetBaseRef("some-ref"); err != nil {
+		t.Fatalf("SetBaseRef: %v", err)
+	}
+
+	// Verify snapshots were wiped
+	has, _ = database.HasSnapshots("sess-1")
+	if has {
+		t.Error("expected snapshots to be wiped after SetBaseRef")
+	}
+}
+
+func TestMarkReviewedOnSubmitConfig(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: "head123",
+	}
+
+	formatter := NewReviewFormatter(func(path string, start, end int) string {
+		return ""
+	}, types.ReviewFormatConfig{})
+
+	now := time.Now()
+
+	// Test "commented" mode: only files with comments get marked
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		formatter:   formatter,
+		cfg:         &types.Config{MarkReviewedOnSubmit: "commented"},
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
+		BaseRef: "base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool),
+		ChangedFiles: []types.ChangedFile{
+			{Path: "main.go", Status: types.FileModified},
+			{Path: "utils.go", Status: types.FileModified},
+		},
+		Comments: []types.ReviewComment{
+			{ID: "c1", TargetType: types.TargetFile, TargetRef: "main.go", Type: types.CommentIssue, Body: "fix"},
+		},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+	database.UpsertChangedFile("sess-1", &e.current.ChangedFiles[0])
+	database.UpsertChangedFile("sess-1", &e.current.ChangedFiles[1])
+
+	e.Submit(types.ActionRequestChanges, "fix")
+
+	// Check the snapshot — only main.go should be marked as reviewed
+	snapshots, _ := database.GetSnapshots("sess-1")
+	if len(snapshots) == 0 {
+		t.Fatal("expected a snapshot")
+	}
+	snap, _ := database.GetSnapshot(snapshots[0].ID)
+	for _, f := range snap.Files {
+		if f.Path == "main.go" && !f.Reviewed {
+			t.Error("expected main.go to be reviewed (has comment)")
+		}
+		if f.Path == "utils.go" && f.Reviewed {
+			t.Error("expected utils.go to NOT be reviewed (no comment)")
+		}
+	}
+}
