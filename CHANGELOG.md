@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.43.0](https://github.com/josephschmitt/monocle/compare/v0.42.0...v0.43.0) (2026-04-08)
+
+
+### Features
+
+* **tui:** add g/G keybindings to ref picker for top/bottom jump ([02518c0](https://github.com/josephschmitt/monocle/commit/02518c0375d2ee0d0a354172cd3a900919830d29))
+* **tui:** detect binary files and show indicator in diff view ([d7f343d](https://github.com/josephschmitt/monocle/commit/d7f343daef9b0f2475cf654d6a50d02c70a95bc1))
+
 ## [0.42.0](https://github.com/josephschmitt/monocle/compare/v0.41.1...v0.42.0) (2026-04-07)
 
 
