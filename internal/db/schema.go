@@ -5,9 +5,12 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 7
+const schemaVersion = 8
 
 const dropSQL = `
+DROP TABLE IF EXISTS review_snapshot_content;
+DROP TABLE IF EXISTS review_snapshot_files;
+DROP TABLE IF EXISTS review_snapshots;
 DROP TABLE IF EXISTS review_submissions;
 DROP TABLE IF EXISTS comments;
 DROP TABLE IF EXISTS content_versions;
@@ -104,12 +107,43 @@ CREATE TABLE IF NOT EXISTS additional_files (
 	UNIQUE(session_id, path)
 );
 
+CREATE TABLE IF NOT EXISTS review_snapshots (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	submission_id TEXT NOT NULL REFERENCES review_submissions(id),
+	review_round INTEGER NOT NULL,
+	head_ref TEXT NOT NULL,
+	base_ref TEXT NOT NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS review_snapshot_files (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	snapshot_id INTEGER NOT NULL REFERENCES review_snapshots(id),
+	path TEXT NOT NULL,
+	status TEXT NOT NULL,
+	reviewed INTEGER NOT NULL DEFAULT 0,
+	blob_sha TEXT NOT NULL DEFAULT '',
+	content TEXT NOT NULL DEFAULT '',
+	UNIQUE(snapshot_id, path)
+);
+
+CREATE TABLE IF NOT EXISTS review_snapshot_content (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	snapshot_id INTEGER NOT NULL REFERENCES review_snapshots(id),
+	content_item_id TEXT NOT NULL,
+	version INTEGER NOT NULL,
+	UNIQUE(snapshot_id, content_item_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_changed_files_session ON changed_files(session_id);
 CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_type, target_ref);
 CREATE INDEX IF NOT EXISTS idx_review_submissions_session ON review_submissions(session_id);
 CREATE INDEX IF NOT EXISTS idx_additional_files_session ON additional_files(session_id);
+CREATE INDEX IF NOT EXISTS idx_review_snapshots_session ON review_snapshots(session_id);
+CREATE INDEX IF NOT EXISTS idx_review_snapshot_files_snapshot ON review_snapshot_files(snapshot_id);
 `
 
 // Migrate checks the schema version and applies migrations as needed.

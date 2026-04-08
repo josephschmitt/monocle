@@ -13,8 +13,9 @@ type Config struct {
 	AutoFocusMode     bool               `json:"auto_focus_mode"`
 	Mouse              *bool `json:"mouse"`
 	MinDiffWidth       int   `json:"min_diff_width"`
-	CommentExpand      *bool `json:"comment_expand"`
-	CommentExpandDelay int   `json:"comment_expand_delay"`
+	CommentExpand         *bool  `json:"comment_expand"`
+	CommentExpandDelay    int    `json:"comment_expand_delay"`
+	MarkReviewedOnSubmit  string `json:"mark_reviewed_on_submit"` // "all" (default), "commented", "manual"
 }
 
 type ReviewFormatConfig struct {
