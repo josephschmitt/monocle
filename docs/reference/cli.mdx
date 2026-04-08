@@ -17,6 +17,7 @@ Monocle detects the Git repository root from the current working directory and o
 
 | Flag | Short | Description |
 |------|-------|-------------|
+| `--workdir PATH` | `-C` | Override the working directory. Monocle pairs with the repository at this path instead of the current directory. Also reads from the `MONOCLE_WORKDIR` environment variable. |
 | `--socket PATH` | | Override the Unix socket path. Also reads from the `MONOCLE_SOCKET` environment variable. |
 | `--additional-path PATH` | `-a` | Add an extra file or directory path to include in the review. Repeatable. |
 | `--continue` | `-c` | Resume the most recent session for this repository. |

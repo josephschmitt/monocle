@@ -10,7 +10,7 @@ When registered in **MCP tools mode**, agents call these operations as MCP tools
 When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
 <Note>
-  Set the `MONOCLE_SOCKET` environment variable when the agent's working directory differs from monocle's working directory. Without it, commands look for a socket based on the current directory and may not find a running session. Press `I` in the monocle TUI to see the active socket path.
+  When the agent's working directory differs from monocle's, use `--workdir` (`-C`) to point commands at the correct repository. Alternatively, set `MONOCLE_SOCKET` or `MONOCLE_WORKDIR` to achieve the same effect via environment variables. Without one of these, commands look for a socket based on the current directory and may not find a running session. Press `I` in the monocle TUI to see the active socket path.
 </Note>
 
 ---
@@ -20,15 +20,16 @@ When registered in **skills mode**, agents invoke the corresponding CLI commands
 Check the current review status of the running monocle session.
 
 ```bash
-monocle review status [--json] [--socket PATH]
+monocle review status [--json] [--workdir PATH] [--socket PATH]
 ```
 
 ### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--json` | Output the result as structured JSON instead of plain text. |
-| `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | | Output the result as structured JSON instead of plain text. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
 
 ### Output
 
@@ -45,7 +46,7 @@ In MCP tools mode, call the `review_status` tool with no parameters.
 Retrieve pending review feedback from the queue.
 
 ```bash
-monocle review get-feedback [--wait] [--json] [--socket PATH]
+monocle review get-feedback [--wait] [--json] [--workdir PATH] [--socket PATH]
 ```
 
 When the reviewer submits a review, it is placed in a queue. Multiple queued reviews are combined and delivered together as a single response.
@@ -54,11 +55,12 @@ Without `--wait`, the command returns immediately. If no feedback is pending it 
 
 ### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--wait` | Block until feedback is available. The command does not return until the reviewer submits a review. Used by the `/review-plan-wait` skill. |
-| `--json` | Output the result as structured JSON. |
-| `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--wait` | | Block until feedback is available. The command does not return until the reviewer submits a review. Used by the `/review-plan-wait` skill. |
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
 
 ### MCP tool equivalent
 
@@ -75,7 +77,7 @@ In MCP tools mode, call the `get_feedback` tool:
 Send content to the reviewer — a plan, architecture document, summary, or any other text — so it appears in the monocle sidebar alongside file diffs.
 
 ```bash
-monocle review send-artifact --title TEXT [--file PATH] [--id ID] [--type EXT] [--wait] [--json] [--socket PATH]
+monocle review send-artifact --title TEXT [--file PATH] [--id ID] [--type EXT] [--wait] [--json] [--workdir PATH] [--socket PATH]
 ```
 
 If you run the command again with the same `--id`, monocle updates the existing entry and shows a diff between the old and new versions.
@@ -84,15 +86,16 @@ When `--file` is not provided, the command reads content from stdin.
 
 ### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--title TEXT` | **(Required)** Title displayed in the monocle sidebar. |
-| `--file PATH` | Path to the file to submit. When omitted, reads from stdin. |
-| `--id ID` | Identifier for the artifact. Use the same ID on subsequent calls to update the content in place. Defaults to the filename when `--file` is used. |
-| `--type EXT` | File extension used for syntax highlighting (e.g. `md`, `go`, `py`, `ts`). |
-| `--wait` | Block until the reviewer responds with feedback. Used by the `/review-plan-wait` skill. |
-| `--json` | Output the result as structured JSON. |
-| `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--title TEXT` | | **(Required)** Title displayed in the monocle sidebar. |
+| `--file PATH` | | Path to the file to submit. When omitted, reads from stdin. |
+| `--id ID` | | Identifier for the artifact. Use the same ID on subsequent calls to update the content in place. Defaults to the filename when `--file` is used. |
+| `--type EXT` | | File extension used for syntax highlighting (e.g. `md`, `go`, `py`, `ts`). |
+| `--wait` | | Block until the reviewer responds with feedback. Used by the `/review-plan-wait` skill. |
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
 
 ### Reading from stdin
 
@@ -125,7 +128,7 @@ When using MCP tools mode, the `send_artifact` tool accepts these parameters:
 Add one or more files or directories to the current review session so they appear in the monocle diff viewer.
 
 ```bash
-monocle review add-files <paths...> [--json] [--socket PATH]
+monocle review add-files <paths...> [--json] [--workdir PATH] [--socket PATH]
 ```
 
 ### Arguments
@@ -136,10 +139,11 @@ monocle review add-files <paths...> [--json] [--socket PATH]
 
 ### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--json` | Output the result as structured JSON. |
-| `--socket PATH` | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
 
 ### MCP tool equivalent
 
