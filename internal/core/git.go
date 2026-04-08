@@ -21,6 +21,8 @@ type GitAPI interface {
 	FileContent(ref, path string) (string, error)
 	RecentCommits(n int) ([]LogEntry, error)
 	ResolveRef(ref string) (string, error)
+	HashObject(path string) (string, error)
+	CatFile(sha string) (string, error)
 }
 
 // GitClient wraps git operations for a repository.
@@ -193,6 +195,26 @@ func (g *GitClient) ResolveRef(ref string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// HashObject writes a file's content into the git object store and returns its blob SHA.
+// This works with uncommitted files — it hashes the working tree content.
+func (g *GitClient) HashObject(path string) (string, error) {
+	absPath := filepath.Join(g.repoRoot, path)
+	out, err := g.run("hash-object", "-w", absPath)
+	if err != nil {
+		return "", fmt.Errorf("git hash-object %s: %w", path, err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// CatFile retrieves content from the git object store by SHA.
+func (g *GitClient) CatFile(sha string) (string, error) {
+	out, err := g.run("cat-file", "-p", sha)
+	if err != nil {
+		return "", fmt.Errorf("git cat-file %s: %w", sha, err)
+	}
+	return out, nil
+}
+
 func (g *GitClient) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.repoRoot
@@ -237,6 +259,33 @@ func buildSyntheticDiff(content string) []types.DiffHunk {
 			Kind:       types.DiffLineAdded,
 			Content:    line,
 			NewLineNum: i + 1,
+		})
+	}
+	return []types.DiffHunk{hunk}
+}
+
+// buildSyntheticDeleteDiff creates a single hunk showing the entire content as removed lines.
+// Used for files that existed in a snapshot but have been deleted.
+func buildSyntheticDeleteDiff(content string) []types.DiffHunk {
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+
+	hunk := types.DiffHunk{
+		OldStart: 1,
+		OldCount: len(lines),
+		NewStart: 0,
+		NewCount: 0,
+	}
+	for i, line := range lines {
+		hunk.Lines = append(hunk.Lines, types.DiffLine{
+			Kind:       types.DiffLineRemoved,
+			Content:    line,
+			OldLineNum: i + 1,
 		})
 	}
 	return []types.DiffHunk{hunk}

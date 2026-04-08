@@ -117,6 +117,13 @@ type EngineAPI interface {
 	SelectedBaseRef() string
 	RecentCommits(n int) ([]LogEntry, error)
 
+	// Review snapshots
+	GetSnapshots() ([]types.ReviewSnapshot, error)
+	SetSnapshotBase(snapshotID int) error
+	ClearSnapshotBase()
+	GetActiveSnapshot() *types.ReviewSnapshot
+	HasSnapshots() (bool, error)
+
 	// Server (socket for MCP channel)
 	StartServer(socketPath string) error
 
