@@ -576,15 +576,6 @@ func (d *DB) DeleteSnapshots(sessionID string) error {
 		return fmt.Errorf("delete snapshot files: %w", err)
 	}
 
-	// Delete content item snapshots
-	_, err = d.Exec(
-		`DELETE FROM review_snapshot_content WHERE snapshot_id IN
-		 (SELECT id FROM review_snapshots WHERE session_id = ?)`, sessionID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete snapshot content: %w", err)
-	}
-
 	// Delete snapshots
 	_, err = d.Exec(`DELETE FROM review_snapshots WHERE session_id = ?`, sessionID)
 	if err != nil {

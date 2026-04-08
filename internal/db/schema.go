@@ -8,7 +8,6 @@ import (
 const schemaVersion = 8
 
 const dropSQL = `
-DROP TABLE IF EXISTS review_snapshot_content;
 DROP TABLE IF EXISTS review_snapshot_files;
 DROP TABLE IF EXISTS review_snapshots;
 DROP TABLE IF EXISTS review_submissions;
@@ -126,14 +125,6 @@ CREATE TABLE IF NOT EXISTS review_snapshot_files (
 	blob_sha TEXT NOT NULL DEFAULT '',
 	content TEXT NOT NULL DEFAULT '',
 	UNIQUE(snapshot_id, path)
-);
-
-CREATE TABLE IF NOT EXISTS review_snapshot_content (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	snapshot_id INTEGER NOT NULL REFERENCES review_snapshots(id),
-	content_item_id TEXT NOT NULL,
-	version INTEGER NOT NULL,
-	UNIQUE(snapshot_id, content_item_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_changed_files_session ON changed_files(session_id);

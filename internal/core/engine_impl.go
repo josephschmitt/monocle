@@ -199,9 +199,10 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 
 	e.mu.Lock()
 	if e.current != nil && e.current.ID == session.ID {
-		// Auto-unmark reviewed files that changed since the latest snapshot
+		// Auto-unmark files and content items that changed since the latest snapshot
 		if e.latestSnapshot != nil {
 			e.autoUnmarkChangedFiles(session, files, e.latestSnapshot)
+			e.autoUnmarkChangedContent(session, e.latestSnapshot)
 		}
 		e.current.ChangedFiles = files
 	}
@@ -1279,6 +1280,21 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 			f.Reviewed = true
 			session.FileStatuses[f.Path] = true
 			_ = e.database.MarkFileReviewed(session.ID, f.Path, true)
+		}
+	}
+}
+
+// autoUnmarkChangedContent marks content items as unreviewed if they were updated
+// after the snapshot was created. Uses existing version timestamps — no separate
+// snapshot table needed since content items already have version history.
+func (e *Engine) autoUnmarkChangedContent(session *types.ReviewSession, snapshot *types.ReviewSnapshot) {
+	for i := range session.ContentItems {
+		item := &session.ContentItems[i]
+		if item.UpdatedAt.After(snapshot.CreatedAt) {
+			if item.Reviewed {
+				item.Reviewed = false
+				_ = e.database.MarkContentItemReviewed(session.ID, item.ID, false)
+			}
 		}
 	}
 }
