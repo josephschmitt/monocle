@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0](https://github.com/josephschmitt/monocle/compare/v0.43.0...v0.44.0) (2026-04-08)
+
+
+### Features
+
+* add --workdir/-C flag to override working directory for socket pairing ([33ecddb](https://github.com/josephschmitt/monocle/commit/33ecddbbc1a981e467703e102987828193a8274e))
+
 ## [0.43.0](https://github.com/josephschmitt/monocle/compare/v0.42.0...v0.43.0) (2026-04-08)
 
 
