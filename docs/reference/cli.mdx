@@ -136,12 +136,22 @@ monocle unregister [agent] [--global] [--keep-plan-hook] [--keep-review-gate] [-
 
 Handlers for agent lifecycle events. These subcommands are invoked by the agent's hook runner, not by humans — they read a JSON payload on stdin and emit the agent's expected decision JSON on stdout. `monocle register` wires them up automatically for Claude Code; this section documents the command surface for users who want to install them manually.
 
-| Subcommand | Agent flag | Description |
-|---|---|---|
-| `monocle hooks exit-plan --agent claude` | required | Block on the Monocle reviewer and emit a Claude Code `PermissionRequest` `allow`/`deny` decision. |
-| `monocle hooks enter-plan --agent claude` | required | Emit a Claude Code `PreToolUse` `additionalContext` string pointing the agent at Monocle's review loop. |
-| `monocle hooks mark-activity --agent claude` | required | Notify the Monocle engine that a write-tool just fired, marking the session as having unreviewed changes. |
-| `monocle hooks on-stop --agent claude` | required | On Claude's `Stop` event, block the turn-end until the reviewer responds if (and only if) the turn included file edits. Emits a Claude Code Stop-hook `{"decision":"block","reason":...}` on "request changes"; exits 0 empty on "approve" or on a pure-chat turn. |
+| Subcommand | Description |
+|---|---|
+| `monocle hooks exit-plan` | Block on the Monocle reviewer and emit a Claude Code `PermissionRequest` `allow`/`deny` decision. |
+| `monocle hooks enter-plan` | Emit a Claude Code `PreToolUse` `additionalContext` string pointing the agent at Monocle's review loop. |
+| `monocle hooks mark-activity` | Notify the Monocle engine that a write-tool just fired, marking the session as having unreviewed changes. |
+| `monocle hooks on-stop` | On Claude's `Stop` event, block the turn-end until the reviewer responds if (and only if) the turn included file edits. Emits a Claude Code Stop-hook `{"decision":"block","reason":...}` on "request changes"; exits 0 empty on "approve" or on a pure-chat turn. |
+
+### Common flags
+
+Every hooks subcommand accepts the same flags:
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--agent AGENT` | | **(Required)** Agent whose hook runner is invoking this command. Currently only `claude` is supported. |
+| `--workdir PATH` | `-C` | Override the working directory used to locate the engine socket. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path directly. Also reads from `MONOCLE_SOCKET`. |
 
 The `--agent` flag is required on every subcommand, even though `claude` is currently the only supported value. This keeps `settings.json` entries self-describing and makes future agents additive rather than breaking.
 

@@ -3,7 +3,7 @@ title: "Review Gating"
 description: "Block your agent until you approve its plan or current work."
 ---
 
-Review gating lets you pause your agent's progress until you've had a chance to review. monocle provides two mechanisms: plan gating, which holds the agent at a specific content submission, and pause flow, which stops the agent mid-session at any point.
+Review gating lets you pause your agent's progress until you've had a chance to review. monocle provides three mechanisms: plan gating via hooks or skills, a per-turn review gate that blocks after file edits, and manual pause flow.
 
 ## Plan gating with `/review-plan-wait`
 
@@ -40,11 +40,35 @@ Once you've reviewed and pressed `S` to submit, the agent unblocks and receives 
   Pause flow requires MCP channel support and is currently only available with Claude Code. Other agents (OpenCode, Codex CLI, Gemini CLI) do not support the push notification needed to trigger the pause.
 </Warning>
 
+## Turn-end review gate (Claude Code hooks)
+
+When you register Claude Code with the review-gate hooks enabled (the default), monocle automatically blocks the agent at the end of any turn that edited files. You don't need to press anything — the gate triggers whenever the agent's turn included write-tool calls (Edit, Write, NotebookEdit, MultiEdit).
+
+<Steps>
+  <Step title="Agent edits files during its turn">
+    Each time a write-tool fires, the `PostToolUse` hook marks the session as having unreviewed changes.
+  </Step>
+  <Step title="Agent's turn ends">
+    The `Stop` hook fires and checks for unreviewed activity. If write-tools fired during the turn, the hook blocks and waits for your review.
+  </Step>
+  <Step title="You review and respond">
+    Open monocle and review the diffs. Press `S` to submit. If you approve, the agent's next turn starts. If you request changes, the feedback is sent back and the agent continues working to address it.
+  </Step>
+</Steps>
+
+If no file edits happened during the turn (for example, a pure-chat response), the hook exits immediately and the turn ends normally.
+
+To opt out of the turn-end review gate, pass `--no-review-gate` when registering or uncheck the option in the TUI wizard. See the [CLI reference](/reference/cli#monocle-register) for details.
+
+<Note>
+  Hooks don't fire when Claude is launched with `--dangerously-load-development-channels`. If you rely on MCP channels for push notifications, the hook toggles are no-ops at runtime.
+</Note>
+
 ## Choosing the right mechanism
 
-| | Plan gating | Pause flow |
-|---|---|---|
-| **What it gates** | A specific plan or artifact | The agent's entire session |
-| **When it triggers** | Agent calls `/review-plan-wait` | You press `P` in the TUI |
-| **Agent support** | All agents | Claude Code only |
-| **Use when** | You want to review the plan before the agent writes code | You want to pause everything while you catch up |
+| | Plan gating | Turn-end gate | Pause flow |
+|---|---|---|---|
+| **What it gates** | A specific plan or artifact | Every turn that edits files | The agent's entire session |
+| **When it triggers** | Agent calls `/review-plan-wait` or `ExitPlanMode` hook fires | Automatically at turn-end | You press `P` in the TUI |
+| **Agent support** | All agents (skills); Claude Code (hooks) | Claude Code only | Claude Code only |
+| **Use when** | You want to review the plan before the agent writes code | You want automatic review checkpoints after every code change | You want to pause everything while you catch up |
