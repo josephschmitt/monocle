@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.0](https://github.com/josephschmitt/monocle/compare/v0.44.0...v0.45.0) (2026-04-17)
+
+
+### Features
+
+* auto-review ExitPlanMode via Claude Code hooks ([d351f42](https://github.com/josephschmitt/monocle/commit/d351f4277dd759e4751326201d3092592c53d248))
+* **hooks:** add per-turn review gate via PostToolUse + Stop hooks ([a62ee4a](https://github.com/josephschmitt/monocle/commit/a62ee4a9ee0bdb8412b0d07bb7ce848a1876f900))
+* **register:** rebuild register/unregister as a themed TUI wizard ([ea6a07a](https://github.com/josephschmitt/monocle/commit/ea6a07afd4fd3780278e0b90bea0f36b9d64d121))
+
+
+### Bug Fixes
+
+* **hooks:** use absolute/repo-relative binary path + planFilePath as stable id ([40b13dc](https://github.com/josephschmitt/monocle/commit/40b13dc6993ddfa921418868b91a352d5caaca2b))
+
 ## [0.44.0](https://github.com/josephschmitt/monocle/compare/v0.43.0...v0.44.0) (2026-04-08)
 
 
