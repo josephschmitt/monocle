@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.46.0](https://github.com/josephschmitt/monocle/compare/v0.45.0...v0.46.0) (2026-04-18)
+
+
+### Features
+
+* **core:** add review tracking with snapshot-based change detection ([d634347](https://github.com/josephschmitt/monocle/commit/d634347d5b35cde37e8c294e19aa834b6ee04b28))
+* **db:** add review snapshot schema and queries ([15e18c1](https://github.com/josephschmitt/monocle/commit/15e18c1dc3a7439357815a8e6c0ec0cdf59bdd54))
+* **tui:** render review indicators, snapshot ref picker, and stable sidebar ([5382b38](https://github.com/josephschmitt/monocle/commit/5382b383a30b4c140160a2a62a65afbae0752133))
+
 ## [0.45.0](https://github.com/josephschmitt/monocle/compare/v0.44.0...v0.45.0) (2026-04-17)
 
 
