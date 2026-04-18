@@ -173,11 +173,10 @@ func refreshTick() tea.Cmd {
 
 // AppOptions configures optional behavior for the TUI app.
 type AppOptions struct {
-	MCPRegisterFn    func(global bool) error // if non-nil, offer MCP auto-registration on startup
-	ShowSessionPicker bool   // if true, show session picker modal on startup
-	RepoRoot         string  // repo root path, used by session picker to list sessions
-	DeferredSocket   string  // socket path to start after session is established (empty = already started)
-	NonGitMode       bool   // if true, directory mode (no git, show file contents instead of diffs)
+	MCPRegisterFn     func(global bool) error // if non-nil, offer MCP auto-registration on startup
+	ShowSessionPicker bool                    // if true, show session picker modal on startup
+	RepoRoot          string                  // repo root path, used by session picker to list sessions
+	NonGitMode        bool                    // if true, directory mode (no git, show file contents instead of diffs)
 }
 
 // appModel is the root model that composes all sub-models.
@@ -228,7 +227,6 @@ type appModel struct {
 
 	showSessionPicker bool   // open session picker on startup
 	repoRoot          string // repo root for session listing
-	deferredSocket    string // socket to start after session pick
 
 	nonGitMode bool             // directory mode (no git)
 	infoBanner infoBannerModel  // info modal for non-git startup
@@ -326,7 +324,6 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		minDiffWidth:      minDiffW,
 		showSessionPicker: o.ShowSessionPicker,
 		repoRoot:          o.RepoRoot,
-		deferredSocket:    o.DeferredSocket,
 		nonGitMode:        o.NonGitMode,
 	}
 }
@@ -376,17 +373,14 @@ func (m appModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// startSessionAndLoad creates a new session, starts the deferred socket server,
-// and returns a cmd that loads the initial data.
+// startSessionAndLoad creates a new session on the engine and returns a cmd
+// that loads the initial file/content lists. Used when the session picker
+// opens with no prior sessions or the user cancels.
 func (m appModel) startSessionAndLoad() tea.Cmd {
 	engine := m.engine
 	repoRoot := m.repoRoot
-	socketPath := m.deferredSocket
 	return func() tea.Msg {
 		engine.StartSession(core.SessionOptions{RepoRoot: repoRoot})
-		if socketPath != "" {
-			engine.StartServer(socketPath)
-		}
 		files := engine.GetChangedFiles()
 		items := engine.GetContentItems()
 		additional := engine.GetAdditionalFiles()
@@ -394,17 +388,12 @@ func (m appModel) startSessionAndLoad() tea.Cmd {
 	}
 }
 
-// resumeSessionAndLoad resumes an existing session, starts the deferred socket server,
-// and returns a cmd that loads the session data.
+// resumeSessionAndLoad resumes an existing session and loads its data.
 func (m appModel) resumeSessionAndLoad(sessionID string) tea.Cmd {
 	engine := m.engine
-	socketPath := m.deferredSocket
 	return func() tea.Msg {
 		if _, err := engine.ResumeSession(sessionID); err != nil {
 			return nil
-		}
-		if socketPath != "" {
-			engine.StartServer(socketPath)
 		}
 		files := engine.GetChangedFiles()
 		items := engine.GetContentItems()

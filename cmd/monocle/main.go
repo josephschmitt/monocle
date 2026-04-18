@@ -14,7 +14,6 @@ import (
 	"github.com/josephschmitt/monocle/internal/adapters"
 	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/core"
-	"github.com/josephschmitt/monocle/internal/db"
 	monocleMCP "github.com/josephschmitt/monocle/internal/mcp"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/tui"
@@ -707,65 +706,60 @@ func resolveSession(engine core.EngineAPI, repoRoot string, continueSession bool
 }
 
 func runTUI(socketOverride string, workdir string, additionalPaths []string, continueSession bool, resumePicker bool, sessionID string) error {
-	// Load config
-	cfg, err := core.LoadConfig()
-	if err != nil {
-		cfg = core.DefaultConfig()
-	}
-
-	// Open database
-	database, err := db.Open(db.DBPath())
-	if err != nil {
-		return fmt.Errorf("open db: %w", err)
-	}
-	defer database.Close()
-
-	// Get repo root — use --workdir if provided, otherwise CWD
+	// Resolve repo root — use --workdir if provided, otherwise CWD.
+	// nonGitMode informs the sidebar rendering but the real engine lives
+	// in `monocle serve`, which performs its own repo-root resolution.
 	repoRoot, nonGitMode, err := resolveRepoRoot(workdir)
 	if err != nil {
 		return err
 	}
 
-	// Create engine
-	engine, err := core.NewEngine(cfg, database, repoRoot, nonGitMode)
+	// Auto-spawn `monocle serve` for this repo if none is running, then
+	// connect as a thin client. The engine (SQLite, session, feedback
+	// queue, socket server) all live in the serve process; the TUI holds
+	// no engine state.
+	socketPath, _, err := adapters.EnsureServe(adapters.AutoSpawnOptions{
+		RepoRoot: repoRoot,
+		Socket:   socketOverride,
+	})
 	if err != nil {
-		return fmt.Errorf("create engine: %w", err)
+		return fmt.Errorf("ensure serve: %w", err)
 	}
 
-	// Resolve session: continue, resume, or new
-	if nonGitMode {
-		// In non-git mode, always start a fresh session
-		if err := startNewSession(engine, repoRoot); err != nil {
-			return err
+	engine, err := client.NewEngineClient(socketPath)
+	if err != nil {
+		return fmt.Errorf("connect engine: %w", err)
+	}
+	defer engine.Close()
+
+	// Session selection. monocle serve defaults to "continue latest or
+	// start new", so the zero-flag case needs no client-side action.
+	switch {
+	case sessionID != "":
+		if _, err := engine.ResumeSession(sessionID); err != nil {
+			return fmt.Errorf("resume session %s: %w", sessionID, err)
 		}
-	} else if err := resolveSession(engine, repoRoot, continueSession, resumePicker, sessionID); err != nil {
-		return err
-	}
-
-	// Reload any pending (undelivered) feedback from a previous session
-	if continueSession || sessionID != "" {
 		engine.ReloadPendingFeedback()
+	case continueSession:
+		sessions, err := engine.ListSessions(core.ListSessionsOptions{RepoRoot: repoRoot, Limit: 1})
+		if err == nil && len(sessions) > 0 {
+			if _, err := engine.ResumeSession(sessions[0].ID); err != nil {
+				return fmt.Errorf("resume session: %w", err)
+			}
+		}
+		engine.ReloadPendingFeedback()
+	case resumePicker:
+		// Picker modal drives ListSessions + ResumeSession itself.
 	}
 
-	// Add additional file paths if provided (only for new sessions)
+	// Only attach additional paths on a fresh-start flow. Resume variants
+	// preserve the paths that were persisted with the session.
 	if len(additionalPaths) > 0 && !continueSession && !resumePicker && sessionID == "" {
 		if _, err := engine.AddAdditionalPaths(additionalPaths); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not add additional paths: %v\n", err)
 		}
 	}
 
-	// Start socket server (deferred when showing session picker)
-	socketPath := socketOverride
-	if socketPath == "" {
-		socketPath = adapters.DefaultSocketPath(repoRoot)
-	}
-	if !resumePicker {
-		if err := engine.StartServer(socketPath); err != nil {
-			return fmt.Errorf("start server: %w", err)
-		}
-	}
-
-	// Check if MCP channel needs registration
 	var appOpts tui.AppOptions
 	appOpts.NonGitMode = nonGitMode
 	adapter := &adapters.ClaudeAdapter{}
@@ -777,24 +771,16 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 	if resumePicker {
 		appOpts.ShowSessionPicker = true
 		appOpts.RepoRoot = repoRoot
-		appOpts.DeferredSocket = socketPath
 	}
 
-	// Create TUI model
 	app := tui.NewApp(engine, appOpts)
-
-	// Create Bubble Tea program
 	p := tea.NewProgram(app)
-
-	// Bridge engine events to TUI
 	tui.BridgeEngineEvents(engine, p)
 
-	// Run program
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
-
-	// Cleanup
-	engine.Shutdown()
+	// Note: don't call engine.Shutdown() — serve owns its own lifecycle
+	// (idle timeout, PID file) and other clients may still be attached.
 	return nil
 }
