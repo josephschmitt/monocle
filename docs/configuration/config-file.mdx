@@ -33,6 +33,7 @@ Create either or both files — you only need to include the settings you want t
   "comment_expand_delay": 2000,
   "review_tracking": true,
   "mark_reviewed_on_submit": "all",
+  "idle_timeout": "30m",
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -59,6 +60,7 @@ Create either or both files — you only need to include the settings you want t
 | `comment_expand_delay` | integer (ms) | `2000` | Delay in milliseconds before a comment auto-expands on hover |
 | `review_tracking` | `true`, `false` | `true` | Enable review state tracking, snapshots, and change detection between rounds. Set to `false` for raw diffs with no reviewed indicators. |
 | `mark_reviewed_on_submit` | `"all"`, `"commented"`, `"manual"` | `"all"` | Which files to mark as reviewed when submitting (requires `review_tracking`, see [Review State](/concepts/review-state)) |
+| `idle_timeout` | duration string (e.g. `"30m"`, `"1h"`) | `"30m"` | How long `monocle serve` stays alive after the last client disconnects (plus a 60s grace window). Overridden by the `--idle-timeout` flag. Use `"0s"` or a negative value to disable. |
 | `keybindings` | object | `{}` | Custom key overrides (see [Keybindings](/configuration/keybindings)) |
 | `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
 | `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |

@@ -255,13 +255,19 @@ The comment editor supports standard emacs-style shortcuts:
 ## CLI
 
 ```
-monocle [--socket PATH]              Start a review session
+monocle [--socket PATH]              Start a review session (auto-spawns monocle serve)
+monocle serve [--idle-timeout DUR]   Run a headless engine for this repo (socket server, no TUI)
+monocle stop                         Stop the running monocle serve for this repo
 monocle register [agent] [--global]  Register Monocle for an agent
 monocle unregister [agent] [--global] Remove Monocle registration
 monocle --version                    Print version
 ```
 
 The `agent` argument is one of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you select which agents to register. The `--global` flag writes to the user-level config directory instead of the project.
+
+### How the engine runs
+
+Monocle 0.46+ splits the engine from the frontend. `monocle serve` owns the SQLite database, the review session, and the Unix socket; the `monocle` TUI, agent CLI commands, and future frontends all attach as thin socket clients. You don't usually need to run `monocle serve` yourself — launching `monocle` auto-spawns one in the background for the current repo. It exits on its own 60 seconds + `--idle-timeout` (default 30 min) after the last client disconnects.
 
 ### Agent-Facing Commands
 
@@ -313,6 +319,7 @@ Monocle loads settings from JSON config files:
   "comment_expand_delay": 2000,
   "review_tracking": true,
   "mark_reviewed_on_submit": "all",
+  "idle_timeout": "30m",
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -337,6 +344,7 @@ Monocle loads settings from JSON config files:
 | `comment_expand_delay`               | integer (ms)                               | `2000`       | Delay before auto-expanding a selected comment (0 = instant)             |
 | `review_tracking`                    | `true`, `false`                            | `true`       | Enable review state tracking, snapshots, and change detection. Set to `false` to get raw diffs with no reviewed indicators. |
 | `mark_reviewed_on_submit`            | `"all"`, `"commented"`, `"manual"`         | `"all"`      | Which files to mark as reviewed when submitting (requires `review_tracking`) |
+| `idle_timeout`                       | duration string (e.g. `"30m"`, `"1h"`)     | `"30m"`      | How long `monocle serve` stays alive after the last client disconnects (plus a 60s grace window). Overridden by `--idle-timeout`. |
 | `keybindings`                        | object                                     | `{}`         | Custom key overrides (see below)                                         |
 | `review_format.include_snippets`     | `true`, `false`                            | `true`       | Include code snippets in formatted reviews                               |
 | `review_format.max_snippet_lines`    | integer                                    | `10`         | Truncate snippets longer than this                                       |
