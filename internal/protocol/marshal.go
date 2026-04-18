@@ -61,6 +61,211 @@ func Decode(data []byte) (any, error) {
 		msg = &MarkActivityResponse{}
 	case TypeAwaitReviewResponse:
 		msg = &AwaitReviewResponse{}
+
+	// --- Engine surface: inbound ---
+	case TypeStartSession:
+		msg = &StartSessionMsg{}
+	case TypeResumeSession:
+		msg = &ResumeSessionMsg{}
+	case TypeGetSession:
+		msg = &GetSessionMsg{}
+	case TypeListSessions:
+		msg = &ListSessionsMsg{}
+	case TypeRefreshChangedFiles:
+		msg = &RefreshChangedFilesMsg{}
+	case TypeGetChangedFiles:
+		msg = &GetChangedFilesMsg{}
+	case TypeGetFileDiff:
+		msg = &GetFileDiffMsg{}
+	case TypeGetFileContent:
+		msg = &GetFileContentMsg{}
+	case TypeGetContentItems:
+		msg = &GetContentItemsMsg{}
+	case TypeGetContentItem:
+		msg = &GetContentItemMsg{}
+	case TypeGetContentDiff:
+		msg = &GetContentDiffMsg{}
+	case TypeGetContentVersions:
+		msg = &GetContentVersionsMsg{}
+	case TypeGetContentDiffBetweenVersion:
+		msg = &GetContentDiffBetweenVersionsMsg{}
+	case TypeDismissArtifact:
+		msg = &DismissArtifactMsg{}
+	case TypeGetAdditionalFiles:
+		msg = &GetAdditionalFilesMsg{}
+	case TypeGetAdditionalFileContent:
+		msg = &GetAdditionalFileContentMsg{}
+	case TypeAddComment:
+		msg = &AddCommentMsg{}
+	case TypeEditComment:
+		msg = &EditCommentMsg{}
+	case TypeDeleteComment:
+		msg = &DeleteCommentMsg{}
+	case TypeResolveComment:
+		msg = &ResolveCommentMsg{}
+	case TypeClearComments:
+		msg = &ClearCommentsMsg{}
+	case TypeClearReview:
+		msg = &ClearReviewMsg{}
+	case TypeMarkReviewed:
+		msg = &MarkReviewedMsg{}
+	case TypeUnmarkReviewed:
+		msg = &UnmarkReviewedMsg{}
+	case TypeMarkContentReviewed:
+		msg = &MarkContentReviewedMsg{}
+	case TypeUnmarkContentReviewed:
+		msg = &UnmarkContentReviewedMsg{}
+	case TypeResetAllReviewed:
+		msg = &ResetAllReviewedMsg{}
+	case TypeMarkAllReviewed:
+		msg = &MarkAllReviewedMsg{}
+	case TypeGetReviewSummary:
+		msg = &GetReviewSummaryMsg{}
+	case TypeSubmit:
+		msg = &SubmitMsg{}
+	case TypeFormatReview:
+		msg = &FormatReviewMsg{}
+	case TypeGetSubmissions:
+		msg = &GetSubmissionsMsg{}
+	case TypeSetBaseRef:
+		msg = &SetBaseRefMsg{}
+	case TypeSetAutoAdvanceRef:
+		msg = &SetAutoAdvanceRefMsg{}
+	case TypeIsAutoAdvanceRef:
+		msg = &IsAutoAdvanceRefMsg{}
+	case TypeSelectedBaseRef:
+		msg = &SelectedBaseRefMsg{}
+	case TypeRecentCommits:
+		msg = &RecentCommitsMsg{}
+	case TypeGetSnapshots:
+		msg = &GetSnapshotsMsg{}
+	case TypeSetSnapshotBase:
+		msg = &SetSnapshotBaseMsg{}
+	case TypeClearSnapshotBase:
+		msg = &ClearSnapshotBaseMsg{}
+	case TypeGetActiveSnapshot:
+		msg = &GetActiveSnapshotMsg{}
+	case TypeHasSnapshots:
+		msg = &HasSnapshotsMsg{}
+	case TypeGetConfig:
+		msg = &GetConfigMsg{}
+	case TypeSaveConfig:
+		msg = &SaveConfigMsg{}
+	case TypeIsReviewTrackingEnabled:
+		msg = &IsReviewTrackingEnabledMsg{}
+	case TypeGetFeedbackStatus:
+		msg = &GetFeedbackStatusMsg{}
+	case TypeGetQueuedCount:
+		msg = &GetQueuedCountMsg{}
+	case TypeReloadPendingFeedback:
+		msg = &ReloadPendingFeedbackMsg{}
+	case TypeGetSubscriberCount:
+		msg = &GetSubscriberCountMsg{}
+	case TypeGetSocketPath:
+		msg = &GetSocketPathMsg{}
+
+	// --- Engine surface: outbound ---
+	case TypeStartSessionResponse:
+		msg = &StartSessionResponse{}
+	case TypeResumeSessionResponse:
+		msg = &ResumeSessionResponse{}
+	case TypeGetSessionResponse:
+		msg = &GetSessionResponse{}
+	case TypeListSessionsResponse:
+		msg = &ListSessionsResponse{}
+	case TypeRefreshChangedFilesResponse:
+		msg = &RefreshChangedFilesResponse{}
+	case TypeGetChangedFilesResponse:
+		msg = &GetChangedFilesResponse{}
+	case TypeGetFileDiffResponse:
+		msg = &GetFileDiffResponse{}
+	case TypeGetFileContentResponse:
+		msg = &GetFileContentResponse{}
+	case TypeGetContentItemsResponse:
+		msg = &GetContentItemsResponse{}
+	case TypeGetContentItemResponse:
+		msg = &GetContentItemResponse{}
+	case TypeGetContentDiffResponse:
+		msg = &GetContentDiffResponse{}
+	case TypeGetContentVersionsResponse:
+		msg = &GetContentVersionsResponse{}
+	case TypeGetContentDiffBetweenVersionResponse:
+		msg = &GetContentDiffBetweenVersionsResponse{}
+	case TypeDismissArtifactResponse:
+		msg = &DismissArtifactResponse{}
+	case TypeGetAdditionalFilesResponse:
+		msg = &GetAdditionalFilesResponse{}
+	case TypeGetAdditionalFileContentResponse:
+		msg = &GetAdditionalFileContentResponse{}
+	case TypeAddCommentResponse:
+		msg = &AddCommentResponse{}
+	case TypeEditCommentResponse:
+		msg = &EditCommentResponse{}
+	case TypeDeleteCommentResponse:
+		msg = &DeleteCommentResponse{}
+	case TypeResolveCommentResponse:
+		msg = &ResolveCommentResponse{}
+	case TypeClearCommentsResponse:
+		msg = &ClearCommentsResponse{}
+	case TypeClearReviewResponse:
+		msg = &ClearReviewResponse{}
+	case TypeMarkReviewedResponse:
+		msg = &MarkReviewedResponse{}
+	case TypeUnmarkReviewedResponse:
+		msg = &UnmarkReviewedResponse{}
+	case TypeMarkContentReviewedResponse:
+		msg = &MarkContentReviewedResponse{}
+	case TypeUnmarkContentReviewedResponse:
+		msg = &UnmarkContentReviewedResponse{}
+	case TypeResetAllReviewedResponse:
+		msg = &ResetAllReviewedResponse{}
+	case TypeMarkAllReviewedResponse:
+		msg = &MarkAllReviewedResponse{}
+	case TypeGetReviewSummaryResponse:
+		msg = &GetReviewSummaryResponse{}
+	case TypeSubmitResponse:
+		msg = &SubmitResponse{}
+	case TypeFormatReviewResponse:
+		msg = &FormatReviewResponse{}
+	case TypeGetSubmissionsResponse:
+		msg = &GetSubmissionsResponse{}
+	case TypeSetBaseRefResponse:
+		msg = &SetBaseRefResponse{}
+	case TypeSetAutoAdvanceRefResponse:
+		msg = &SetAutoAdvanceRefResponse{}
+	case TypeIsAutoAdvanceRefResponse:
+		msg = &IsAutoAdvanceRefResponse{}
+	case TypeSelectedBaseRefResponse:
+		msg = &SelectedBaseRefResponse{}
+	case TypeRecentCommitsResponse:
+		msg = &RecentCommitsResponse{}
+	case TypeGetSnapshotsResponse:
+		msg = &GetSnapshotsResponse{}
+	case TypeSetSnapshotBaseResponse:
+		msg = &SetSnapshotBaseResponse{}
+	case TypeClearSnapshotBaseResponse:
+		msg = &ClearSnapshotBaseResponse{}
+	case TypeGetActiveSnapshotResponse:
+		msg = &GetActiveSnapshotResponse{}
+	case TypeHasSnapshotsResponse:
+		msg = &HasSnapshotsResponse{}
+	case TypeGetConfigResponse:
+		msg = &GetConfigResponse{}
+	case TypeSaveConfigResponse:
+		msg = &SaveConfigResponse{}
+	case TypeIsReviewTrackingEnabledResponse:
+		msg = &IsReviewTrackingEnabledResponse{}
+	case TypeGetFeedbackStatusResponse:
+		msg = &GetFeedbackStatusResponse{}
+	case TypeGetQueuedCountResponse:
+		msg = &GetQueuedCountResponse{}
+	case TypeReloadPendingFeedbackResponse:
+		msg = &ReloadPendingFeedbackResponse{}
+	case TypeGetSubscriberCountResponse:
+		msg = &GetSubscriberCountResponse{}
+	case TypeGetSocketPathResponse:
+		msg = &GetSocketPathResponse{}
+
 	default:
 		return nil, fmt.Errorf("protocol decode: unknown type %q", envelope.Type)
 	}
