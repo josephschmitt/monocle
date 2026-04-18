@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.1](https://github.com/josephschmitt/monocle/compare/v0.46.0...v0.46.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **hooks:** enter-plan stays silent when monocle engine is unreachable ([29adfab](https://github.com/josephschmitt/monocle/commit/29adfabbad1ca64862bdc77306a69e461af3f9f7))
+
 ## [0.46.0](https://github.com/josephschmitt/monocle/compare/v0.45.0...v0.46.0) (2026-04-18)
 
 
