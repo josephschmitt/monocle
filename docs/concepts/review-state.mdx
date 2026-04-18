@@ -81,23 +81,23 @@ Snapshots are preserved when the base ref auto-advances (HEAD moves because the 
 
 ## Viewing changes since a prior round
 
-Open the ref picker with `g` `b` and you'll see a **Since Review** section listing your prior review rounds:
+Open the ref picker with `b` and you'll see a **Since Review** section listing your prior review rounds:
 
 ```
 Select Base Ref
 
-  Latest Changes ✓
-  ──────────────────
   Since Review
   Round 3 (2h ago)
   Round 2 (1d ago)
-  ──────────────────
+
+  Working Tree ✓
+
   Recent Commits
   abc1234  Fix the widget
   def5678  Add new feature
 ```
 
-Select a round to view only the changes since that review. The status bar updates to show which round you're diffing against. Select **Latest Changes** or a specific commit to return to normal git-based diffing.
+Snapshots appear at the top of the picker. Select a round to view only the changes since that review. The status bar updates to show which round you're diffing against. Select **Working Tree** or a specific commit to return to normal git-based diffing.
 
 <Note>
   Snapshots only appear in the ref picker after you've submitted at least one review with **Request Changes**. If you haven't submitted yet, you'll only see commits.
