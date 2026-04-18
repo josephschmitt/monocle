@@ -6,9 +6,20 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/josephschmitt/monocle/internal/protocol"
 )
+
+// DefaultIdleTimeout is how long monocle serve stays running past the 60s
+// grace window after the last client disconnects. Zero disables idle
+// shutdown (the serve runs until SIGINT/SIGTERM).
+const DefaultIdleTimeout = 30 * time.Minute
+
+// IdleGracePeriod is the fixed delay between "last client disconnected"
+// and "start the idle countdown". Prevents thrashing when a user Ctrl-Cs
+// a frontend and re-runs it within a few seconds.
+const IdleGracePeriod = 60 * time.Second
 
 // SocketServer listens on a Unix domain socket for CLI subcommand messages.
 type SocketServer struct {
@@ -17,12 +28,53 @@ type SocketServer struct {
 	socketPath      string
 	subscriberCount int
 	queuedCount     int // active queue-mode connections (not counted in subscriberCount)
-	subscriberMu    sync.Mutex
+	oneshotCount    int // active one-shot request connections (CLI tool calls in flight)
+	// lastDisconnectAt is the time the most recent client hung up leaving
+	// the server with zero active connections. Zero value means the server
+	// has always had at least one active client since startup.
+	lastDisconnectAt time.Time
+	subscriberMu     sync.Mutex
+
+	// totalActiveConns counts every live accepted connection regardless of
+	// type. It's the source of truth for idle detection, tracked at
+	// accept/close boundaries so the monitor doesn't fire during the
+	// narrow window before a new client's first message arrives.
+	totalActiveConns int
+
+	idleTimeout      time.Duration // 0 disables idle shutdown
+	idleGrace        time.Duration // 0 → IdleGracePeriod; test hook only
+	idleTickInterval time.Duration // 0 → 10s; test hook only
+	idleStop         chan struct{} // closes when the server shuts down (stops the monitor goroutine)
+	shutdownCh       chan struct{} // closes when idle timer fires
 }
 
 // NewSocketServer creates a new SocketServer. Call SetEngine and Start before use.
 func NewSocketServer() *SocketServer {
-	return &SocketServer{}
+	return &SocketServer{
+		shutdownCh: make(chan struct{}),
+		idleStop:   make(chan struct{}),
+	}
+}
+
+// SetIdleTimeout configures how long the server stays alive past the 60s
+// grace window after the last client disconnects. A zero or negative value
+// disables idle shutdown.
+func (s *SocketServer) SetIdleTimeout(d time.Duration) {
+	s.idleTimeout = d
+}
+
+// IdleShutdownCh returns a channel that closes when the idle timer fires.
+// Callers should listen on this alongside OS signals to know when to exit.
+func (s *SocketServer) IdleShutdownCh() <-chan struct{} {
+	return s.shutdownCh
+}
+
+// ActiveConnections returns the total number of live connections across all
+// modes. Used by the idle monitor and exposed for tests/observability.
+func (s *SocketServer) ActiveConnections() int {
+	s.subscriberMu.Lock()
+	defer s.subscriberMu.Unlock()
+	return s.totalActiveConns
 }
 
 // SetEngine wires the engine to the server. Called during engine construction.
@@ -49,7 +101,63 @@ func (s *SocketServer) Start(socketPath string) error {
 	s.socketPath = socketPath
 
 	go s.acceptLoop()
+	if s.idleTimeout > 0 {
+		go s.idleMonitor()
+	}
 	return nil
+}
+
+// idleMonitor periodically checks whether the server has been fully idle for
+// grace+idleTimeout and, if so, closes shutdownCh. The main goroutine of
+// monocle serve should select on IdleShutdownCh() alongside OS signals.
+func (s *SocketServer) idleMonitor() {
+	tick := s.idleTickInterval
+	if tick == 0 {
+		tick = 10 * time.Second
+	}
+	grace := s.idleGrace
+	if grace == 0 {
+		grace = IdleGracePeriod
+	}
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.idleStop:
+			return
+		case <-ticker.C:
+			s.subscriberMu.Lock()
+			active := s.totalActiveConns
+			last := s.lastDisconnectAt
+			s.subscriberMu.Unlock()
+
+			if active > 0 || last.IsZero() {
+				continue
+			}
+			if time.Since(last) >= grace+s.idleTimeout {
+				close(s.shutdownCh)
+				return
+			}
+		}
+	}
+}
+
+// onDisconnect records a client departure. When it takes the active total
+// to zero, the idle countdown starts.
+func (s *SocketServer) onDisconnect() {
+	s.subscriberMu.Lock()
+	defer s.subscriberMu.Unlock()
+	if s.totalActiveConns == 0 {
+		s.lastDisconnectAt = time.Now()
+	}
+}
+
+// onConnect cancels any in-flight idle countdown. Called when a new client
+// appears so a quick UI restart within the grace window doesn't trip idle.
+func (s *SocketServer) onConnect() {
+	s.subscriberMu.Lock()
+	defer s.subscriberMu.Unlock()
+	s.lastDisconnectAt = time.Time{}
 }
 
 // SocketPath returns the path of the Unix domain socket.
@@ -64,8 +172,15 @@ func (s *SocketServer) SubscriberCount() int {
 	return s.subscriberCount
 }
 
-// Shutdown stops the server and removes the socket file.
+// Shutdown stops the server, halts the idle monitor, and removes the socket file.
 func (s *SocketServer) Shutdown() error {
+	// idleStop is nil-safe because acceptLoop may not have been started.
+	select {
+	case <-s.idleStop:
+		// already closed
+	default:
+		close(s.idleStop)
+	}
 	if s.listener == nil {
 		return nil
 	}
@@ -80,7 +195,19 @@ func (s *SocketServer) acceptLoop() {
 		if err != nil {
 			return // listener was closed
 		}
-		go s.handleConnection(conn)
+		s.subscriberMu.Lock()
+		s.totalActiveConns++
+		s.subscriberMu.Unlock()
+		s.onConnect()
+		go func(c net.Conn) {
+			defer func() {
+				s.subscriberMu.Lock()
+				s.totalActiveConns--
+				s.subscriberMu.Unlock()
+				s.onDisconnect()
+			}()
+			s.handleConnection(c)
+		}(conn)
 	}
 }
 
@@ -121,8 +248,18 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// One-shot request/response (backward compatible with CLI subcommands)
-	defer conn.Close()
+	// One-shot request/response (backward compatible with CLI subcommands).
+	// Track oneshotCount for observability; idle bookkeeping happens at
+	// the accept/close boundary in acceptLoop.
+	s.subscriberMu.Lock()
+	s.oneshotCount++
+	s.subscriberMu.Unlock()
+	defer func() {
+		s.subscriberMu.Lock()
+		s.oneshotCount--
+		s.subscriberMu.Unlock()
+		conn.Close()
+	}()
 
 	response := s.handleMessage(msg)
 	if response == nil {

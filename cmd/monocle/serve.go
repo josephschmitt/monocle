@@ -21,7 +21,8 @@ import (
 // own Engine.
 type ServeCmd struct {
 	WorkDirFlag
-	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Socket      string        `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	IdleTimeout time.Duration `help:"Exit after this idle interval past the 60s grace window (0 disables)" name:"idle-timeout" default:""`
 }
 
 // StopCmd sends SIGTERM to a running `monocle serve` process for the target
@@ -97,6 +98,19 @@ func (c *ServeCmd) Run() error {
 		return fmt.Errorf("create engine: %w", err)
 	}
 
+	// Resolve idle timeout precedence: explicit flag > config file > default.
+	// A negative flag value disables idle shutdown entirely.
+	idle := core.DefaultIdleTimeout
+	if cfg.IdleTimeout != 0 {
+		idle = time.Duration(cfg.IdleTimeout)
+	}
+	if c.IdleTimeout != 0 {
+		idle = c.IdleTimeout
+	}
+	if idle > 0 {
+		engine.SetIdleTimeout(idle)
+	}
+
 	// Resolve an initial session the same way runTUI does today: continue
 	// the latest session if any, otherwise start fresh. `monocle serve`
 	// has no picker UI, so `--resume` and `--session` variants stay with
@@ -123,10 +137,15 @@ func (c *ServeCmd) Run() error {
 
 	fmt.Fprintf(os.Stdout, "monocle serve: listening on %s (pid %d)\n", socketPath, os.Getpid())
 
-	// Block on SIGINT/SIGTERM.
+	// Block on SIGINT/SIGTERM or the idle-shutdown signal, whichever
+	// fires first.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	select {
+	case <-sig:
+	case <-engine.IdleShutdownCh():
+		fmt.Fprintln(os.Stdout, "monocle serve: idle timeout reached, exiting")
+	}
 
 	engine.Shutdown()
 	return nil

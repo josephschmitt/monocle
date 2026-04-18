@@ -1767,6 +1767,19 @@ func (e *Engine) Shutdown() {
 	_ = e.server.Shutdown()
 }
 
+// SetIdleTimeout configures how long the underlying socket server stays
+// alive past the 60s grace window after the last client disconnects. Zero
+// or negative disables idle shutdown.
+func (e *Engine) SetIdleTimeout(d time.Duration) {
+	e.server.SetIdleTimeout(d)
+}
+
+// IdleShutdownCh returns a channel that closes when the idle timer fires.
+// monocle serve selects on this alongside SIGINT/SIGTERM.
+func (e *Engine) IdleShutdownCh() <-chan struct{} {
+	return e.server.IdleShutdownCh()
+}
+
 // -- Socket message handlers (called by SocketServer) --
 
 // handleGetReviewStatus returns the current review state.
