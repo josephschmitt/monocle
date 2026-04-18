@@ -29,6 +29,8 @@ type CLI struct {
 	Register        RegisterCmd        `cmd:"" help:"Register Monocle for an agent"`
 	Unregister      UnregisterCmd      `cmd:"" help:"Remove Monocle registration"`
 	Hooks           HooksCmd           `cmd:"" help:"Hook handlers for agent lifecycle events (invoked by the agent harness)"`
+	Serve           ServeCmd           `cmd:"serve" help:"Run a headless Monocle engine for this repo (socket server, no TUI)"`
+	Stop            StopCmd            `cmd:"stop" help:"Stop a running monocle serve process for this repo"`
 	ServeMcp        ServeMCPCmd        `cmd:"serve-mcp" help:"Run the MCP server" hidden:""`
 	ServeMcpChannel ServeMCPChannelCmd `cmd:"serve-mcp-channel" help:"Run the MCP channel server (deprecated)" hidden:""`
 	Install         InstallCmd         `cmd:"" help:"Install MCP channel (alias for register)" hidden:""`
