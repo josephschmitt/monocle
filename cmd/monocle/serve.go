@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -60,6 +61,28 @@ func readPIDFile(path string) (int, error) {
 
 func removePIDFile(path string) {
 	_ = os.Remove(path)
+}
+
+// pidLooksLikeMonocle reports whether /proc/<pid>/cmdline mentions "monocle".
+// Used by StopCmd to guard against signalling a recycled PID after a crashed
+// serve left a stale .pid file. On platforms without /proc (macOS, Windows)
+// we fall back to a best-effort `ps` lookup; if both fail we err on the safe
+// side and return false, leaving the user to clean up manually.
+func pidLooksLikeMonocle(pid int) bool {
+	// Linux /proc fast path.
+	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
+		// cmdline fields are NUL-separated; replace for the substring scan.
+		cmdline := strings.ReplaceAll(string(data), "\x00", " ")
+		return strings.Contains(cmdline, "monocle")
+	}
+	// Fallback: ps -p <pid> -o command=. Available on macOS, BSDs, and most
+	// linuxes; absent on plain Windows. exec is intentional rather than
+	// importing a process library — this is one-shot and runs only on
+	// `monocle stop`.
+	if out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output(); err == nil {
+		return strings.Contains(string(out), "monocle")
+	}
+	return false
 }
 
 // Run launches the headless engine and blocks on SIGINT/SIGTERM.
@@ -167,6 +190,17 @@ func (c *StopCmd) Run() error {
 			return nil
 		}
 		return err
+	}
+
+	// Verify the PID actually belongs to a monocle process before
+	// signalling. A crashed serve leaves the .pid file behind, and the
+	// kernel may have reassigned that PID to an unrelated process
+	// (editor, ssh, system daemon) — SIGTERM'ing it would silently kill
+	// something innocent. If we can't confirm ownership we refuse to
+	// signal and tell the user to clean up manually.
+	if !pidLooksLikeMonocle(pid) {
+		removePIDFile(pidPath)
+		return fmt.Errorf("pid %d in %s does not look like monocle serve; cleaned up stale pid file", pid, pidPath)
 	}
 
 	proc, err := os.FindProcess(pid)
