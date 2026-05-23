@@ -26,7 +26,9 @@ type AutoSpawnOptions struct {
 	Binary string
 
 	// ReadyTimeout bounds how long EnsureServe waits for the spawned
-	// serve to start listening. Defaults to 2s.
+	// serve to start listening. Defaults to 10s — large repos that
+	// run RefreshChangedFiles on first session can plausibly exceed
+	// the old 2s default, especially on cold filesystems.
 	ReadyTimeout time.Duration
 
 	// ProbeInterval is how often EnsureServe retries Dial between spawn
@@ -116,7 +118,7 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 
 	timeout := opts.ReadyTimeout
 	if timeout == 0 {
-		timeout = 2 * time.Second
+		timeout = 10 * time.Second
 	}
 	interval := opts.ProbeInterval
 	if interval == 0 {
