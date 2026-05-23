@@ -34,6 +34,7 @@ func DefaultConfig() *types.Config {
 		IgnorePatterns: []string{},
 		DiffStyle:      "unified",
 		SidebarStyle:   "flat",
+		Theme:          "dark",
 		Layout:         "auto",
 		TabSize:        4,
 		ContextLines:   3,

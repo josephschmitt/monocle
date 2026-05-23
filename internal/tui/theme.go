@@ -92,3 +92,44 @@ func DefaultTheme() Theme {
 		RemovedChangeBg: lipgloss.Color("#4a1f1f"),
 	}
 }
+
+// LightTheme returns a theme tuned for terminals with a light background.
+func LightTheme() Theme {
+	return Theme{
+		SidebarBorder:        lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("7")),
+		SidebarBorderFocused: lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
+		MainPane:             lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("7")),
+		MainPaneFocused:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
+
+		Added:      lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+		Removed:    lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+		Context:    lipgloss.NewStyle(),
+		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
+		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("7")),
+
+		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
+		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+
+		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("7")).Foreground(lipgloss.Color("0")),
+
+		ModalOverlay: lipgloss.NewStyle().Background(lipgloss.Color("7")),
+		ModalBorder:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
+
+		MarkdownH1:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		MarkdownH2:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		MarkdownH3:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		MarkdownBlockquote: lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Italic(true),
+		MarkdownCode:       lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		MarkdownCodeBlock:  lipgloss.NewStyle().Foreground(lipgloss.Color("0")),
+		MarkdownRule:       lipgloss.NewStyle().Foreground(lipgloss.Color("7")),
+		MarkdownBullet:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+
+		AddedBg:         lipgloss.Color("#d4f4d4"),
+		RemovedBg:       lipgloss.Color("#f4d4d4"),
+		AddedChangeBg:   lipgloss.Color("#a8e6a8"),
+		RemovedChangeBg: lipgloss.Color("#e6a8a8"),
+	}
+}

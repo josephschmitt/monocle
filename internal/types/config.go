@@ -10,6 +10,7 @@ type Config struct {
 	Keybindings    map[string]string `json:"keybindings"`
 	DiffStyle      string            `json:"diff_style"`
 	SidebarStyle   string            `json:"sidebar_style"`
+	Theme          string            `json:"theme"`
 	Layout         string            `json:"layout"`
 	Wrap           bool              `json:"wrap"`
 	TabSize        int               `json:"tab_size"`

@@ -241,6 +241,11 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 
 	theme := DefaultTheme()
 	keys := DefaultKeyMap()
+	if engine != nil {
+		if cfg := engine.GetConfig(); cfg != nil && cfg.Theme == "light" {
+			theme = LightTheme()
+		}
+	}
 	sidebar := newSidebarModel(&keys)
 	sidebar.focused = true
 	help := newHelpModel(theme, &keys)

@@ -307,6 +307,7 @@ Monocle loads settings from JSON config files:
   "layout": "auto",
   "diff_style": "unified",
   "sidebar_style": "flat",
+  "theme": "dark",
   "wrap": false,
   "tab_size": 4,
   "context_lines": 3,
@@ -333,6 +334,7 @@ Monocle loads settings from JSON config files:
 | `layout`                             | `"auto"`, `"side-by-side"`, `"stacked"`    | `"auto"`     | Pane arrangement (`auto` switches based on terminal width)               |
 | `diff_style`                         | `"unified"`, `"split"`, `"file"`           | `"unified"`  | Diff display mode (`file` shows raw content)                             |
 | `sidebar_style`                      | `"flat"`, `"tree"`                         | `"flat"`     | File list display mode                                                   |
+| `theme`                              | `"dark"`, `"light"`                        | `"dark"`     | Color scheme for the TUI (use `"light"` for terminals with a light bg)   |
 | `wrap`                               | `true`, `false`                            | `false`      | Word-wrap long lines in diffs                                            |
 | `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
 | `context_lines`                      | integer                                    | `3`          | Unchanged lines shown around diff hunks                                  |
