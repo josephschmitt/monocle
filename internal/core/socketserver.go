@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -10,6 +11,100 @@ import (
 
 	"github.com/josephschmitt/monocle/internal/protocol"
 )
+
+// subscriberOutQueueSize bounds the per-connection async write queue used
+// by handleSubscription / handleQueuedConnection. A slow or wedged client
+// must not back-pressure the engine — every emit() iterates subscribers
+// synchronously, so a blocking conn.Write would stall event delivery to
+// all other subscribers. When this queue fills, the offending connection
+// is closed instead of blocking.
+const subscriberOutQueueSize = 64
+
+// subscriberConn wraps a persistent-mode connection (subscribe or connect)
+// with a single writer goroutine that drains a bounded outbound queue.
+// Callers send via send(); the queue isolates the engine's emit() loop
+// from network latency on this particular connection.
+type subscriberConn struct {
+	conn      net.Conn
+	outQ      chan []byte
+	closed    chan struct{}
+	closeOnce sync.Once
+	done      chan struct{} // closed when the writer goroutine exits
+}
+
+func newSubscriberConn(conn net.Conn) *subscriberConn {
+	sc := &subscriberConn{
+		conn:   conn,
+		outQ:   make(chan []byte, subscriberOutQueueSize),
+		closed: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+	go sc.writer()
+	return sc
+}
+
+// writer drains outQ to the network. Exits when the queue is empty and
+// the connection has been shutdown, or when a Write fails.
+func (sc *subscriberConn) writer() {
+	defer close(sc.done)
+	for {
+		select {
+		case data := <-sc.outQ:
+			if _, err := sc.conn.Write(data); err != nil {
+				sc.shutdown()
+				return
+			}
+		case <-sc.closed:
+			// Drain any remaining queued frames best-effort, then exit.
+			for {
+				select {
+				case data := <-sc.outQ:
+					if _, err := sc.conn.Write(data); err != nil {
+						return
+					}
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// send queues a message for asynchronous delivery. Returns immediately;
+// if the queue is full the caller is informed via error and the
+// connection is torn down so the engine isn't held hostage by a single
+// laggard client.
+func (sc *subscriberConn) send(msg any) error {
+	select {
+	case <-sc.closed:
+		return errors.New("subscriber connection closed")
+	default:
+	}
+	data, err := protocol.Encode(msg)
+	if err != nil {
+		return err
+	}
+	select {
+	case sc.outQ <- data:
+		return nil
+	case <-sc.closed:
+		return errors.New("subscriber connection closed")
+	default:
+		// Queue full — slow consumer. Kick it rather than blocking
+		// the engine's emit() goroutine.
+		sc.shutdown()
+		return errors.New("subscriber outbound queue full; closing connection")
+	}
+}
+
+// shutdown closes the connection and signals the writer to drain & exit.
+// Safe to call multiple times.
+func (sc *subscriberConn) shutdown() {
+	sc.closeOnce.Do(func() {
+		close(sc.closed)
+		_ = sc.conn.Close()
+	})
+}
 
 // DefaultIdleTimeout is how long monocle serve stays running past the 60s
 // grace window after the last client disconnects. Zero disables idle
@@ -273,44 +368,37 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 // handleSubscription manages a persistent subscription connection.
 // It subscribes to requested engine events and pushes notifications,
 // while also accepting request/response messages on the same connection.
+//
+// Writes go through a per-connection bounded queue + single writer
+// goroutine (subscriberConn) so a slow or wedged client can't back-
+// pressure the engine's emit() loop. If the queue fills, the connection
+// is closed; the engine sheds the laggard instead of stalling all
+// subscribers.
 func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner, sub *protocol.SubscribeMsg) {
-	defer conn.Close()
+	sc := newSubscriberConn(conn)
+	defer sc.shutdown()
 
-	// Mutex for serialized writes to the connection
-	var writeMu sync.Mutex
-	writeMsg := func(msg any) error {
-		data, err := protocol.Encode(msg)
-		if err != nil {
-			return err
-		}
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		_, err = conn.Write(data)
-		return err
-	}
-
-	// Send ack BEFORE registering any callbacks. Earlier ordering registered
-	// callbacks first then sent the ack via writeMsg; if any event fired in
-	// the gap (e.g. a concurrent client connect, file change, submit), the
-	// EventNotification callback would acquire writeMu first and win the
-	// race, sending an event frame before the SubscribeResponse. The client
-	// requires the first frame to be SubscribeResponse and aborts startup
-	// with "unexpected subscribe ack". Sending the ack first guarantees it
-	// can't be preempted because no callback exists yet to race with it.
-	if err := writeMsg(&protocol.SubscribeResponse{
+	// Send ack BEFORE registering any callbacks. With nothing yet
+	// registered, no EventNotification can race the ack frame onto the
+	// wire — the client requires SubscribeResponse to be the first
+	// message it sees.
+	if err := sc.send(&protocol.SubscribeResponse{
 		Type:    protocol.TypeSubscribeResponse,
 		Success: true,
 	}); err != nil {
 		return
 	}
 
-	// Register subscriptions after the ack is on the wire. Any event that
+	// Register subscriptions after the ack is queued. Any event that
 	// fires from here on is correctly ordered after the ack.
 	var unsubs []UnsubscribeFunc
 	for _, eventName := range sub.Events {
 		kind := EventKind(eventName)
 		unsub := s.engine.On(kind, func(payload EventPayload) {
-			if err := writeMsg(&protocol.EventNotification{
+			// Drop the error: send() already kicked the connection if
+			// the outbound queue was full. The engine emit() loop must
+			// remain non-blocking regardless of consumer health.
+			_ = sc.send(&protocol.EventNotification{
 				Type:  protocol.TypeEventNotification,
 				Event: string(payload.Kind),
 				Payload: map[string]any{
@@ -319,11 +407,7 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 					"path":    payload.Path,
 					"item_id": payload.ItemID,
 				},
-			}); err != nil {
-				// Write failed — connection is dead. Close it to trigger
-				// defer cleanup which decrements subscriberCount.
-				conn.Close()
-			}
+			})
 		})
 		unsubs = append(unsubs, unsub)
 	}
@@ -373,7 +457,7 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 
 		response := s.handleMessage(msg)
 		if response != nil {
-			_ = writeMsg(response)
+			_ = sc.send(response)
 		}
 	}
 }
@@ -383,24 +467,13 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 // always queues feedback for pull delivery via get_feedback, while the client
 // can still forward event notifications as channel hints (fire-and-forget).
 func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scanner, cm *protocol.ConnectMsg) {
-	defer conn.Close()
-
-	var writeMu sync.Mutex
-	writeMsg := func(msg any) error {
-		data, err := protocol.Encode(msg)
-		if err != nil {
-			return err
-		}
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		_, err = conn.Write(data)
-		return err
-	}
+	sc := newSubscriberConn(conn)
+	defer sc.shutdown()
 
 	// Send ack BEFORE registering callbacks. Same ordering rule as
 	// handleSubscription: otherwise a concurrent emit can race the ack
 	// frame onto the wire and the client aborts the handshake.
-	if err := writeMsg(&protocol.ConnectResponse{
+	if err := sc.send(&protocol.ConnectResponse{
 		Type:    protocol.TypeConnectResponse,
 		Success: true,
 	}); err != nil {
@@ -414,7 +487,7 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 	for _, eventName := range cm.Events {
 		kind := EventKind(eventName)
 		unsub := s.engine.On(kind, func(payload EventPayload) {
-			if err := writeMsg(&protocol.EventNotification{
+			_ = sc.send(&protocol.EventNotification{
 				Type:  protocol.TypeEventNotification,
 				Event: string(payload.Kind),
 				Payload: map[string]any{
@@ -423,9 +496,7 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 					"path":    payload.Path,
 					"item_id": payload.ItemID,
 				},
-			}); err != nil {
-				conn.Close()
-			}
+			})
 		})
 		unsubs = append(unsubs, unsub)
 	}
@@ -469,7 +540,7 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 
 		response := s.handleMessage(msg)
 		if response != nil {
-			_ = writeMsg(response)
+			_ = sc.send(response)
 		}
 	}
 }
