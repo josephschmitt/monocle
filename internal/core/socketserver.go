@@ -289,8 +289,23 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 		return err
 	}
 
-	// Subscribe to requested events before sending ack, so handlers are
-	// registered by the time the client sees the ack and starts emitting.
+	// Send ack BEFORE registering any callbacks. Earlier ordering registered
+	// callbacks first then sent the ack via writeMsg; if any event fired in
+	// the gap (e.g. a concurrent client connect, file change, submit), the
+	// EventNotification callback would acquire writeMu first and win the
+	// race, sending an event frame before the SubscribeResponse. The client
+	// requires the first frame to be SubscribeResponse and aborts startup
+	// with "unexpected subscribe ack". Sending the ack first guarantees it
+	// can't be preempted because no callback exists yet to race with it.
+	if err := writeMsg(&protocol.SubscribeResponse{
+		Type:    protocol.TypeSubscribeResponse,
+		Success: true,
+	}); err != nil {
+		return
+	}
+
+	// Register subscriptions after the ack is on the wire. Any event that
+	// fires from here on is correctly ordered after the ack.
 	var unsubs []UnsubscribeFunc
 	for _, eventName := range sub.Events {
 		kind := EventKind(eventName)
@@ -311,14 +326,6 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 			}
 		})
 		unsubs = append(unsubs, unsub)
-	}
-
-	// Send ack
-	if err := writeMsg(&protocol.SubscribeResponse{
-		Type:    protocol.TypeSubscribeResponse,
-		Success: true,
-	}); err != nil {
-		return
 	}
 
 	// Passive subscribers (e.g. the TUI) get events but don't count as
@@ -390,6 +397,16 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 		return err
 	}
 
+	// Send ack BEFORE registering callbacks. Same ordering rule as
+	// handleSubscription: otherwise a concurrent emit can race the ack
+	// frame onto the wire and the client aborts the handshake.
+	if err := writeMsg(&protocol.ConnectResponse{
+		Type:    protocol.TypeConnectResponse,
+		Success: true,
+	}); err != nil {
+		return
+	}
+
 	// Subscribe to requested events (like handleSubscription) but do NOT
 	// increment subscriberCount. This allows event forwarding for channel
 	// notifications without affecting the push/queue decision in Submit().
@@ -411,14 +428,6 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 			}
 		})
 		unsubs = append(unsubs, unsub)
-	}
-
-	// Send ack
-	if err := writeMsg(&protocol.ConnectResponse{
-		Type:    protocol.TypeConnectResponse,
-		Success: true,
-	}); err != nil {
-		return
 	}
 
 	// Track queue connection
