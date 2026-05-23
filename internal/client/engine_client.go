@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -127,7 +128,12 @@ func (c *EngineClient) readLoop() {
 		}
 		msg, err := protocol.Decode(line)
 		if err != nil {
-			continue // best-effort: skip garbage rather than closing the link
+			// Skip garbage rather than closing the link, but log so a
+			// version-mismatch between client and serve binaries shows
+			// up in stderr instead of manifesting only as opaque
+			// timeouts on every subsequent request.
+			fmt.Fprintf(os.Stderr, "monocle client: dropping undecodable message (%v)\n", err)
+			continue
 		}
 		if notif, ok := msg.(*protocol.EventNotification); ok {
 			c.dispatchEvent(notif)
