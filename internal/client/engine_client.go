@@ -190,6 +190,13 @@ func (c *EngineClient) request(msg any) (any, error) {
 	}
 }
 
+// dispatchEvent fans the engine notification out to local subscribers. The
+// fan-out runs in a fresh goroutine so a callback that calls back into
+// c.request() doesn't deadlock the read loop — the read loop is the only
+// producer for c.pending, so blocking it on a request response would hang
+// forever. Per-event ordering within a single subscriber is preserved
+// because we serialize the dispatch goroutine launches and each event's
+// callbacks run inline within that goroutine.
 func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 	kind := core.EventKind(notif.Event)
 	payload := core.EventPayload{Kind: kind}
@@ -213,9 +220,14 @@ func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 	}
 	c.subsMu.Unlock()
 
-	for _, cb := range callbacks {
-		cb(payload)
+	if len(callbacks) == 0 {
+		return
 	}
+	go func() {
+		for _, cb := range callbacks {
+			cb(payload)
+		}
+	}()
 }
 
 // Close tears down the underlying socket and terminates the read loop.
