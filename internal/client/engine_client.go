@@ -446,8 +446,14 @@ func (c *EngineClient) AddAdditionalPaths(paths []string) ([]types.AdditionalFil
 		}
 		return nil, errors.New("add additional files failed")
 	}
-	// The existing message doesn't return the resulting AdditionalFile list,
-	// so re-fetch to keep EngineAPI parity.
+	// The server now returns the newly-added subset on Added; mirror
+	// the local engine's contract (return only the new files, not the
+	// cumulative list). Fall back to GetAdditionalFiles when talking to
+	// an older serve that doesn't populate Added — preserves the
+	// pre-fix behavior rather than returning an empty slice silently.
+	if r.Added != nil {
+		return r.Added, nil
+	}
 	return c.GetAdditionalFiles(), nil
 }
 

@@ -1,5 +1,7 @@
 package protocol
 
+import "github.com/josephschmitt/monocle/internal/types"
+
 // Inbound message types (from CLI subcommands to engine via socket)
 const (
 	TypeGetReviewStatus    = "get_review_status"
@@ -127,11 +129,15 @@ type AddAdditionalFilesMsg struct {
 }
 
 // AddAdditionalFilesResponse acknowledges additional files submission.
+// Added carries the newly-attached files (not the cumulative list) so
+// callers can distinguish a fresh add from a no-op de-dup. Older clients
+// that only inspect Success/Count keep working because Added is additive.
 type AddAdditionalFilesResponse struct {
-	Type    string `json:"type"`
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Count   int    `json:"count"`
+	Type    string                 `json:"type"`
+	Success bool                   `json:"success"`
+	Message string                 `json:"message,omitempty"`
+	Count   int                    `json:"count"`
+	Added   []types.AdditionalFile `json:"added,omitempty"`
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the

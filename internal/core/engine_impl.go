@@ -497,6 +497,7 @@ func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *
 		Success: true,
 		Message: fmt.Sprintf("Added %d file(s) for review", len(added)),
 		Count:   len(added),
+		Added:   added,
 	}
 }
 
