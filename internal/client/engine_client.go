@@ -766,11 +766,11 @@ func (c *EngineClient) HasSnapshots() (bool, error) {
 // socket. Kept so the client satisfies core.EngineAPI.
 func (c *EngineClient) StartServer(_ string) error { return nil }
 
-// PollFeedback, WaitForFeedback, GetReviewStatusInfo, SubmitContentForReview,
-// RequestPause, CancelPause are agent-facing helpers that the TUI does not
-// call. They're implemented as no-ops on the client so the interface is
-// satisfied; any frontend that needed them would use the existing CLI-level
-// PollFeedbackMsg / SubmitContentMsg plumbing.
+// PollFeedback, WaitForFeedback, GetReviewStatusInfo, SubmitContentForReview
+// are agent-facing helpers that the TUI does not call. They're implemented
+// as no-ops on the client so the interface is satisfied; any frontend that
+// needed them would use the existing CLI-level PollFeedbackMsg /
+// SubmitContentMsg plumbing.
 func (c *EngineClient) PollFeedback() *core.FormattedReview     { return nil }
 func (c *EngineClient) WaitForFeedback() *core.FormattedReview  { return nil }
 func (c *EngineClient) GetReviewStatusInfo() *core.ReviewStatusInfo {
@@ -779,8 +779,17 @@ func (c *EngineClient) GetReviewStatusInfo() *core.ReviewStatusInfo {
 func (c *EngineClient) SubmitContentForReview(_, _, _, _ string, _ bool) error {
 	return errors.New("SubmitContentForReview not supported on client")
 }
-func (c *EngineClient) RequestPause() {}
-func (c *EngineClient) CancelPause()  {}
+
+// RequestPause and CancelPause route the TUI's pause keybind through the
+// daemon. Pre-fix these were `{}` stubs and the daemon's pause flag was
+// never set, so `monocle review status` kept returning the prior status
+// and `get-feedback --wait` did not block on user-initiated pause.
+func (c *EngineClient) RequestPause() {
+	_, _ = c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: true})
+}
+func (c *EngineClient) CancelPause() {
+	_, _ = c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: false})
+}
 
 func (c *EngineClient) GetFeedbackStatus() string {
 	resp, err := c.request(&protocol.GetFeedbackStatusMsg{Type: protocol.TypeGetFeedbackStatus})

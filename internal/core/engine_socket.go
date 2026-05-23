@@ -471,3 +471,17 @@ func (e *Engine) handleGetSocketPath(_ *protocol.GetSocketPathMsg) *protocol.Get
 		Path: e.GetSocketPath(),
 	}
 }
+
+// handleSetPause routes the TUI's pause keybind through the daemon so the
+// real pause flag flips on the engine that the agent's `monocle review
+// status` and `get-feedback --wait` consult. Pre-fix, the client's
+// RequestPause/CancelPause were no-op stubs and the agent never saw
+// pause_requested.
+func (e *Engine) handleSetPause(msg *protocol.SetPauseMsg) *protocol.SetPauseResponse {
+	if msg.Requested {
+		e.RequestPause()
+	} else {
+		e.CancelPause()
+	}
+	return &protocol.SetPauseResponse{Type: protocol.TypeSetPauseResponse}
+}

@@ -585,6 +585,8 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleGetSubscriberCount(m)
 	case *protocol.GetSocketPathMsg:
 		return s.engine.handleGetSocketPath(m)
+	case *protocol.SetPauseMsg:
+		return s.engine.handleSetPause(m)
 
 	default:
 		return nil

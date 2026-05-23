@@ -78,6 +78,9 @@ const (
 	TypeReloadPendingFeedback = "reload_pending_feedback"
 	TypeGetSubscriberCount    = "get_subscriber_count"
 	TypeGetSocketPath         = "get_socket_path"
+
+	// Pause flow
+	TypeSetPause = "set_pause"
 )
 
 // Outbound (engine → frontend)
@@ -153,6 +156,9 @@ const (
 	TypeReloadPendingFeedbackResponse = "reload_pending_feedback_response"
 	TypeGetSubscriberCountResponse    = "get_subscriber_count_response"
 	TypeGetSocketPathResponse         = "get_socket_path_response"
+
+	// Pause flow
+	TypeSetPauseResponse = "set_pause_response"
 )
 
 // LogEntry mirrors core.LogEntry for wire transmission (protocol must not
@@ -690,4 +696,18 @@ type GetSocketPathMsg struct {
 type GetSocketPathResponse struct {
 	Type string `json:"type"`
 	Path string `json:"path,omitempty"`
+}
+
+// --- Pause flow ---
+
+// SetPauseMsg toggles the engine's pause-requested flag. Requested=true is
+// the equivalent of Engine.RequestPause; false maps to CancelPause. Carries
+// both in one message so a single protocol path covers both directions.
+type SetPauseMsg struct {
+	Type      string `json:"type"`
+	Requested bool   `json:"requested"`
+}
+
+type SetPauseResponse struct {
+	Type string `json:"type"`
 }

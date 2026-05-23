@@ -163,6 +163,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetSubscriberCountMsg{}
 	case TypeGetSocketPath:
 		msg = &GetSocketPathMsg{}
+	case TypeSetPause:
+		msg = &SetPauseMsg{}
 
 	// --- Engine surface: outbound ---
 	case TypeStartSessionResponse:
@@ -265,6 +267,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetSubscriberCountResponse{}
 	case TypeGetSocketPathResponse:
 		msg = &GetSocketPathResponse{}
+	case TypeSetPauseResponse:
+		msg = &SetPauseResponse{}
 
 	default:
 		return nil, fmt.Errorf("protocol decode: unknown type %q", envelope.Type)
