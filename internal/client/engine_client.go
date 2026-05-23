@@ -58,6 +58,12 @@ func NewEngineClient(socketPath string) (*EngineClient, error) {
 	}
 
 	// Subscribe to every event kind so the client mirrors all engine events.
+	// Passive=true marks this as a viewer connection: the TUI is not an
+	// attached agent, so the engine must not flip into push-delivery mode
+	// just because the reviewer's UI is open. Without this flag the server
+	// would count the TUI in subscriberCount, take the push branch in
+	// Submit(), and silently mark the review delivered — the real agent
+	// would never see it.
 	sub := &protocol.SubscribeMsg{
 		Type: protocol.TypeSubscribe,
 		Events: []string{
@@ -71,6 +77,7 @@ func NewEngineClient(socketPath string) (*EngineClient, error) {
 			string(core.EventFeedbackPickedUp),
 			string(core.EventWaitStatusChanged),
 		},
+		Passive: true,
 	}
 	data, err := protocol.Encode(sub)
 	if err != nil {

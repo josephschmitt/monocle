@@ -136,8 +136,12 @@ func TestEngineClient_RoundTrip(t *testing.T) {
 	if path := ec.GetSocketPath(); path != socketPath {
 		t.Errorf("GetSocketPath = %q, want %q", path, socketPath)
 	}
-	if count := ec.GetSubscriberCount(); count != 1 {
-		t.Errorf("GetSubscriberCount = %d, want 1", count)
+	// EngineClient subscribes passively (TUI is a viewer, not an agent),
+	// so it must NOT bump the agent-facing subscriber count — otherwise
+	// Submit() would flip into push mode and the real agent would lose
+	// the feedback.
+	if count := ec.GetSubscriberCount(); count != 0 {
+		t.Errorf("GetSubscriberCount = %d, want 0 (passive subscribe must not count)", count)
 	}
 }
 

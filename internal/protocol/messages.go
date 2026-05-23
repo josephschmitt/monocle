@@ -72,9 +72,18 @@ type SubmitContentResponse struct {
 }
 
 // SubscribeMsg requests a persistent event subscription on this connection.
+//
+// Passive=true marks the connection as a viewer (e.g. the TUI) that should
+// NOT be counted as an attached agent. The server forwards events but skips
+// the subscriberCount bookkeeping that Submit() uses to pick push vs queue
+// delivery, and suppresses the EventConnectionChanged broadcast that
+// otherwise tells the UI "an agent is connected". The zero value (false)
+// preserves the existing push-subscriber semantics for backwards
+// compatibility with any agent that sends SubscribeMsg directly.
 type SubscribeMsg struct {
-	Type   string   `json:"type"`
-	Events []string `json:"events"`
+	Type    string   `json:"type"`
+	Events  []string `json:"events"`
+	Passive bool     `json:"passive,omitempty"`
 }
 
 // SubscribeResponse acknowledges a subscription request.

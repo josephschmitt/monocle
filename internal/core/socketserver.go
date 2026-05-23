@@ -321,26 +321,32 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 		return
 	}
 
-	// Track subscriber connection
-	s.subscriberMu.Lock()
-	s.subscriberCount++
-	count := s.subscriberCount
-	s.subscriberMu.Unlock()
-	s.engine.emit(EventConnectionChanged, EventPayload{
-		Kind:   EventConnectionChanged,
-		Status: fmt.Sprintf("%d", count),
-	})
-
-	// Clean up subscriptions and subscriber count on exit
-	defer func() {
+	// Passive subscribers (e.g. the TUI) get events but don't count as
+	// attached agents — Submit() must not flip into push mode just
+	// because the reviewer's UI is open.
+	if !sub.Passive {
 		s.subscriberMu.Lock()
-		s.subscriberCount--
+		s.subscriberCount++
 		count := s.subscriberCount
 		s.subscriberMu.Unlock()
 		s.engine.emit(EventConnectionChanged, EventPayload{
 			Kind:   EventConnectionChanged,
 			Status: fmt.Sprintf("%d", count),
 		})
+	}
+
+	// Clean up subscriptions (and subscriber count for non-passive subs) on exit.
+	defer func() {
+		if !sub.Passive {
+			s.subscriberMu.Lock()
+			s.subscriberCount--
+			count := s.subscriberCount
+			s.subscriberMu.Unlock()
+			s.engine.emit(EventConnectionChanged, EventPayload{
+				Kind:   EventConnectionChanged,
+				Status: fmt.Sprintf("%d", count),
+			})
+		}
 		for _, unsub := range unsubs {
 			unsub()
 		}
