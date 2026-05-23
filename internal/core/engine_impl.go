@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/db"
@@ -18,7 +19,12 @@ import (
 type Engine struct {
 	mu sync.RWMutex
 
-	cfg       *types.Config
+	// cfg is held behind atomic.Pointer so concurrent readers (e.g.
+	// GetFileDiff reading ContextLines, Submit reading
+	// MarkReviewedOnSubmit) don't race with SaveConfig swapping a new
+	// value in. Always go through cfgPtr / setCfgPtr — never embed
+	// types.Config directly.
+	cfg       atomic.Pointer[types.Config]
 	database  *db.DB
 	git       GitAPI
 	server    *SocketServer
@@ -63,7 +69,6 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string, nonGitMode b
 	feedback := NewFeedbackQueue()
 
 	e := &Engine{
-		cfg:            cfg,
 		database:       database,
 		git:            git,
 		server:         server,
@@ -72,6 +77,7 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string, nonGitMode b
 		autoAdvanceRef: !nonGitMode,
 		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(cfg)
 
 	e.formatter = NewReviewFormatter(func(path string, start, end int) string {
 		content, err := git.FileContent("", path)
@@ -267,7 +273,11 @@ func (e *Engine) GetFileDiff(path string) (*types.DiffResult, error) {
 		return e.snapshotFileDiff(snapshot, path)
 	}
 
-	return e.git.FileDiff(session.BaseRef, path, e.cfg.ContextLines)
+	ctxLines := 0
+	if cfg := e.cfg.Load(); cfg != nil {
+		ctxLines = cfg.ContextLines
+	}
+	return e.git.FileDiff(session.BaseRef, path, ctxLines)
 }
 
 func (e *Engine) GetFileContent(path string) (string, error) {
@@ -1310,8 +1320,8 @@ func (e *Engine) deleteSnapshots() {
 // markReviewedOnSubmit marks files as reviewed based on the config setting.
 func (e *Engine) markReviewedOnSubmit(session *types.ReviewSession) {
 	var mode string
-	if e.cfg != nil {
-		mode = e.cfg.MarkReviewedOnSubmit
+	if cfg := e.cfg.Load(); cfg != nil {
+		mode = cfg.MarkReviewedOnSubmit
 	}
 	if mode == "" {
 		mode = "all"
@@ -1748,19 +1758,22 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 // -- Lifecycle --
 
 // Shutdown stops the socket server and cleans up resources.
-// GetConfig returns the current configuration.
+// GetConfig returns a snapshot of the current configuration. Callers may
+// hold the returned pointer indefinitely without racing against SaveConfig
+// because the engine swaps in a fresh pointer rather than mutating in place.
 func (e *Engine) GetConfig() *types.Config {
-	return e.cfg
+	return e.cfg.Load()
 }
 
 // IsReviewTrackingEnabled returns true when review state tracking is active.
 func (e *Engine) IsReviewTrackingEnabled() bool {
-	return e.cfg != nil && e.cfg.ReviewTracking
+	cfg := e.cfg.Load()
+	return cfg != nil && cfg.ReviewTracking
 }
 
 // SaveConfig persists the current configuration to disk.
 func (e *Engine) SaveConfig() error {
-	return SaveConfig(e.cfg)
+	return SaveConfig(e.cfg.Load())
 }
 
 func (e *Engine) Shutdown() {

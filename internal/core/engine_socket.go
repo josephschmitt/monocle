@@ -415,12 +415,16 @@ func (e *Engine) handleGetConfig(_ *protocol.GetConfigMsg) *protocol.GetConfigRe
 }
 
 // handleSaveConfig replaces the engine's config with the value from the
-// client and persists it. The in-place copy preserves pointer identity so
-// any in-process subscribers holding e.cfg keep seeing fresh fields.
+// client and persists it. The previous implementation mutated *e.cfg in
+// place under e.mu, but every reader (ContextLines, MarkReviewedOnSubmit,
+// ReviewTracking) accessed the struct without the lock — a data race on
+// strings/slices. The atomic.Pointer swap below removes the race: readers
+// take a stable snapshot via Load, writers publish a fresh pointer.
+// Callers that captured the old pointer see the old values; this is
+// preferable to torn reads.
 func (e *Engine) handleSaveConfig(msg *protocol.SaveConfigMsg) *protocol.SaveConfigResponse {
-	e.mu.Lock()
-	*e.cfg = msg.Config
-	e.mu.Unlock()
+	cfgCopy := msg.Config
+	e.cfg.Store(&cfgCopy)
 	err := e.SaveConfig()
 	return &protocol.SaveConfigResponse{
 		Type:  protocol.TypeSaveConfigResponse,

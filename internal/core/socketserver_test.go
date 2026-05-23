@@ -35,7 +35,6 @@ func setupTestEngine(t *testing.T) (*Engine, string) {
 	server := NewSocketServer()
 	feedback := NewFeedbackQueue()
 	engine := &Engine{
-		cfg:            cfg,
 		database:       database,
 		git:            stub,
 		server:         server,
@@ -45,6 +44,7 @@ func setupTestEngine(t *testing.T) (*Engine, string) {
 		autoAdvanceRef: true,
 		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
+	engine.cfg.Store(cfg)
 	server.SetEngine(engine)
 
 	// Start a session so the engine is usable

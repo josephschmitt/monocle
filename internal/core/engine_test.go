@@ -482,9 +482,9 @@ func TestMarkReviewedAndUnmark(t *testing.T) {
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID:           "sess-1",
 		FileStatuses: make(map[string]bool),
@@ -1050,9 +1050,9 @@ func TestSnapshotCreatedOnRequestChanges(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID:           "sess-1",
 		Agent:        "claude",
@@ -1121,9 +1121,9 @@ func TestSnapshotWipedOnApprove(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID:           "sess-1",
 		Agent:        "claude",
@@ -1238,9 +1238,9 @@ func TestMarkReviewedOnSubmitConfig(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{MarkReviewedOnSubmit: "commented", ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{MarkReviewedOnSubmit: "commented", ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
@@ -1288,9 +1288,9 @@ func TestReviewTrackingDisabled_MarkReviewedNoop(t *testing.T) {
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,
-		cfg:         &types.Config{ReviewTracking: false},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: false})
 	e.current = &types.ReviewSession{
 		ID:           "sess-1",
 		FileStatuses: make(map[string]bool),
@@ -1333,9 +1333,9 @@ func TestReviewTrackingDisabled_SubmitNoSnapshot(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{ReviewTracking: false},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: false})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
@@ -1371,9 +1371,9 @@ func TestReviewTrackingDisabled_HasSnapshotsReturnsFalse(t *testing.T) {
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,
-		cfg:         &types.Config{ReviewTracking: false},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: false})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", FileStatuses: make(map[string]bool),
 		CreatedAt: now, UpdatedAt: now,
@@ -1416,9 +1416,9 @@ func TestReviewTrackingEnabled_PreservesExistingBehavior(t *testing.T) {
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID:           "sess-1",
 		FileStatuses: make(map[string]bool),
@@ -1468,9 +1468,9 @@ func TestAutoUnmarkChangedFiles_ContentChanged(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID:           "sess-1",
@@ -1510,9 +1510,9 @@ func TestAutoUnmarkChangedFiles_NewFileSinceSnapshot(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID:           "sess-1",
@@ -1549,9 +1549,9 @@ func TestAutoUnmarkChangedFiles_DeletedFile(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID:           "sess-1",
@@ -1593,9 +1593,9 @@ func TestAutoUnmarkChangedFiles_UnchangedPreservesUserUnmark(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID:           "sess-1",
@@ -1635,9 +1635,9 @@ func TestSubmitContentForReview_UnmarksOnContentChange(t *testing.T) {
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID:           "sess-1",
@@ -1695,7 +1695,8 @@ func TestSnapshotFileDiff_ModifiedFile(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub, cfg: &types.Config{ReviewTracking: true}}
+	e := &Engine{git: stub,}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
 		FilesByPath: map[string]*types.SnapshotFile{
@@ -1720,7 +1721,8 @@ func TestSnapshotFileDiff_NewFile(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub, cfg: &types.Config{ReviewTracking: true}}
+	e := &Engine{git: stub,}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
 		FilesByPath: map[string]*types.SnapshotFile{},
@@ -1744,7 +1746,8 @@ func TestSnapshotFileDiff_DeletedFile(t *testing.T) {
 		// No fileContents entry for "gone.go" → FileContent returns error
 	}
 
-	e := &Engine{git: stub, cfg: &types.Config{ReviewTracking: true}}
+	e := &Engine{git: stub,}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
 		FilesByPath: map[string]*types.SnapshotFile{
@@ -1773,7 +1776,8 @@ func TestSnapshotFileDiff_NoChange(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub, cfg: &types.Config{ReviewTracking: true}}
+	e := &Engine{git: stub,}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
 		FilesByPath: map[string]*types.SnapshotFile{
@@ -1807,9 +1811,9 @@ func TestMarkReviewedOnSubmit_AllMode(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{MarkReviewedOnSubmit: "all", ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{MarkReviewedOnSubmit: "all", ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
@@ -1855,9 +1859,9 @@ func TestMarkReviewedOnSubmit_ManualMode(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{MarkReviewedOnSubmit: "manual", ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{MarkReviewedOnSubmit: "manual", ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
@@ -1905,9 +1909,9 @@ func TestSnapshotAutoActivatedAfterRequestChanges(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
@@ -1947,10 +1951,10 @@ func TestResumeSession_WorkingTreeDefault(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{ReviewTracking: true},
 		sessions:    NewSessionManager(database, stub),
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	// Create session and submit to create a snapshot
 	session := &types.ReviewSession{
@@ -2007,9 +2011,9 @@ func TestFilesRelativeToSnapshot_RevertedFilesAppear(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID: "sess-1", FileStatuses: make(map[string]bool),
@@ -2071,9 +2075,9 @@ func TestFilesRelativeToSnapshot_UnchangedFromSnapshotSkipped(t *testing.T) {
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID: "sess-1", FileStatuses: make(map[string]bool),
@@ -2116,9 +2120,9 @@ func TestFilesRelativeToSnapshot_GitDiffFileUnchangedFromSnapshotHidden(t *testi
 		feedback:    NewFeedbackQueue(),
 		database:    database,
 		git:         stub,
-		cfg:         &types.Config{ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	session := &types.ReviewSession{
 		ID: "sess-1", FileStatuses: make(map[string]bool),
@@ -2232,9 +2236,9 @@ func TestMarkReviewedOnSubmit_CommentedMode_MarksArtifacts(t *testing.T) {
 		database:    database,
 		git:         stub,
 		formatter:   formatter,
-		cfg:         &types.Config{MarkReviewedOnSubmit: "commented", ReviewTracking: true},
 		subscribers: make(map[EventKind]map[int]EventCallback),
 	}
+	e.cfg.Store(&types.Config{MarkReviewedOnSubmit: "commented", ReviewTracking: true})
 	e.current = &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
 		BaseRef: "base", ReviewRound: 1,
