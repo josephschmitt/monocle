@@ -196,6 +196,37 @@ func (c *EngineClient) request(msg any) (any, error) {
 	}
 }
 
+// requestNoTimeout is the timeout-free variant used by genuinely
+// long-blocking calls (WaitForFeedback). Same single-in-flight invariant
+// as request(), but it relies on the connection closing or readErr firing
+// to unblock — there's no deadline. Don't use this for ordinary RPCs;
+// while it's in flight every other request serializes behind reqMu.
+func (c *EngineClient) requestNoTimeout(msg any) (any, error) {
+	data, err := protocol.Encode(msg)
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+
+	c.reqMu.Lock()
+	defer c.reqMu.Unlock()
+
+	c.writeMu.Lock()
+	_, werr := c.conn.Write(data)
+	c.writeMu.Unlock()
+	if werr != nil {
+		return nil, fmt.Errorf("write: %w", werr)
+	}
+
+	select {
+	case resp := <-c.pending:
+		return resp, nil
+	case err := <-c.readErr:
+		return nil, err
+	case <-c.closed:
+		return nil, errors.New("client closed")
+	}
+}
+
 // dispatchEvent fans the engine notification out to local subscribers. The
 // fan-out runs in a fresh goroutine so a callback that calls back into
 // c.request() doesn't deadlock the read loop — the read loop is the only
@@ -804,18 +835,90 @@ func (c *EngineClient) HasSnapshots() (bool, error) {
 // socket. Kept so the client satisfies core.EngineAPI.
 func (c *EngineClient) StartServer(_ string) error { return nil }
 
-// PollFeedback, WaitForFeedback, GetReviewStatusInfo, SubmitContentForReview
-// are agent-facing helpers that the TUI does not call. They're implemented
-// as no-ops on the client so the interface is satisfied; any frontend that
-// needed them would use the existing CLI-level PollFeedbackMsg /
-// SubmitContentMsg plumbing.
-func (c *EngineClient) PollFeedback() *core.FormattedReview     { return nil }
-func (c *EngineClient) WaitForFeedback() *core.FormattedReview  { return nil }
-func (c *EngineClient) GetReviewStatusInfo() *core.ReviewStatusInfo {
-	return nil
+// PollFeedback, WaitForFeedback, GetReviewStatusInfo,
+// SubmitContentForReview are agent-facing helpers. The TUI does not call
+// them today, but they're part of EngineAPI so leaving them as silent
+// nil-returning stubs is a structural footgun: any future TUI code that
+// happens to call them would compile, pass inline-engine unit tests, and
+// silently regress in production. Wire them through the existing
+// PollFeedbackMsg / GetReviewStatusMsg / SubmitContentMsg plumbing so
+// the contract actually works end-to-end.
+
+func (c *EngineClient) PollFeedback() *core.FormattedReview {
+	resp, err := c.request(&protocol.PollFeedbackMsg{
+		Type: protocol.TypePollFeedback,
+		Wait: false,
+	})
+	if err != nil {
+		return nil
+	}
+	r := resp.(*protocol.PollFeedbackResponse)
+	if !r.HasFeedback {
+		return nil
+	}
+	return &core.FormattedReview{
+		Formatted:    r.Feedback,
+		CommentCount: r.CommentCount,
+		Action:       r.Action,
+	}
 }
-func (c *EngineClient) SubmitContentForReview(_, _, _, _ string, _ bool) error {
-	return errors.New("SubmitContentForReview not supported on client")
+
+// WaitForFeedback blocks indefinitely (Wait=true) until the reviewer
+// submits. We bypass DefaultTimeout via requestNoTimeout because the
+// CLI's get-feedback --wait flow can take minutes to hours, and the
+// timeout would otherwise tear down the connection prematurely.
+func (c *EngineClient) WaitForFeedback() *core.FormattedReview {
+	resp, err := c.requestNoTimeout(&protocol.PollFeedbackMsg{
+		Type: protocol.TypePollFeedback,
+		Wait: true,
+	})
+	if err != nil {
+		return nil
+	}
+	r := resp.(*protocol.PollFeedbackResponse)
+	if !r.HasFeedback {
+		return nil
+	}
+	return &core.FormattedReview{
+		Formatted:    r.Feedback,
+		CommentCount: r.CommentCount,
+		Action:       r.Action,
+	}
+}
+
+func (c *EngineClient) GetReviewStatusInfo() *core.ReviewStatusInfo {
+	resp, err := c.request(&protocol.GetReviewStatusMsg{Type: protocol.TypeGetReviewStatus})
+	if err != nil {
+		return nil
+	}
+	r := resp.(*protocol.GetReviewStatusResponse)
+	return &core.ReviewStatusInfo{
+		Status:       r.Status,
+		CommentCount: r.CommentCount,
+		Summary:      r.Summary,
+	}
+}
+
+func (c *EngineClient) SubmitContentForReview(id, title, content, contentType string, isPlan bool) error {
+	resp, err := c.request(&protocol.SubmitContentMsg{
+		Type:        protocol.TypeSubmitContent,
+		ID:          id,
+		Title:       title,
+		Content:     content,
+		ContentType: contentType,
+		IsPlan:      isPlan,
+	})
+	if err != nil {
+		return err
+	}
+	r := resp.(*protocol.SubmitContentResponse)
+	if !r.Success {
+		if r.Message != "" {
+			return errors.New(r.Message)
+		}
+		return errors.New("submit content failed")
+	}
+	return nil
 }
 
 // RequestPause and CancelPause route the TUI's pause keybind through the
