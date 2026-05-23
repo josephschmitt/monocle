@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -79,18 +80,38 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 
 	cmd := exec.Command(binary, args...)
 	detachChildProcess(cmd)
-	// Detach stdio so the child doesn't hold the parent's terminal.
+	// Detach stdin/stdout so the child doesn't hold the parent's
+	// terminal. Capture stderr to a sibling log file so a child that
+	// dies during startup (db locked, repo resolution failed, port in
+	// use) can be diagnosed — pre-fix this was nil and the user only
+	// saw "serve did not become ready within Xs" with no cause.
 	cmd.Stdin = nil
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	logPath := socketPath + ".log"
+	var stderrFile *os.File
+	if f, openErr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); openErr == nil {
+		cmd.Stderr = f
+		stderrFile = f
+	}
 
 	if err := cmd.Start(); err != nil {
+		if stderrFile != nil {
+			_ = stderrFile.Close()
+		}
 		return "", false, fmt.Errorf("autospawn: start serve: %w", err)
 	}
 	// Release so we don't leave a zombie if the child exits while we're
 	// polling. The serve is expected to long-outlive us.
 	if err := cmd.Process.Release(); err != nil {
+		if stderrFile != nil {
+			_ = stderrFile.Close()
+		}
 		return "", true, fmt.Errorf("autospawn: release child: %w", err)
+	}
+	if stderrFile != nil {
+		// The child has inherited the fd; close our copy. The kernel
+		// keeps the file alive for the child until it exits.
+		_ = stderrFile.Close()
 	}
 
 	timeout := opts.ReadyTimeout
@@ -109,7 +130,12 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 		}
 		time.Sleep(interval)
 	}
-	return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s", timeout)
+	// Try to surface the real cause from the child's stderr so the
+	// user isn't stuck with an opaque readiness timeout.
+	if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+		return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s: %s", timeout, strings.TrimSpace(string(data)))
+	}
+	return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s (no stderr captured; check %s)", timeout, logPath)
 }
 
 // socketAlive reports whether socketPath is currently accepting connections.
