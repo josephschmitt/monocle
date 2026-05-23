@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
+	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/tui"
 )
 
@@ -18,11 +19,16 @@ type Model struct {
 
 // NewModel constructs the wizard from Options. An empty KeyMap triggers a
 // full defaults fallback (keys + theme), so simple callers can pass a zero
-// Options{Mode, Adapters} and get a working wizard.
+// Options{Mode, Adapters} and get a working wizard. The theme fallback
+// honors the user's `theme` config so a `light`-configured user gets a
+// light wizard too.
 func NewModel(opts Options) Model {
 	if len(opts.Keys.WizardAdvance) == 0 {
 		opts.Keys = tui.DefaultKeyMap()
 		opts.Theme = tui.DefaultTheme()
+		if cfg, err := core.LoadConfig(); err == nil && cfg != nil && cfg.Theme == "light" {
+			opts.Theme = tui.LightTheme()
+		}
 	}
 	return Model{state: NewWizardState(opts)}
 }
