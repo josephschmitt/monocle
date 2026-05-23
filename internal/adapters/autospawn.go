@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -39,9 +38,10 @@ type AutoSpawnOptions struct {
 // <repoRoot>` detached, polls for readiness, and returns the socket path
 // once the engine is accepting connections.
 //
-// The child process is placed in a new session (Setsid=true) so it
-// outlives the launching frontend — closing the TUI doesn't kill the
-// engine, and another frontend can attach next time.
+// The child process is detached from the launching terminal (via the
+// platform-specific helper detachChildProcess) so it outlives the TUI —
+// closing the frontend doesn't kill the engine, and another frontend can
+// attach next time.
 func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err error) {
 	socketPath = opts.Socket
 	if socketPath == "" {
@@ -78,7 +78,7 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 	}
 
 	cmd := exec.Command(binary, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	detachChildProcess(cmd)
 	// Detach stdio so the child doesn't hold the parent's terminal.
 	cmd.Stdin = nil
 	cmd.Stdout = nil
