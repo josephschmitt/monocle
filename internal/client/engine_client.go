@@ -32,9 +32,14 @@ type EngineClient struct {
 	nextSubID   int
 
 	closed chan struct{}
-	// cached config, mutated by the TUI between GetConfig/SaveConfig calls.
-	// Pointer identity matches what the engine exposes locally.
-	cfg *types.Config
+
+	// cfg is the most recent GetConfig snapshot, retained so SaveConfig
+	// can ship the mutated copy back. GetConfig always re-fetches and
+	// overwrites this — the cache is only a fallback for transient socket
+	// errors and the pointer SaveConfig sends back. cfgMu protects against
+	// concurrent reader/writer races (TUI threads, event callbacks).
+	cfgMu sync.Mutex
+	cfg   *types.Config
 }
 
 // NewEngineClient dials the socket, subscribes to every engine event kind,
@@ -838,25 +843,41 @@ func (c *EngineClient) GetSocketPath() string {
 
 // --- EngineAPI: config ---
 
-// GetConfig returns a cached pointer to the engine's current config. Callers
-// may mutate fields; SaveConfig ships the whole thing back to the server.
+// GetConfig always fetches a fresh snapshot from the daemon and stashes
+// it on the client so SaveConfig can ship the mutated copy back. Earlier
+// versions cached on first call and never invalidated, which silently
+// dropped any changes made by other clients (e.g. another TUI or
+// `monocle register`) and let a stale-cached SaveConfig clobber them.
+//
+// The TUI's settings flow is: GetConfig() -> mutate fields on the
+// returned pointer -> SaveConfig(). Refreshing on each GetConfig is
+// what makes that round-trip see the daemon's actual current values.
 func (c *EngineClient) GetConfig() *types.Config {
-	if c.cfg != nil {
-		return c.cfg
-	}
 	resp, err := c.request(&protocol.GetConfigMsg{Type: protocol.TypeGetConfig})
 	if err != nil {
-		return nil
+		// Fall back to the last-known cfg so callers don't get nil
+		// during a transient socket hiccup. SaveConfig will fail
+		// loudly if the client is truly disconnected.
+		c.cfgMu.Lock()
+		cached := c.cfg
+		c.cfgMu.Unlock()
+		return cached
 	}
-	c.cfg = resp.(*protocol.GetConfigResponse).Config
-	return c.cfg
+	cfg := resp.(*protocol.GetConfigResponse).Config
+	c.cfgMu.Lock()
+	c.cfg = cfg
+	c.cfgMu.Unlock()
+	return cfg
 }
 
 func (c *EngineClient) SaveConfig() error {
-	if c.cfg == nil {
+	c.cfgMu.Lock()
+	cfg := c.cfg
+	c.cfgMu.Unlock()
+	if cfg == nil {
 		return errors.New("SaveConfig called before GetConfig")
 	}
-	resp, err := c.request(&protocol.SaveConfigMsg{Type: protocol.TypeSaveConfig, Config: *c.cfg})
+	resp, err := c.request(&protocol.SaveConfigMsg{Type: protocol.TypeSaveConfig, Config: *cfg})
 	if err != nil {
 		return err
 	}
