@@ -45,6 +45,7 @@ type SocketServer struct {
 	idleGrace        time.Duration // 0 → IdleGracePeriod; test hook only
 	idleTickInterval time.Duration // 0 → 10s; test hook only
 	idleStop         chan struct{} // closes when the server shuts down (stops the monitor goroutine)
+	idleStopOnce     sync.Once     // guards close(idleStop) against double-close
 	shutdownCh       chan struct{} // closes when idle timer fires
 }
 
@@ -174,13 +175,9 @@ func (s *SocketServer) SubscriberCount() int {
 
 // Shutdown stops the server, halts the idle monitor, and removes the socket file.
 func (s *SocketServer) Shutdown() error {
-	// idleStop is nil-safe because acceptLoop may not have been started.
-	select {
-	case <-s.idleStop:
-		// already closed
-	default:
-		close(s.idleStop)
-	}
+	// sync.Once guards against a panic when two callers race into Shutdown
+	// (e.g. a SIGTERM handler and the idle-monitor-driven path both fire).
+	s.idleStopOnce.Do(func() { close(s.idleStop) })
 	if s.listener == nil {
 		return nil
 	}
