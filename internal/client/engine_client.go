@@ -148,6 +148,14 @@ func (c *EngineClient) readLoop() {
 // request sends msg and blocks until the corresponding response arrives. The
 // reqMu lock guarantees one in-flight request at a time, so the order of
 // non-event messages on the pending channel matches the order of sends.
+//
+// On timeout we tear down the underlying socket rather than just returning.
+// The pending channel is shared across requests with no correlation ID, so
+// a stale response that arrives after the timeout would otherwise sit in
+// the buffer and be read by the next call — producing a wrong-type assertion
+// panic when the wrapper does resp.(*protocol.XxxResponse). Closing the
+// connection forces a clean reconnect on the next operation and prevents
+// cross-talk.
 func (c *EngineClient) request(msg any) (any, error) {
 	data, err := protocol.Encode(msg)
 	if err != nil {
@@ -172,6 +180,7 @@ func (c *EngineClient) request(msg any) (any, error) {
 	case <-c.closed:
 		return nil, errors.New("client closed")
 	case <-time.After(DefaultTimeout):
+		_ = c.conn.Close()
 		return nil, errors.New("timeout waiting for response")
 	}
 }
