@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,61 +16,95 @@ import (
 )
 
 // EngineClient is a socket-backed implementation of core.EngineAPI. It opens
-// a single persistent connection to monocle serve, sends a SubscribeMsg so
-// engine events are pushed back, then serialises request/response calls over
-// the same socket. Incoming messages are demultiplexed into either the local
+// a persistent connection to monocle serve, sends a SubscribeMsg so engine
+// events are pushed back, then serialises request/response calls over the
+// same socket. Incoming messages are demultiplexed into either the local
 // event bus (for EventNotification) or the pending request channel.
+//
+// On terminal socket error (write fail, timeout) the client tears the
+// connection down and lazily re-dials on the next request — a single slow
+// RPC must not permanently brick the client.
 type EngineClient struct {
+	socketPath string
+
+	connMu  sync.Mutex // guards conn / scanner / closed / read goroutine state
 	conn    net.Conn
 	scanner *bufio.Scanner
 
 	writeMu sync.Mutex // serialises writes to the socket
-	reqMu   sync.Mutex // one request in flight at a time
+	reqMu   sync.Mutex // one ordinary in-flight request at a time
 	pending chan any   // read loop delivers non-event responses here
 	readErr chan error // terminal read error
+	closed  chan struct{}
 
 	subsMu      sync.Mutex
 	subscribers map[core.EventKind]map[int]core.EventCallback
 	nextSubID   int
 
-	closed chan struct{}
+	// eventCh feeds dispatchWorker so we preserve per-subscriber event
+	// ordering. Without a single worker, spawning one goroutine per event
+	// (the previous design) gave Go's scheduler license to deliver them
+	// out of order to a subscriber's callback. quitCh terminates the
+	// worker on Close — we never close eventCh because readLoop may still
+	// be racing dispatchEvent against shutdown.
+	eventCh   chan *protocol.EventNotification
+	quitCh    chan struct{}
+	quitOnce  sync.Once
+	dispStart sync.Once
 
-	// cfg is the most recent GetConfig snapshot, retained so SaveConfig
-	// can ship the mutated copy back. GetConfig always re-fetches and
-	// overwrites this — the cache is only a fallback for transient socket
-	// errors and the pointer SaveConfig sends back. cfgMu protects against
-	// concurrent reader/writer races (TUI threads, event callbacks).
+	// cfg is the cached config snapshot. Cache-on-first-call is the only
+	// way to preserve the documented "GetConfig() -> mutate -> SaveConfig()"
+	// round-trip: refreshing on every GetConfig would let an interleaving
+	// fetch overwrite the pointer the caller is still mutating, silently
+	// dropping the user's edits at save time. The trade-off is that
+	// changes made by another client (a second TUI, monocle register) are
+	// not visible until the EngineClient is reconstructed — a smaller bug
+	// than losing live mutations.
 	cfgMu sync.Mutex
 	cfg   *types.Config
+
+	// closedOnce guards close(c.closed) — readLoop and external Close both
+	// race to close it.
+	closedOnce sync.Once
 }
 
 // NewEngineClient dials the socket, subscribes to every engine event kind,
 // and starts the demultiplexing read loop. The returned client satisfies
 // core.EngineAPI.
 func NewEngineClient(socketPath string) (*EngineClient, error) {
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", socketPath, err)
-	}
-	scanner := bufio.NewScanner(conn)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-
 	c := &EngineClient{
-		conn:        conn,
-		scanner:     scanner,
+		socketPath:  socketPath,
 		pending:     make(chan any, 1),
 		readErr:     make(chan error, 1),
 		subscribers: make(map[core.EventKind]map[int]core.EventCallback),
 		closed:      make(chan struct{}),
+		eventCh:     make(chan *protocol.EventNotification, 256),
+		quitCh:      make(chan struct{}),
 	}
+	c.dispStart.Do(func() { go c.dispatchWorker() })
+
+	if err := c.dialAndSubscribe(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// dialAndSubscribe opens a fresh connection, sends the subscribe handshake,
+// validates the ack (including protocol version), and starts a new
+// readLoop. The previous closed channel is re-armed so subsequent requests
+// can wait on it.
+func (c *EngineClient) dialAndSubscribe() error {
+	conn, err := net.Dial("unix", c.socketPath)
+	if err != nil {
+		return fmt.Errorf("dial %s: %w", c.socketPath, err)
+	}
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
 	// Subscribe to every event kind so the client mirrors all engine events.
 	// Passive=true marks this as a viewer connection: the TUI is not an
 	// attached agent, so the engine must not flip into push-delivery mode
-	// just because the reviewer's UI is open. Without this flag the server
-	// would count the TUI in subscriberCount, take the push branch in
-	// Submit(), and silently mark the review delivered — the real agent
-	// would never see it.
+	// just because the reviewer's UI is open.
 	sub := &protocol.SubscribeMsg{
 		Type: protocol.TypeSubscribe,
 		Events: []string{
@@ -88,50 +123,96 @@ func NewEngineClient(socketPath string) (*EngineClient, error) {
 	data, err := protocol.Encode(sub)
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("encode subscribe: %w", err)
+		return fmt.Errorf("encode subscribe: %w", err)
 	}
 	if _, err := conn.Write(data); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("write subscribe: %w", err)
+		return fmt.Errorf("write subscribe: %w", err)
 	}
 
-	// The very first line is the SubscribeResponse ack; consume it before
-	// starting the read loop so callers can immediately issue requests.
 	if !scanner.Scan() {
 		conn.Close()
 		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("read subscribe ack: %w", err)
+			return fmt.Errorf("read subscribe ack: %w", err)
 		}
-		return nil, errors.New("server closed before subscribe ack")
+		return errors.New("server closed before subscribe ack")
 	}
 	ack, err := protocol.Decode(scanner.Bytes())
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("decode subscribe ack: %w", err)
+		return fmt.Errorf("decode subscribe ack: %w", err)
 	}
-	if _, ok := ack.(*protocol.SubscribeResponse); !ok {
+	subAck, ok := ack.(*protocol.SubscribeResponse)
+	if !ok {
 		conn.Close()
-		return nil, fmt.Errorf("unexpected subscribe ack: %T", ack)
+		return fmt.Errorf("unexpected subscribe ack: %T", ack)
+	}
+	if subAck.ProtocolVersion < protocol.CurrentProtocolVersion {
+		// Old daemon: silently drops Passive, would count this TUI as an
+		// agent and route feedback to it instead of the real agent. We
+		// refuse rather than silently mis-route. Caller should `monocle
+		// stop` and respawn.
+		conn.Close()
+		return fmt.Errorf(
+			"monocle serve protocol version %d is older than client (%d); run `monocle stop` and retry",
+			subAck.ProtocolVersion, protocol.CurrentProtocolVersion,
+		)
 	}
 
-	go c.readLoop()
-	return c, nil
+	c.connMu.Lock()
+	c.conn = conn
+	c.scanner = scanner
+	// Re-arm closed so request() callers can wait on it.
+	c.closed = make(chan struct{})
+	c.closedOnce = sync.Once{}
+	// Drain any stale frames from a prior session.
+	c.drainPendingLocked()
+	c.connMu.Unlock()
+
+	go c.readLoop(conn, scanner)
+	return nil
+}
+
+// drainPendingLocked discards any frames left over from a previous
+// connection's pending channel. Caller must hold connMu.
+func (c *EngineClient) drainPendingLocked() {
+	for {
+		select {
+		case <-c.pending:
+		case <-c.readErr:
+		default:
+			return
+		}
+	}
+}
+
+// ensureConn re-dials if the connection has been torn down (timeout, write
+// error, server hang-up). Returns a nil error when the client is ready to
+// send the next request.
+func (c *EngineClient) ensureConn() error {
+	c.connMu.Lock()
+	closed := c.closed
+	c.connMu.Unlock()
+	select {
+	case <-closed:
+		return c.dialAndSubscribe()
+	default:
+		return nil
+	}
 }
 
 // readLoop demultiplexes incoming messages into events (dispatched locally)
-// or request responses (sent on the pending channel for the caller to pick up).
-func (c *EngineClient) readLoop() {
-	for c.scanner.Scan() {
-		line := c.scanner.Bytes()
+// or request responses (sent on the pending channel for the caller to pick
+// up). When the loop exits, c.closed is closed so blocked callers unblock
+// and the next request triggers a redial.
+func (c *EngineClient) readLoop(conn net.Conn, scanner *bufio.Scanner) {
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
 		msg, err := protocol.Decode(line)
 		if err != nil {
-			// Skip garbage rather than closing the link, but log so a
-			// version-mismatch between client and serve binaries shows
-			// up in stderr instead of manifesting only as opaque
-			// timeouts on every subsequent request.
 			fmt.Fprintf(os.Stderr, "monocle client: dropping undecodable message (%v)\n", err)
 			continue
 		}
@@ -145,7 +226,7 @@ func (c *EngineClient) readLoop() {
 			return
 		}
 	}
-	err := c.scanner.Err()
+	err := scanner.Err()
 	if err == nil {
 		err = errors.New("connection closed")
 	}
@@ -153,20 +234,26 @@ func (c *EngineClient) readLoop() {
 	case c.readErr <- err:
 	default:
 	}
-	close(c.closed)
+	c.closeConn()
+}
+
+// closeConn tears down the current connection and signals waiters via
+// c.closed. Safe to call multiple times — a sync.Once guards close(c.closed).
+func (c *EngineClient) closeConn() {
+	c.connMu.Lock()
+	conn := c.conn
+	c.closedOnce.Do(func() { close(c.closed) })
+	c.connMu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
 }
 
 // request sends msg and blocks until the corresponding response arrives. The
-// reqMu lock guarantees one in-flight request at a time, so the order of
-// non-event messages on the pending channel matches the order of sends.
-//
-// On timeout we tear down the underlying socket rather than just returning.
-// The pending channel is shared across requests with no correlation ID, so
-// a stale response that arrives after the timeout would otherwise sit in
-// the buffer and be read by the next call — producing a wrong-type assertion
-// panic when the wrapper does resp.(*protocol.XxxResponse). Closing the
-// connection forces a clean reconnect on the next operation and prevents
-// cross-talk.
+// reqMu lock guarantees one in-flight ordinary request at a time, so the
+// order of non-event messages on the pending channel matches the order of
+// sends. On any terminal error (timeout, write error, server close) the
+// connection is torn down and the next request lazily redials.
 func (c *EngineClient) request(msg any) (any, error) {
 	data, err := protocol.Encode(msg)
 	if err != nil {
@@ -176,10 +263,20 @@ func (c *EngineClient) request(msg any) (any, error) {
 	c.reqMu.Lock()
 	defer c.reqMu.Unlock()
 
+	if err := c.ensureConn(); err != nil {
+		return nil, err
+	}
+
+	c.connMu.Lock()
+	conn := c.conn
+	closed := c.closed
+	c.connMu.Unlock()
+
 	c.writeMu.Lock()
-	_, werr := c.conn.Write(data)
+	_, werr := conn.Write(data)
 	c.writeMu.Unlock()
 	if werr != nil {
+		c.closeConn()
 		return nil, fmt.Errorf("write: %w", werr)
 	}
 
@@ -187,54 +284,83 @@ func (c *EngineClient) request(msg any) (any, error) {
 	case resp := <-c.pending:
 		return resp, nil
 	case err := <-c.readErr:
+		c.closeConn()
 		return nil, err
-	case <-c.closed:
+	case <-closed:
 		return nil, errors.New("client closed")
 	case <-time.After(DefaultTimeout):
-		_ = c.conn.Close()
+		c.closeConn()
 		return nil, errors.New("timeout waiting for response")
 	}
 }
 
 // requestNoTimeout is the timeout-free variant used by genuinely
-// long-blocking calls (WaitForFeedback). Same single-in-flight invariant
-// as request(), but it relies on the connection closing or readErr firing
-// to unblock — there's no deadline. Don't use this for ordinary RPCs;
-// while it's in flight every other request serializes behind reqMu.
+// long-blocking calls (WaitForFeedback). It opens its OWN dedicated
+// connection rather than serialising behind reqMu — otherwise a single
+// hours-long Wait would block every other RPC on the shared client (and
+// RequestPause, the very call that releases the wait, would self-deadlock).
 func (c *EngineClient) requestNoTimeout(msg any) (any, error) {
+	conn, err := net.Dial("unix", c.socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %w", c.socketPath, err)
+	}
+	defer conn.Close()
+
 	data, err := protocol.Encode(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
-
-	c.reqMu.Lock()
-	defer c.reqMu.Unlock()
-
-	c.writeMu.Lock()
-	_, werr := c.conn.Write(data)
-	c.writeMu.Unlock()
-	if werr != nil {
-		return nil, fmt.Errorf("write: %w", werr)
+	if _, err := conn.Write(data); err != nil {
+		return nil, fmt.Errorf("write: %w", err)
 	}
 
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("read: %w", err)
+		}
+		return nil, errors.New("server closed without response")
+	}
+	resp, err := protocol.Decode(scanner.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return resp, nil
+}
+
+// dispatchEvent hands the notification to the single dispatch worker.
+// The worker preserves per-subscriber event ordering — the previous
+// goroutine-per-event design let the runtime deliver events out of order,
+// violating the contract the comment claimed.
+func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 	select {
-	case resp := <-c.pending:
-		return resp, nil
-	case err := <-c.readErr:
-		return nil, err
-	case <-c.closed:
-		return nil, errors.New("client closed")
+	case c.eventCh <- notif:
+	case <-c.quitCh:
+		// Client is shutting down; drop the event.
+	default:
+		// Worker is stalled — drop with a stderr breadcrumb so backpressure
+		// is visible. Better than blocking the read loop indefinitely.
+		fmt.Fprintf(os.Stderr, "monocle client: event channel full, dropping %q\n", notif.Event)
 	}
 }
 
-// dispatchEvent fans the engine notification out to local subscribers. The
-// fan-out runs in a fresh goroutine so a callback that calls back into
-// c.request() doesn't deadlock the read loop — the read loop is the only
-// producer for c.pending, so blocking it on a request response would hang
-// forever. Per-event ordering within a single subscriber is preserved
-// because we serialize the dispatch goroutine launches and each event's
-// callbacks run inline within that goroutine.
-func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
+// dispatchWorker drains eventCh serially so per-subscriber callbacks see
+// events in the same order the daemon emitted them. Exits on quitCh
+// (Close) rather than channel close, because readLoop can still race
+// against shutdown and would panic if we closed eventCh underneath it.
+func (c *EngineClient) dispatchWorker() {
+	for {
+		select {
+		case notif := <-c.eventCh:
+			c.invokeCallbacks(notif)
+		case <-c.quitCh:
+			return
+		}
+	}
+}
+
+func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	kind := core.EventKind(notif.Event)
 	payload := core.EventPayload{Kind: kind}
 	if v, ok := notif.Payload["message"].(string); ok {
@@ -257,19 +383,17 @@ func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 	}
 	c.subsMu.Unlock()
 
-	if len(callbacks) == 0 {
-		return
+	for _, cb := range callbacks {
+		cb(payload)
 	}
-	go func() {
-		for _, cb := range callbacks {
-			cb(payload)
-		}
-	}()
 }
 
-// Close tears down the underlying socket and terminates the read loop.
+// Close tears down the underlying socket and terminates the read and
+// dispatch loops. Idempotent.
 func (c *EngineClient) Close() error {
-	return c.conn.Close()
+	c.quitOnce.Do(func() { close(c.quitCh) })
+	c.closeConn()
+	return nil
 }
 
 // On satisfies core.EngineAPI. Registrations are local-only — the server
@@ -305,7 +429,10 @@ func (c *EngineClient) StartSession(opts core.SessionOptions) (*types.ReviewSess
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.StartSessionResponse)
+	r, ok := resp.(*protocol.StartSessionResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -317,7 +444,10 @@ func (c *EngineClient) ResumeSession(sessionID string) (*types.ReviewSession, er
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.ResumeSessionResponse)
+	r, ok := resp.(*protocol.ResumeSessionResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -329,7 +459,11 @@ func (c *EngineClient) GetSession() *types.ReviewSession {
 	if err != nil {
 		return nil
 	}
-	return resp.(*protocol.GetSessionResponse).Session
+	r, ok := resp.(*protocol.GetSessionResponse)
+	if !ok {
+		return nil
+	}
+	return r.Session
 }
 
 func (c *EngineClient) ListSessions(opts core.ListSessionsOptions) ([]types.SessionSummary, error) {
@@ -341,7 +475,10 @@ func (c *EngineClient) ListSessions(opts core.ListSessionsOptions) ([]types.Sess
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.ListSessionsResponse)
+	r, ok := resp.(*protocol.ListSessionsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -355,7 +492,10 @@ func (c *EngineClient) RefreshChangedFiles() ([]types.ChangedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.RefreshChangedFilesResponse)
+	r, ok := resp.(*protocol.RefreshChangedFilesResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -367,7 +507,11 @@ func (c *EngineClient) GetChangedFiles() []types.ChangedFile {
 	if err != nil {
 		return nil
 	}
-	return resp.(*protocol.GetChangedFilesResponse).Files
+	r, ok := resp.(*protocol.GetChangedFilesResponse)
+	if !ok {
+		return nil
+	}
+	return r.Files
 }
 
 func (c *EngineClient) GetFileDiff(path string) (*types.DiffResult, error) {
@@ -375,7 +519,10 @@ func (c *EngineClient) GetFileDiff(path string) (*types.DiffResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetFileDiffResponse)
+	r, ok := resp.(*protocol.GetFileDiffResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -387,7 +534,10 @@ func (c *EngineClient) GetFileContent(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	r := resp.(*protocol.GetFileContentResponse)
+	r, ok := resp.(*protocol.GetFileContentResponse)
+	if !ok {
+		return "", fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return "", errors.New(r.Error)
 	}
@@ -401,7 +551,11 @@ func (c *EngineClient) GetContentItems() []types.ContentItem {
 	if err != nil {
 		return nil
 	}
-	return resp.(*protocol.GetContentItemsResponse).Items
+	r, ok := resp.(*protocol.GetContentItemsResponse)
+	if !ok {
+		return nil
+	}
+	return r.Items
 }
 
 func (c *EngineClient) GetContentItem(id string) (*types.ContentItem, error) {
@@ -409,7 +563,10 @@ func (c *EngineClient) GetContentItem(id string) (*types.ContentItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetContentItemResponse)
+	r, ok := resp.(*protocol.GetContentItemResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -421,7 +578,10 @@ func (c *EngineClient) GetContentDiff(id string) (*types.DiffResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetContentDiffResponse)
+	r, ok := resp.(*protocol.GetContentDiffResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -433,7 +593,10 @@ func (c *EngineClient) GetContentVersions(id string) ([]types.ContentVersion, er
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetContentVersionsResponse)
+	r, ok := resp.(*protocol.GetContentVersionsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -450,7 +613,10 @@ func (c *EngineClient) GetContentDiffBetweenVersions(id string, fromVersion, toV
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetContentDiffBetweenVersionsResponse)
+	r, ok := resp.(*protocol.GetContentDiffBetweenVersionsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -462,7 +628,10 @@ func (c *EngineClient) DismissArtifact(id string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.DismissArtifactResponse)
+	r, ok := resp.(*protocol.DismissArtifactResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -476,11 +645,14 @@ func (c *EngineClient) GetAdditionalFiles() []types.AdditionalFile {
 	if err != nil {
 		return nil
 	}
-	return resp.(*protocol.GetAdditionalFilesResponse).Files
+	r, ok := resp.(*protocol.GetAdditionalFilesResponse)
+	if !ok {
+		return nil
+	}
+	return r.Files
 }
 
 func (c *EngineClient) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, error) {
-	// Reuse the existing AddAdditionalFilesMsg already used by the CLI.
 	resp, err := c.request(&protocol.AddAdditionalFilesMsg{
 		Type:  protocol.TypeAddAdditionalFiles,
 		Paths: paths,
@@ -488,19 +660,25 @@ func (c *EngineClient) AddAdditionalPaths(paths []string) ([]types.AdditionalFil
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.AddAdditionalFilesResponse)
+	r, ok := resp.(*protocol.AddAdditionalFilesResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if !r.Success {
 		if r.Message != "" {
 			return nil, errors.New(r.Message)
 		}
 		return nil, errors.New("add additional files failed")
 	}
-	// The server now returns the newly-added subset on Added; mirror
-	// the local engine's contract (return only the new files, not the
-	// cumulative list). Fall back to GetAdditionalFiles when talking to
-	// an older serve that doesn't populate Added — preserves the
-	// pre-fix behavior rather than returning an empty slice silently.
-	if r.Added != nil {
+	// AddedPresent distinguishes "new daemon returned empty Added"
+	// (legitimately added zero files) from "old daemon doesn't populate
+	// Added at all". When the daemon honors the field we trust it; the
+	// fallback to the cumulative GetAdditionalFiles only fires against a
+	// truly old daemon — never on a new daemon returning an empty list.
+	if r.AddedPresent {
+		if r.Added == nil {
+			return []types.AdditionalFile{}, nil
+		}
 		return r.Added, nil
 	}
 	return c.GetAdditionalFiles(), nil
@@ -511,7 +689,10 @@ func (c *EngineClient) GetAdditionalFileContent(absPath string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	r := resp.(*protocol.GetAdditionalFileContentResponse)
+	r, ok := resp.(*protocol.GetAdditionalFileContentResponse)
+	if !ok {
+		return "", fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return "", errors.New(r.Error)
 	}
@@ -533,7 +714,10 @@ func (c *EngineClient) AddComment(target core.CommentTarget, commentType types.C
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.AddCommentResponse)
+	r, ok := resp.(*protocol.AddCommentResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -550,7 +734,10 @@ func (c *EngineClient) EditComment(commentID string, commentType types.CommentTy
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.EditCommentResponse)
+	r, ok := resp.(*protocol.EditCommentResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -562,7 +749,10 @@ func (c *EngineClient) DeleteComment(commentID string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.DeleteCommentResponse)
+	r, ok := resp.(*protocol.DeleteCommentResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -574,7 +764,10 @@ func (c *EngineClient) ResolveComment(commentID string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.ResolveCommentResponse)
+	r, ok := resp.(*protocol.ResolveCommentResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -586,7 +779,10 @@ func (c *EngineClient) ClearComments() error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.ClearCommentsResponse)
+	r, ok := resp.(*protocol.ClearCommentsResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -598,7 +794,10 @@ func (c *EngineClient) ClearReview() error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.ClearReviewResponse)
+	r, ok := resp.(*protocol.ClearReviewResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -612,7 +811,10 @@ func (c *EngineClient) MarkReviewed(path string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.MarkReviewedResponse)
+	r, ok := resp.(*protocol.MarkReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -624,7 +826,10 @@ func (c *EngineClient) UnmarkReviewed(path string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.UnmarkReviewedResponse)
+	r, ok := resp.(*protocol.UnmarkReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -636,7 +841,10 @@ func (c *EngineClient) MarkContentReviewed(id string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.MarkContentReviewedResponse)
+	r, ok := resp.(*protocol.MarkContentReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -648,7 +856,10 @@ func (c *EngineClient) UnmarkContentReviewed(id string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.UnmarkContentReviewedResponse)
+	r, ok := resp.(*protocol.UnmarkContentReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -660,7 +871,10 @@ func (c *EngineClient) ResetAllReviewed() error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.ResetAllReviewedResponse)
+	r, ok := resp.(*protocol.ResetAllReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -672,7 +886,10 @@ func (c *EngineClient) MarkAllReviewed() error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.MarkAllReviewedResponse)
+	r, ok := resp.(*protocol.MarkAllReviewedResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -686,7 +903,10 @@ func (c *EngineClient) GetReviewSummary() (*types.ReviewSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetReviewSummaryResponse)
+	r, ok := resp.(*protocol.GetReviewSummaryResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -698,7 +918,10 @@ func (c *EngineClient) Submit(action types.SubmitAction, body string) (*core.Sub
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.SubmitResponse)
+	r, ok := resp.(*protocol.SubmitResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -710,7 +933,10 @@ func (c *EngineClient) FormatReview(action types.SubmitAction, body string) (str
 	if err != nil {
 		return "", err
 	}
-	r := resp.(*protocol.FormatReviewResponse)
+	r, ok := resp.(*protocol.FormatReviewResponse)
+	if !ok {
+		return "", fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return "", errors.New(r.Error)
 	}
@@ -722,7 +948,10 @@ func (c *EngineClient) GetSubmissions() ([]types.ReviewSubmission, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetSubmissionsResponse)
+	r, ok := resp.(*protocol.GetSubmissionsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -736,7 +965,10 @@ func (c *EngineClient) SetBaseRef(ref string) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.SetBaseRefResponse)
+	r, ok := resp.(*protocol.SetBaseRefResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -752,7 +984,11 @@ func (c *EngineClient) IsAutoAdvanceRef() bool {
 	if err != nil {
 		return false
 	}
-	return resp.(*protocol.IsAutoAdvanceRefResponse).Enabled
+	r, ok := resp.(*protocol.IsAutoAdvanceRefResponse)
+	if !ok {
+		return false
+	}
+	return r.Enabled
 }
 
 func (c *EngineClient) SelectedBaseRef() string {
@@ -760,7 +996,11 @@ func (c *EngineClient) SelectedBaseRef() string {
 	if err != nil {
 		return ""
 	}
-	return resp.(*protocol.SelectedBaseRefResponse).Ref
+	r, ok := resp.(*protocol.SelectedBaseRefResponse)
+	if !ok {
+		return ""
+	}
+	return r.Ref
 }
 
 func (c *EngineClient) RecentCommits(n int) ([]core.LogEntry, error) {
@@ -768,7 +1008,10 @@ func (c *EngineClient) RecentCommits(n int) ([]core.LogEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.RecentCommitsResponse)
+	r, ok := resp.(*protocol.RecentCommitsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -786,7 +1029,10 @@ func (c *EngineClient) GetSnapshots() ([]types.ReviewSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resp.(*protocol.GetSnapshotsResponse)
+	r, ok := resp.(*protocol.GetSnapshotsResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return nil, errors.New(r.Error)
 	}
@@ -798,7 +1044,10 @@ func (c *EngineClient) SetSnapshotBase(snapshotID int) error {
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.SetSnapshotBaseResponse)
+	r, ok := resp.(*protocol.SetSnapshotBaseResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -814,7 +1063,11 @@ func (c *EngineClient) GetActiveSnapshot() *types.ReviewSnapshot {
 	if err != nil {
 		return nil
 	}
-	return resp.(*protocol.GetActiveSnapshotResponse).Snapshot
+	r, ok := resp.(*protocol.GetActiveSnapshotResponse)
+	if !ok {
+		return nil
+	}
+	return r.Snapshot
 }
 
 func (c *EngineClient) HasSnapshots() (bool, error) {
@@ -822,7 +1075,10 @@ func (c *EngineClient) HasSnapshots() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	r := resp.(*protocol.HasSnapshotsResponse)
+	r, ok := resp.(*protocol.HasSnapshotsResponse)
+	if !ok {
+		return false, fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return false, errors.New(r.Error)
 	}
@@ -835,15 +1091,6 @@ func (c *EngineClient) HasSnapshots() (bool, error) {
 // socket. Kept so the client satisfies core.EngineAPI.
 func (c *EngineClient) StartServer(_ string) error { return nil }
 
-// PollFeedback, WaitForFeedback, GetReviewStatusInfo,
-// SubmitContentForReview are agent-facing helpers. The TUI does not call
-// them today, but they're part of EngineAPI so leaving them as silent
-// nil-returning stubs is a structural footgun: any future TUI code that
-// happens to call them would compile, pass inline-engine unit tests, and
-// silently regress in production. Wire them through the existing
-// PollFeedbackMsg / GetReviewStatusMsg / SubmitContentMsg plumbing so
-// the contract actually works end-to-end.
-
 func (c *EngineClient) PollFeedback() *core.FormattedReview {
 	resp, err := c.request(&protocol.PollFeedbackMsg{
 		Type: protocol.TypePollFeedback,
@@ -852,8 +1099,8 @@ func (c *EngineClient) PollFeedback() *core.FormattedReview {
 	if err != nil {
 		return nil
 	}
-	r := resp.(*protocol.PollFeedbackResponse)
-	if !r.HasFeedback {
+	r, ok := resp.(*protocol.PollFeedbackResponse)
+	if !ok || !r.HasFeedback {
 		return nil
 	}
 	return &core.FormattedReview{
@@ -864,9 +1111,9 @@ func (c *EngineClient) PollFeedback() *core.FormattedReview {
 }
 
 // WaitForFeedback blocks indefinitely (Wait=true) until the reviewer
-// submits. We bypass DefaultTimeout via requestNoTimeout because the
-// CLI's get-feedback --wait flow can take minutes to hours, and the
-// timeout would otherwise tear down the connection prematurely.
+// submits. Opens its own dedicated socket so the blocking call doesn't
+// hold the main client's reqMu for hours and stall every other RPC —
+// including RequestPause, the call that would release the wait.
 func (c *EngineClient) WaitForFeedback() *core.FormattedReview {
 	resp, err := c.requestNoTimeout(&protocol.PollFeedbackMsg{
 		Type: protocol.TypePollFeedback,
@@ -875,8 +1122,8 @@ func (c *EngineClient) WaitForFeedback() *core.FormattedReview {
 	if err != nil {
 		return nil
 	}
-	r := resp.(*protocol.PollFeedbackResponse)
-	if !r.HasFeedback {
+	r, ok := resp.(*protocol.PollFeedbackResponse)
+	if !ok || !r.HasFeedback {
 		return nil
 	}
 	return &core.FormattedReview{
@@ -891,7 +1138,10 @@ func (c *EngineClient) GetReviewStatusInfo() *core.ReviewStatusInfo {
 	if err != nil {
 		return nil
 	}
-	r := resp.(*protocol.GetReviewStatusResponse)
+	r, ok := resp.(*protocol.GetReviewStatusResponse)
+	if !ok {
+		return nil
+	}
 	return &core.ReviewStatusInfo{
 		Status:       r.Status,
 		CommentCount: r.CommentCount,
@@ -911,7 +1161,10 @@ func (c *EngineClient) SubmitContentForReview(id, title, content, contentType st
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.SubmitContentResponse)
+	r, ok := resp.(*protocol.SubmitContentResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if !r.Success {
 		if r.Message != "" {
 			return errors.New(r.Message)
@@ -921,15 +1174,16 @@ func (c *EngineClient) SubmitContentForReview(id, title, content, contentType st
 	return nil
 }
 
-// RequestPause and CancelPause route the TUI's pause keybind through the
-// daemon. Pre-fix these were `{}` stubs and the daemon's pause flag was
-// never set, so `monocle review status` kept returning the prior status
-// and `get-feedback --wait` did not block on user-initiated pause.
-func (c *EngineClient) RequestPause() {
-	_, _ = c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: true})
+// RequestPause / CancelPause now propagate the socket error so the
+// frontend can avoid lying to the user about whether the daemon's pause
+// flag actually flipped.
+func (c *EngineClient) RequestPause() error {
+	_, err := c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: true})
+	return err
 }
-func (c *EngineClient) CancelPause() {
-	_, _ = c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: false})
+func (c *EngineClient) CancelPause() error {
+	_, err := c.request(&protocol.SetPauseMsg{Type: protocol.TypeSetPause, Requested: false})
+	return err
 }
 
 func (c *EngineClient) GetFeedbackStatus() string {
@@ -937,7 +1191,11 @@ func (c *EngineClient) GetFeedbackStatus() string {
 	if err != nil {
 		return ""
 	}
-	return resp.(*protocol.GetFeedbackStatusResponse).Status
+	r, ok := resp.(*protocol.GetFeedbackStatusResponse)
+	if !ok {
+		return ""
+	}
+	return r.Status
 }
 
 func (c *EngineClient) GetQueuedCount() int {
@@ -945,7 +1203,11 @@ func (c *EngineClient) GetQueuedCount() int {
 	if err != nil {
 		return 0
 	}
-	return resp.(*protocol.GetQueuedCountResponse).Count
+	r, ok := resp.(*protocol.GetQueuedCountResponse)
+	if !ok {
+		return 0
+	}
+	return r.Count
 }
 
 func (c *EngineClient) ReloadPendingFeedback() {
@@ -957,7 +1219,11 @@ func (c *EngineClient) GetSubscriberCount() int {
 	if err != nil {
 		return 0
 	}
-	return resp.(*protocol.GetSubscriberCountResponse).Count
+	r, ok := resp.(*protocol.GetSubscriberCountResponse)
+	if !ok {
+		return 0
+	}
+	return r.Count
 }
 
 func (c *EngineClient) GetSocketPath() string {
@@ -965,38 +1231,52 @@ func (c *EngineClient) GetSocketPath() string {
 	if err != nil {
 		return ""
 	}
-	return resp.(*protocol.GetSocketPathResponse).Path
+	r, ok := resp.(*protocol.GetSocketPathResponse)
+	if !ok {
+		return ""
+	}
+	return r.Path
 }
 
 // --- EngineAPI: config ---
 
-// GetConfig always fetches a fresh snapshot from the daemon and stashes
-// it on the client so SaveConfig can ship the mutated copy back. Earlier
-// versions cached on first call and never invalidated, which silently
-// dropped any changes made by other clients (e.g. another TUI or
-// `monocle register`) and let a stale-cached SaveConfig clobber them.
-//
-// The TUI's settings flow is: GetConfig() -> mutate fields on the
-// returned pointer -> SaveConfig(). Refreshing on each GetConfig is
-// what makes that round-trip see the daemon's actual current values.
+// GetConfig returns a cached pointer. The caller's documented flow is
+// GetConfig() -> mutate -> SaveConfig(), so we cache the first fetch and
+// return the same pointer on subsequent calls; refreshing would let an
+// interleaving GetConfig overwrite the in-progress mutation pointer and
+// silently drop user edits. The trade-off: changes made by a different
+// client (a second TUI, `monocle register`) aren't visible until this
+// EngineClient is reconstructed.
 func (c *EngineClient) GetConfig() *types.Config {
-	resp, err := c.request(&protocol.GetConfigMsg{Type: protocol.TypeGetConfig})
-	if err != nil {
-		// Fall back to the last-known cfg so callers don't get nil
-		// during a transient socket hiccup. SaveConfig will fail
-		// loudly if the client is truly disconnected.
-		c.cfgMu.Lock()
-		cached := c.cfg
-		c.cfgMu.Unlock()
+	c.cfgMu.Lock()
+	cached := c.cfg
+	c.cfgMu.Unlock()
+	if cached != nil {
 		return cached
 	}
-	cfg := resp.(*protocol.GetConfigResponse).Config
+	resp, err := c.request(&protocol.GetConfigMsg{Type: protocol.TypeGetConfig})
+	if err != nil {
+		return nil
+	}
+	r, ok := resp.(*protocol.GetConfigResponse)
+	if !ok {
+		return nil
+	}
 	c.cfgMu.Lock()
-	c.cfg = cfg
+	// Re-check in case of race; first writer wins so the caller's
+	// pointer identity is stable.
+	if c.cfg == nil {
+		c.cfg = r.Config
+	}
+	cfg := c.cfg
 	c.cfgMu.Unlock()
 	return cfg
 }
 
+// SaveConfig persists the cached config snapshot. Deep-copies via a JSON
+// round-trip so a TUI goroutine mutating slice/map fields on the
+// GetConfig-returned pointer can't race with the marshal — a concurrent
+// map iteration / write would otherwise panic the encoder.
 func (c *EngineClient) SaveConfig() error {
 	c.cfgMu.Lock()
 	cfg := c.cfg
@@ -1004,11 +1284,22 @@ func (c *EngineClient) SaveConfig() error {
 	if cfg == nil {
 		return errors.New("SaveConfig called before GetConfig")
 	}
-	resp, err := c.request(&protocol.SaveConfigMsg{Type: protocol.TypeSaveConfig, Config: *cfg})
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	var safe types.Config
+	if err := json.Unmarshal(data, &safe); err != nil {
+		return fmt.Errorf("unmarshal config: %w", err)
+	}
+	resp, err := c.request(&protocol.SaveConfigMsg{Type: protocol.TypeSaveConfig, Config: safe})
 	if err != nil {
 		return err
 	}
-	r := resp.(*protocol.SaveConfigResponse)
+	r, ok := resp.(*protocol.SaveConfigResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
@@ -1020,7 +1311,11 @@ func (c *EngineClient) IsReviewTrackingEnabled() bool {
 	if err != nil {
 		return false
 	}
-	return resp.(*protocol.IsReviewTrackingEnabledResponse).Enabled
+	r, ok := resp.(*protocol.IsReviewTrackingEnabledResponse)
+	if !ok {
+		return false
+	}
+	return r.Enabled
 }
 
 // Shutdown is a no-op on the client. The serve process manages its own
