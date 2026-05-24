@@ -16,9 +16,16 @@ import (
 // by handleSubscription / handleQueuedConnection. A slow or wedged client
 // must not back-pressure the engine — every emit() iterates subscribers
 // synchronously, so a blocking conn.Write would stall event delivery to
-// all other subscribers. When this queue fills, the offending connection
-// is closed instead of blocking.
-const subscriberOutQueueSize = 64
+// all other subscribers. The buffer absorbs normal bursts (e.g. one event
+// per changed file during a bulk refresh); only truly stuck clients hit
+// the soft deadline below.
+const subscriberOutQueueSize = 1024
+
+// subscriberSendDeadline is how long send() will wait on a full queue
+// before tearing down the connection. Gives a transiently-slow client
+// time to drain instead of being kicked on the first burst, while still
+// failing fast against a wedged consumer.
+const subscriberSendDeadline = 5 * time.Second
 
 // subscriberConn wraps a persistent-mode connection (subscribe or connect)
 // with a single writer goroutine that drains a bounded outbound queue.
@@ -70,28 +77,35 @@ func (sc *subscriberConn) writer() {
 	}
 }
 
-// send queues a message for asynchronous delivery. Returns immediately;
-// if the queue is full the caller is informed via error and the
-// connection is torn down so the engine isn't held hostage by a single
-// laggard client.
+// send queues a message for asynchronous delivery. If the queue is full
+// we wait up to subscriberSendDeadline before declaring the consumer
+// stuck and tearing down the connection — purely non-blocking would
+// shed healthy slow clients on the first transient burst.
 func (sc *subscriberConn) send(msg any) error {
-	select {
-	case <-sc.closed:
-		return errors.New("subscriber connection closed")
-	default:
-	}
 	data, err := protocol.Encode(msg)
 	if err != nil {
 		return err
 	}
+	// Fast path: enqueue without allocating a timer.
 	select {
 	case sc.outQ <- data:
 		return nil
 	case <-sc.closed:
 		return errors.New("subscriber connection closed")
 	default:
-		// Queue full — slow consumer. Kick it rather than blocking
-		// the engine's emit() goroutine.
+	}
+	// Queue full — wait briefly for the writer to drain rather than
+	// hanging up on a momentary burst. emit() callers are still bounded
+	// by subscriberSendDeadline so a wedged consumer cannot stall the
+	// engine indefinitely.
+	timer := time.NewTimer(subscriberSendDeadline)
+	defer timer.Stop()
+	select {
+	case sc.outQ <- data:
+		return nil
+	case <-sc.closed:
+		return errors.New("subscriber connection closed")
+	case <-timer.C:
 		sc.shutdown()
 		return errors.New("subscriber outbound queue full; closing connection")
 	}
@@ -383,8 +397,9 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 	// wire — the client requires SubscribeResponse to be the first
 	// message it sees.
 	if err := sc.send(&protocol.SubscribeResponse{
-		Type:    protocol.TypeSubscribeResponse,
-		Success: true,
+		Type:            protocol.TypeSubscribeResponse,
+		Success:         true,
+		ProtocolVersion: protocol.CurrentProtocolVersion,
 	}); err != nil {
 		return
 	}
