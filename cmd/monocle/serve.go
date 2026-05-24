@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -63,26 +62,29 @@ func removePIDFile(path string) {
 	_ = os.Remove(path)
 }
 
-// pidLooksLikeMonocle reports whether /proc/<pid>/cmdline mentions "monocle".
-// Used by StopCmd to guard against signalling a recycled PID after a crashed
-// serve left a stale .pid file. On platforms without /proc (macOS, Windows)
-// we fall back to a best-effort `ps` lookup; if both fail we err on the safe
-// side and return false, leaving the user to clean up manually.
+// processBasename returns the basename of the first argv element of pid,
+// or "" if it can't determine it. Splits into the platform-specific helper
+// (pidProcessBasename) to keep Windows working without /proc or `ps`.
+func processBasename(pid int) string {
+	return pidProcessBasename(pid)
+}
+
+// pidLooksLikeMonocle reports whether pid's process image is actually a
+// monocle binary, so StopCmd doesn't SIGTERM an unrelated process after a
+// crashed serve leaves a stale .pid file.
+//
+// We match on the BASENAME of argv[0] rather than a substring scan of the
+// full cmdline — a substring match would falsely include `vim monocle.go`,
+// `sudo monocle ...`, `bash -c 'monocle ...'`, `grep monocle`, and any
+// other process whose argv merely mentions the string.
 func pidLooksLikeMonocle(pid int) bool {
-	// Linux /proc fast path.
-	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
-		// cmdline fields are NUL-separated; replace for the substring scan.
-		cmdline := strings.ReplaceAll(string(data), "\x00", " ")
-		return strings.Contains(cmdline, "monocle")
+	base := processBasename(pid)
+	if base == "" {
+		return false
 	}
-	// Fallback: ps -p <pid> -o command=. Available on macOS, BSDs, and most
-	// linuxes; absent on plain Windows. exec is intentional rather than
-	// importing a process library — this is one-shot and runs only on
-	// `monocle stop`.
-	if out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output(); err == nil {
-		return strings.Contains(string(out), "monocle")
-	}
-	return false
+	// Trim common .exe suffix on Windows.
+	base = strings.TrimSuffix(base, ".exe")
+	return base == "monocle"
 }
 
 // Run launches the headless engine and blocks on SIGINT/SIGTERM.
