@@ -99,7 +99,15 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 
 	var stderrFile *os.File
 	loggedThisRun := false
-	if f, openErr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); openErr == nil {
+	// O_EXCL refuses to open if the target already exists (defeats a
+	// hostile re-symlink between Remove and OpenFile); O_NOFOLLOW
+	// refuses to traverse a symlink at logPath if one is restored after
+	// our Remove. Together they close the TOCTOU window where a local
+	// attacker could redirect our truncating write to an arbitrary file
+	// they couldn't otherwise overwrite. On platforms where the syscall
+	// constant isn't defined (or is 0), the open still fails closed
+	// because O_EXCL alone aborts when the target exists.
+	if f, openErr := openLogFile(logPath); openErr == nil {
 		cmd.Stderr = f
 		stderrFile = f
 		loggedThisRun = true
