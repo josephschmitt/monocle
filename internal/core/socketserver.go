@@ -210,7 +210,7 @@ func (s *SocketServer) Start(socketPath string) error {
 	s.listener = l
 	s.socketPath = socketPath
 
-	go s.acceptLoop()
+	go s.acceptLoop(l)
 	if s.idleTimeout > 0 {
 		go s.idleMonitor()
 	}
@@ -295,9 +295,12 @@ func (s *SocketServer) Shutdown() error {
 	return err
 }
 
-func (s *SocketServer) acceptLoop() {
+// acceptLoop is spawned with the listener bound as a parameter so the
+// goroutine can't race against a concurrent Shutdown (or a test helper)
+// that mutates s.listener before the new goroutine first reads it.
+func (s *SocketServer) acceptLoop(l net.Listener) {
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			return // listener was closed
 		}
