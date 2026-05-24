@@ -90,10 +90,19 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	logPath := socketPath + ".log"
+
+	// Remove any stale log left behind by a previous EnsureServe so a
+	// failed OpenFile below can't trick the timeout fallback into
+	// quoting a previous run's error as the cause of this run's
+	// failure.
+	_ = os.Remove(logPath)
+
 	var stderrFile *os.File
+	loggedThisRun := false
 	if f, openErr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); openErr == nil {
 		cmd.Stderr = f
 		stderrFile = f
+		loggedThisRun = true
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -132,10 +141,13 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 		}
 		time.Sleep(interval)
 	}
-	// Try to surface the real cause from the child's stderr so the
-	// user isn't stuck with an opaque readiness timeout.
-	if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
-		return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s: %s", timeout, strings.TrimSpace(string(data)))
+	// Only consult the log if WE wrote to it this run. Otherwise a stale
+	// log from a previous attempt (if our Remove failed) would mislead
+	// the user about the actual root cause.
+	if loggedThisRun {
+		if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s: %s", timeout, strings.TrimSpace(string(data)))
+		}
 	}
 	return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s (no stderr captured; check %s)", timeout, logPath)
 }
