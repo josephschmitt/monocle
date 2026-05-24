@@ -176,7 +176,14 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 	}
 
 	submit := resp.(*protocol.SubmitContentResponse)
-	return textResult(submit.Message), nil, nil
+	// Include the server-minted id when the caller passed an empty ID —
+	// without this the agent has no way to address the artifact later
+	// (mark reviewed, dismiss, fetch versions).
+	body := submit.Message
+	if submit.ID != "" {
+		body = fmt.Sprintf("%s\nid: %s", submit.Message, submit.ID)
+	}
+	return textResult(body), nil, nil
 }
 
 func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params addFilesParams) (*sdkmcp.CallToolResult, any, error) {

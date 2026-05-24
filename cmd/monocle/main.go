@@ -537,6 +537,12 @@ func (cmd *ReviewSendArtifactCmd) Run() error {
 			return printJSON(submit)
 		}
 		fmt.Println(submit.Message)
+		// Echo the (possibly server-minted) id on its own line so the
+		// agent can later address the artifact by id — without this the
+		// minted UUID returned in submit.ID is silently lost.
+		if submit.ID != "" {
+			fmt.Printf("id: %s\n", submit.ID)
+		}
 		return nil
 	}
 
