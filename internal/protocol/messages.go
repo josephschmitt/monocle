@@ -67,10 +67,14 @@ type SubmitContentMsg struct {
 }
 
 // SubmitContentResponse acknowledges content submission.
+// ID echoes the stored content's id — the daemon mints a UUID when the
+// caller sends an empty ID, so this field lets the caller address the
+// just-submitted item (mark reviewed, dismiss, fetch versions).
 type SubmitContentResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
+	ID      string `json:"id,omitempty"`
 }
 
 // SubscribeMsg requests a persistent event subscription on this connection.
@@ -89,10 +93,23 @@ type SubscribeMsg struct {
 }
 
 // SubscribeResponse acknowledges a subscription request.
+// ProtocolVersion lets clients detect a stale daemon that predates wire
+// features they rely on (e.g. Passive subscribers). A zero value means
+// the daemon is older than ProtocolVersion=1 and must be respawned for
+// the client to trust newer behaviour.
 type SubscribeResponse struct {
-	Type    string `json:"type"`
-	Success bool   `json:"success"`
+	Type            string `json:"type"`
+	Success         bool   `json:"success"`
+	ProtocolVersion int    `json:"protocol_version,omitempty"`
 }
+
+// CurrentProtocolVersion is bumped when a wire-protocol change requires
+// new client behaviour. Bump this whenever a new client semantically
+// depends on a daemon feature that an older daemon would silently drop.
+//
+//	1 — initial versioned protocol (Passive subscribers, ContentAdded,
+//	    presence-flag responses).
+const CurrentProtocolVersion = 1
 
 // EventNotification pushes an engine event to a subscribed connection.
 type EventNotification struct {
@@ -130,14 +147,22 @@ type AddAdditionalFilesMsg struct {
 
 // AddAdditionalFilesResponse acknowledges additional files submission.
 // Added carries the newly-attached files (not the cumulative list) so
-// callers can distinguish a fresh add from a no-op de-dup. Older clients
-// that only inspect Success/Count keep working because Added is additive.
+// callers can distinguish a fresh add from a no-op de-dup.
+//
+// AddedPresent disambiguates "new daemon returned an empty Added list"
+// (genuinely added zero files) from "old daemon doesn't populate Added at
+// all". Without this flag, a JSON `omitempty` on an empty slice is
+// indistinguishable on the wire from the field being absent, so the
+// client cannot tell whether to trust Added or fall back to a cumulative
+// fetch. New daemons always set AddedPresent=true; old daemons leave it
+// false.
 type AddAdditionalFilesResponse struct {
-	Type    string                 `json:"type"`
-	Success bool                   `json:"success"`
-	Message string                 `json:"message,omitempty"`
-	Count   int                    `json:"count"`
-	Added   []types.AdditionalFile `json:"added,omitempty"`
+	Type         string                 `json:"type"`
+	Success      bool                   `json:"success"`
+	Message      string                 `json:"message,omitempty"`
+	Count        int                    `json:"count"`
+	Added        []types.AdditionalFile `json:"added,omitempty"`
+	AddedPresent bool                   `json:"added_present,omitempty"`
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the
