@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -69,22 +70,54 @@ func processBasename(pid int) string {
 	return pidProcessBasename(pid)
 }
 
-// pidLooksLikeMonocle reports whether pid's process image is actually a
-// monocle binary, so StopCmd doesn't SIGTERM an unrelated process after a
-// crashed serve leaves a stale .pid file.
+// pidIsAlive reports whether a process with the given pid currently
+// exists. Used by StopCmd to distinguish "pid is gone, pid file is
+// stale" from "pid is alive but we can't identify it".
+func pidIsAlive(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	// On Unix os.FindProcess always succeeds; the canonical liveness
+	// probe is signal 0, which performs the kernel's permission/existence
+	// check without actually sending a signal. On Windows FindProcess
+	// returns an error for dead pids, so reaching this point already
+	// implies alive.
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+// pidLooksLikeMonocle reports whether pid's process image is plausibly a
+// monocle binary, so StopCmd doesn't SIGTERM an unrelated process after
+// a crashed serve leaves a stale .pid file.
 //
-// We match on the BASENAME of argv[0] rather than a substring scan of the
-// full cmdline — a substring match would falsely include `vim monocle.go`,
-// `sudo monocle ...`, `bash -c 'monocle ...'`, `grep monocle`, and any
-// other process whose argv merely mentions the string.
+// Matching policy: the basename of the executable must begin with
+// "monocle" (case-insensitive on Windows). That covers stock installs
+// (`monocle`), versioned/renamed binaries (`monocle-v0.46.1`,
+// `monocle-dev`), `go test ./cmd/monocle` flows (binary `monocle.test`),
+// and `dlv exec ./monocle` (basename `monocle`). A bare prefix check
+// would still false-positive on `monocle-unrelated-tool`, but matching
+// monocle's own variants is more important than excluding that very
+// unlikely case — and StopCmd will only ever signal a pid the user
+// previously asked monocle serve to record.
+//
+// We deliberately do NOT match on a substring scan of the full cmdline:
+// that would falsely include `vim monocle.go`, `sudo monocle ...`,
+// `bash -c 'monocle ...'`, `grep monocle`, and any other process whose
+// argv merely mentions the string.
 func pidLooksLikeMonocle(pid int) bool {
 	base := processBasename(pid)
 	if base == "" {
 		return false
 	}
-	// Trim common .exe suffix on Windows.
-	base = strings.TrimSuffix(base, ".exe")
-	return base == "monocle"
+	// Trim a common .exe suffix on Windows.
+	trimmed := strings.TrimSuffix(base, ".exe")
+	if runtime.GOOS == "windows" {
+		trimmed = strings.ToLower(strings.TrimSuffix(strings.ToLower(base), ".exe"))
+	}
+	return strings.HasPrefix(trimmed, "monocle")
 }
 
 // Run launches the headless engine and blocks on SIGINT/SIGTERM.
@@ -198,11 +231,45 @@ func (c *StopCmd) Run() error {
 	// signalling. A crashed serve leaves the .pid file behind, and the
 	// kernel may have reassigned that PID to an unrelated process
 	// (editor, ssh, system daemon) — SIGTERM'ing it would silently kill
-	// something innocent. If we can't confirm ownership we refuse to
-	// signal and tell the user to clean up manually.
+	// something innocent.
+	//
+	// IMPORTANT: only remove the pid file when we can prove the
+	// recorded process is dead (no such pid OR the pid belongs to a
+	// clearly different binary). If the basename guard just returns
+	// "I'm not sure" — empty basename, /proc read denied, ps timed out
+	// — we leave the pid file alone so a retry can still find the
+	// running daemon. Removing it on every uncertain match was the bug:
+	// it orphaned the live daemon for any non-stock binary name (renames,
+	// `monocle.test`, `dlv exec`, etc.) and the user had no recourse
+	// short of pkill.
+	base := processBasename(pid)
+	if base == "" {
+		// Couldn't determine. Assume the pid is gone (most likely cause)
+		// AND that the pid file is stale enough to clear; if the daemon
+		// is actually alive the OS will refuse our subsequent signal
+		// with ESRCH and we'll clean up there.
+		if !pidIsAlive(pid) {
+			removePIDFile(pidPath)
+			return fmt.Errorf("pid %d in %s is not running; cleaned up stale pid file", pid, pidPath)
+		}
+		// Pid exists but we can't identify it. Refuse to signal AND
+		// leave the pid file alone — better to ask the user to confirm
+		// than to silently kill a stranger or silently orphan our own
+		// daemon.
+		return fmt.Errorf(
+			"pid %d in %s is running but its image could not be identified; "+
+				"if this is monocle serve, remove %s and retry, otherwise leave it alone",
+			pid, pidPath, pidPath,
+		)
+	}
 	if !pidLooksLikeMonocle(pid) {
+		// We DID identify the image and it's clearly not us. The pid
+		// got reassigned; safe to clean up the stale pid file.
 		removePIDFile(pidPath)
-		return fmt.Errorf("pid %d in %s does not look like monocle serve; cleaned up stale pid file", pid, pidPath)
+		return fmt.Errorf(
+			"pid %d in %s is %q, not monocle serve; cleaned up stale pid file",
+			pid, pidPath, base,
+		)
 	}
 
 	proc, err := os.FindProcess(pid)
