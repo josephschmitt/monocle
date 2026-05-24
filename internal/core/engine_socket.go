@@ -414,21 +414,25 @@ func (e *Engine) handleGetConfig(_ *protocol.GetConfigMsg) *protocol.GetConfigRe
 	}
 }
 
-// handleSaveConfig replaces the engine's config with the value from the
-// client and persists it. The previous implementation mutated *e.cfg in
-// place under e.mu, but every reader (ContextLines, MarkReviewedOnSubmit,
-// ReviewTracking) accessed the struct without the lock — a data race on
-// strings/slices. The atomic.Pointer swap below removes the race: readers
-// take a stable snapshot via Load, writers publish a fresh pointer.
-// Callers that captured the old pointer see the old values; this is
-// preferable to torn reads.
+// handleSaveConfig persists the client-supplied config and, only after a
+// successful disk write, swaps the new value into the engine's
+// atomic.Pointer. The order matters: if we publish in-memory first and
+// then SaveConfig fails (read-only fs, ENOSPC, EACCES), readers would
+// see the new config for the rest of the process lifetime while disk
+// still has the old config — so the next serve restart silently reverts
+// the user's change. Persisting first ensures in-memory and on-disk
+// agree on success and that a failure leaves both untouched.
 func (e *Engine) handleSaveConfig(msg *protocol.SaveConfigMsg) *protocol.SaveConfigResponse {
 	cfgCopy := msg.Config
+	if err := SaveConfig(&cfgCopy); err != nil {
+		return &protocol.SaveConfigResponse{
+			Type:  protocol.TypeSaveConfigResponse,
+			Error: err.Error(),
+		}
+	}
 	e.cfg.Store(&cfgCopy)
-	err := e.SaveConfig()
 	return &protocol.SaveConfigResponse{
-		Type:  protocol.TypeSaveConfigResponse,
-		Error: errString(err),
+		Type: protocol.TypeSaveConfigResponse,
 	}
 }
 
@@ -482,10 +486,12 @@ func (e *Engine) handleGetSocketPath(_ *protocol.GetSocketPathMsg) *protocol.Get
 // RequestPause/CancelPause were no-op stubs and the agent never saw
 // pause_requested.
 func (e *Engine) handleSetPause(msg *protocol.SetPauseMsg) *protocol.SetPauseResponse {
+	// The in-process Engine.RequestPause/CancelPause cannot fail; the
+	// error return on the interface exists for the socket-backed proxy.
 	if msg.Requested {
-		e.RequestPause()
+		_ = e.RequestPause()
 	} else {
-		e.CancelPause()
+		_ = e.CancelPause()
 	}
 	return &protocol.SetPauseResponse{Type: protocol.TypeSetPauseResponse}
 }

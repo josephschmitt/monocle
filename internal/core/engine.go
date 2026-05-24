@@ -133,8 +133,11 @@ type EngineAPI interface {
 	WaitForFeedback() *FormattedReview
 	GetReviewStatusInfo() *ReviewStatusInfo
 	SubmitContentForReview(id, title, content, contentType string, isPlan bool) error
-	RequestPause()
-	CancelPause()
+	// RequestPause / CancelPause return error so a frontend (e.g. the TUI)
+	// can surface "pause didn't reach the daemon" rather than rendering a
+	// pause banner the agent never actually saw.
+	RequestPause() error
+	CancelPause() error
 
 	// Feedback status
 	GetFeedbackStatus() string

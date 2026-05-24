@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -493,11 +494,12 @@ func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *
 	}
 
 	return &protocol.AddAdditionalFilesResponse{
-		Type:    protocol.TypeAddAdditionalFilesResponse,
-		Success: true,
-		Message: fmt.Sprintf("Added %d file(s) for review", len(added)),
-		Count:   len(added),
-		Added:   added,
+		Type:         protocol.TypeAddAdditionalFilesResponse,
+		Success:      true,
+		Message:      fmt.Sprintf("Added %d file(s) for review", len(added)),
+		Count:        len(added),
+		Added:        added,
+		AddedPresent: true,
 	}
 }
 
@@ -1661,23 +1663,27 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 }
 
 // RequestPause sets the pause flag so the agent sees "pause_requested" on next status check.
-func (e *Engine) RequestPause() {
+// The in-process implementation cannot fail; the error return exists for
+// the socket-backed EngineClient where the round-trip can.
+func (e *Engine) RequestPause() error {
 	e.feedback.SetPauseRequested(true)
 
 	e.emit(EventPauseChanged, EventPayload{
 		Kind:   EventPauseChanged,
 		Status: "pause_requested",
 	})
+	return nil
 }
 
 // CancelPause clears the pause flag.
-func (e *Engine) CancelPause() {
+func (e *Engine) CancelPause() error {
 	e.feedback.SetPauseRequested(false)
 
 	e.emit(EventPauseChanged, EventPayload{
 		Kind:   EventPauseChanged,
 		Status: "cancelled",
 	})
+	return nil
 }
 
 func (e *Engine) GetFeedbackStatus() string {
@@ -1772,9 +1778,17 @@ func (e *Engine) IsReviewTrackingEnabled() bool {
 	return cfg != nil && cfg.ReviewTracking
 }
 
-// SaveConfig persists the current configuration to disk.
+// SaveConfig persists the current configuration to disk. Guards against a
+// nil atomic.Pointer.Load (struct-literal construction paths or any code
+// that defers Store) — json.MarshalIndent(nil) would otherwise write the
+// literal string "null" to ~/.config/monocle/config.json and silently
+// wipe the user's settings.
 func (e *Engine) SaveConfig() error {
-	return SaveConfig(e.cfg.Load())
+	cfg := e.cfg.Load()
+	if cfg == nil {
+		return errors.New("engine: SaveConfig called with no config loaded")
+	}
+	return SaveConfig(cfg)
 }
 
 func (e *Engine) Shutdown() {
@@ -1964,7 +1978,11 @@ func (e *Engine) completeQueuedDelivery() {
 	})
 }
 
-// handleSubmitContent receives reviewable content (plans, docs) from the agent.
+// handleSubmitContent receives reviewable content (plans, docs) from the
+// agent. When the caller supplies an empty ID we mint a UUID server-side
+// and echo it back via the response so the caller can address the
+// just-submitted item (mark reviewed, dismiss, fetch versions); without
+// this, the round-trip stores under an id the caller can never see.
 func (e *Engine) handleSubmitContent(msg *protocol.SubmitContentMsg) *protocol.SubmitContentResponse {
 	id := msg.ID
 	if id == "" {
@@ -1984,5 +2002,6 @@ func (e *Engine) handleSubmitContent(msg *protocol.SubmitContentMsg) *protocol.S
 		Type:    protocol.TypeSubmitContentResponse,
 		Success: true,
 		Message: fmt.Sprintf("Content submitted for review: %s", msg.Title),
+		ID:      id,
 	}
 }
