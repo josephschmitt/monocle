@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1920,14 +1921,24 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 
 	case "pause":
 		return func() tea.Msg {
-			engine.RequestPause()
-			return pauseChangedMsg{status: "pause_requested"}
+			// Don't emit pauseChangedMsg{status: "pause_requested"}
+			// optimistically — when RequestPause errors (socket
+			// dropped, daemon stalled) the engine never set the flag,
+			// so showing the pause banner would lie to the user. The
+			// engine emits EventPauseChanged on real success, which
+			// BridgeEngineEvents converts into pauseChangedMsg.
+			if err := engine.RequestPause(); err != nil {
+				fmt.Fprintf(os.Stderr, "monocle: request pause: %v\n", err)
+			}
+			return nil
 		}
 
 	case "unpause":
 		return func() tea.Msg {
-			engine.CancelPause()
-			return pauseChangedMsg{status: "cancelled"}
+			if err := engine.CancelPause(); err != nil {
+				fmt.Fprintf(os.Stderr, "monocle: cancel pause: %v\n", err)
+			}
+			return nil
 		}
 
 	case "history":
