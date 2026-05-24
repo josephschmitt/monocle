@@ -27,30 +27,37 @@ import (
 type EngineClient struct {
 	socketPath string
 
-	connMu  sync.Mutex // guards conn / scanner / closed / read goroutine state
-	conn    net.Conn
-	scanner *bufio.Scanner
+	// active is the currently-installed connection bundle (conn + scanner
+	// + per-conn closed channel + per-conn pending/readErr). It's a
+	// pointer so dialAndSubscribe can atomically swap the entire bundle;
+	// readLoop holds its OWN reference and tears down only that bundle,
+	// which is what fixes the "stale readLoop closes fresh conn" race.
+	connMu sync.Mutex
+	active *clientConn
 
 	writeMu sync.Mutex // serialises writes to the socket
 	reqMu   sync.Mutex // one ordinary in-flight request at a time
-	pending chan any   // read loop delivers non-event responses here
-	readErr chan error // terminal read error
-	closed  chan struct{}
 
 	subsMu      sync.Mutex
 	subscribers map[core.EventKind]map[int]core.EventCallback
 	nextSubID   int
 
-	// eventCh feeds dispatchWorker so we preserve per-subscriber event
-	// ordering. Without a single worker, spawning one goroutine per event
-	// (the previous design) gave Go's scheduler license to deliver them
-	// out of order to a subscriber's callback. quitCh terminates the
-	// worker on Close — we never close eventCh because readLoop may still
-	// be racing dispatchEvent against shutdown.
-	eventCh   chan *protocol.EventNotification
-	quitCh    chan struct{}
-	quitOnce  sync.Once
-	dispStart sync.Once
+	// eventCh feeds dispatchWorker. dispatchEvent blocks on send (with a
+	// quitCh fallback) so backpressure flows up to readLoop and ultimately
+	// the daemon's per-conn outbound queue — instead of silently dropping
+	// events the way the previous default-branch design did.
+	eventCh  chan *protocol.EventNotification
+	quitCh   chan struct{}
+	quitOnce sync.Once
+
+	// dispatchDone is closed when dispatchWorker exits; Close waits on it.
+	dispatchDone chan struct{}
+
+	// noTimeoutMu / noTimeoutConns track open requestNoTimeout
+	// connections so Close can actively tear them down — otherwise a
+	// blocked WaitForFeedback goroutine outlives Close indefinitely.
+	noTimeoutMu    sync.Mutex
+	noTimeoutConns map[net.Conn]struct{}
 
 	// cfg is the cached config snapshot. Cache-on-first-call is the only
 	// way to preserve the documented "GetConfig() -> mutate -> SaveConfig()"
@@ -62,10 +69,29 @@ type EngineClient struct {
 	// than losing live mutations.
 	cfgMu sync.Mutex
 	cfg   *types.Config
+}
 
-	// closedOnce guards close(c.closed) — readLoop and external Close both
-	// race to close it.
+// clientConn bundles all per-connection state. By scoping closed/once to
+// the bundle and letting readLoop hold its OWN bundle pointer, a stale
+// readLoop's teardown can never accidentally close a freshly-redialed
+// connection's channel or socket.
+type clientConn struct {
+	conn       net.Conn
+	scanner    *bufio.Scanner
+	pending    chan any   // non-event responses for this connection
+	readErr    chan error // terminal read error for this connection
+	closed     chan struct{}
 	closedOnce sync.Once
+	readDone   chan struct{} // closed when this conn's readLoop exits
+}
+
+// close tears down this specific connection. Idempotent. Operates only
+// on the bundle, never on EngineClient's "current" fields.
+func (cc *clientConn) close() {
+	cc.closedOnce.Do(func() {
+		close(cc.closed)
+		_ = cc.conn.Close()
+	})
 }
 
 // NewEngineClient dials the socket, subscribes to every engine event kind,
@@ -73,26 +99,41 @@ type EngineClient struct {
 // core.EngineAPI.
 func NewEngineClient(socketPath string) (*EngineClient, error) {
 	c := &EngineClient{
-		socketPath:  socketPath,
-		pending:     make(chan any, 1),
-		readErr:     make(chan error, 1),
-		subscribers: make(map[core.EventKind]map[int]core.EventCallback),
-		closed:      make(chan struct{}),
-		eventCh:     make(chan *protocol.EventNotification, 256),
-		quitCh:      make(chan struct{}),
+		socketPath:     socketPath,
+		subscribers:    make(map[core.EventKind]map[int]core.EventCallback),
+		eventCh:        make(chan *protocol.EventNotification, 256),
+		quitCh:         make(chan struct{}),
+		dispatchDone:   make(chan struct{}),
+		noTimeoutConns: make(map[net.Conn]struct{}),
 	}
-	c.dispStart.Do(func() { go c.dispatchWorker() })
 
 	if err := c.dialAndSubscribe(); err != nil {
+		// Dial failed — close quitCh so the not-yet-started dispatch
+		// worker won't leak if the caller retries. dispatchWorker isn't
+		// running yet, but Close-on-failure must still leave the client
+		// in a consistent state.
+		close(c.quitCh)
+		close(c.dispatchDone)
 		return nil, err
 	}
+	// Start the dispatch worker AFTER the dial succeeds. Pre-fix this
+	// ran inside NewEngineClient unconditionally; on dial failure the
+	// caller got (nil, err) but the goroutine leaked because nothing
+	// closed quitCh.
+	go c.dispatchWorker()
 	return c, nil
 }
 
+// subscribeAckTimeout bounds how long dialAndSubscribe waits for the
+// daemon to send the SubscribeResponse. Pre-fix the read had no deadline,
+// so a daemon that accepted but stalled before writing the ack would
+// permanently freeze the next reconnect attempt — the TUI hung forever
+// on the second request after any transient timeout.
+const subscribeAckTimeout = 10 * time.Second
+
 // dialAndSubscribe opens a fresh connection, sends the subscribe handshake,
-// validates the ack (including protocol version), and starts a new
-// readLoop. The previous closed channel is re-armed so subsequent requests
-// can wait on it.
+// validates the ack (including protocol version), and starts a new readLoop
+// bound to its OWN clientConn bundle.
 func (c *EngineClient) dialAndSubscribe() error {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
@@ -130,6 +171,9 @@ func (c *EngineClient) dialAndSubscribe() error {
 		return fmt.Errorf("write subscribe: %w", err)
 	}
 
+	// Bound the ack read so a stalled daemon can't permanently wedge the
+	// reconnect path. SetReadDeadline is cleared once the ack arrives.
+	_ = conn.SetReadDeadline(time.Now().Add(subscribeAckTimeout))
 	if !scanner.Scan() {
 		conn.Close()
 		if err := scanner.Err(); err != nil {
@@ -137,6 +181,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 		}
 		return errors.New("server closed before subscribe ack")
 	}
+	_ = conn.SetReadDeadline(time.Time{}) // clear deadline for steady-state reads
 	ack, err := protocol.Decode(scanner.Bytes())
 	if err != nil {
 		conn.Close()
@@ -159,42 +204,35 @@ func (c *EngineClient) dialAndSubscribe() error {
 		)
 	}
 
+	cc := &clientConn{
+		conn:     conn,
+		scanner:  scanner,
+		pending:  make(chan any, 1),
+		readErr:  make(chan error, 1),
+		closed:   make(chan struct{}),
+		readDone: make(chan struct{}),
+	}
+
 	c.connMu.Lock()
-	c.conn = conn
-	c.scanner = scanner
-	// Re-arm closed so request() callers can wait on it.
-	c.closed = make(chan struct{})
-	c.closedOnce = sync.Once{}
-	// Drain any stale frames from a prior session.
-	c.drainPendingLocked()
+	c.active = cc
 	c.connMu.Unlock()
 
-	go c.readLoop(conn, scanner)
+	go c.readLoop(cc)
 	return nil
 }
 
-// drainPendingLocked discards any frames left over from a previous
-// connection's pending channel. Caller must hold connMu.
-func (c *EngineClient) drainPendingLocked() {
-	for {
-		select {
-		case <-c.pending:
-		case <-c.readErr:
-		default:
-			return
-		}
-	}
-}
-
-// ensureConn re-dials if the connection has been torn down (timeout, write
-// error, server hang-up). Returns a nil error when the client is ready to
-// send the next request.
+// ensureConn re-dials if the active connection has been torn down (timeout,
+// write error, server hang-up). Returns a nil error when the client is
+// ready to send the next request.
 func (c *EngineClient) ensureConn() error {
 	c.connMu.Lock()
-	closed := c.closed
+	cc := c.active
 	c.connMu.Unlock()
+	if cc == nil {
+		return c.dialAndSubscribe()
+	}
 	select {
-	case <-closed:
+	case <-cc.closed:
 		return c.dialAndSubscribe()
 	default:
 		return nil
@@ -202,12 +240,15 @@ func (c *EngineClient) ensureConn() error {
 }
 
 // readLoop demultiplexes incoming messages into events (dispatched locally)
-// or request responses (sent on the pending channel for the caller to pick
-// up). When the loop exits, c.closed is closed so blocked callers unblock
-// and the next request triggers a redial.
-func (c *EngineClient) readLoop(conn net.Conn, scanner *bufio.Scanner) {
-	for scanner.Scan() {
-		line := scanner.Bytes()
+// or request responses (sent on the connection's pending channel). The
+// loop operates EXCLUSIVELY on its own clientConn bundle, never on the
+// client's "current" fields — this is what stops a stale readLoop from
+// tearing down a freshly-redialed connection (see the closeConn-race
+// finding in PR #96's review).
+func (c *EngineClient) readLoop(cc *clientConn) {
+	defer close(cc.readDone)
+	for cc.scanner.Scan() {
+		line := cc.scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
@@ -221,39 +262,34 @@ func (c *EngineClient) readLoop(conn net.Conn, scanner *bufio.Scanner) {
 			continue
 		}
 		select {
-		case c.pending <- msg:
-		case <-c.closed:
+		case cc.pending <- msg:
+		case <-cc.closed:
+			return
+		case <-c.quitCh:
 			return
 		}
 	}
-	err := scanner.Err()
+	err := cc.scanner.Err()
 	if err == nil {
 		err = errors.New("connection closed")
 	}
 	select {
-	case c.readErr <- err:
+	case cc.readErr <- err:
 	default:
 	}
-	c.closeConn()
+	// Close ONLY this connection — not whatever happens to be in
+	// c.active at this moment. A redial may have already swapped in a
+	// fresh clientConn by the time we reach here; that bundle is
+	// completely independent of cc.
+	cc.close()
 }
 
-// closeConn tears down the current connection and signals waiters via
-// c.closed. Safe to call multiple times — a sync.Once guards close(c.closed).
-func (c *EngineClient) closeConn() {
-	c.connMu.Lock()
-	conn := c.conn
-	c.closedOnce.Do(func() { close(c.closed) })
-	c.connMu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
-	}
-}
-
-// request sends msg and blocks until the corresponding response arrives. The
-// reqMu lock guarantees one in-flight ordinary request at a time, so the
-// order of non-event messages on the pending channel matches the order of
-// sends. On any terminal error (timeout, write error, server close) the
-// connection is torn down and the next request lazily redials.
+// request sends msg and blocks until the corresponding response arrives.
+// The reqMu lock guarantees one in-flight ordinary request at a time, so
+// the order of non-event messages on the connection's pending channel
+// matches the order of sends. On any terminal error (timeout, write
+// error, server close) the connection is torn down and the next request
+// lazily redials.
 func (c *EngineClient) request(msg any) (any, error) {
 	data, err := protocol.Encode(msg)
 	if err != nil {
@@ -268,28 +304,32 @@ func (c *EngineClient) request(msg any) (any, error) {
 	}
 
 	c.connMu.Lock()
-	conn := c.conn
-	closed := c.closed
+	cc := c.active
 	c.connMu.Unlock()
+	if cc == nil {
+		return nil, errors.New("client closed")
+	}
 
 	c.writeMu.Lock()
-	_, werr := conn.Write(data)
+	_, werr := cc.conn.Write(data)
 	c.writeMu.Unlock()
 	if werr != nil {
-		c.closeConn()
+		cc.close()
 		return nil, fmt.Errorf("write: %w", werr)
 	}
 
 	select {
-	case resp := <-c.pending:
+	case resp := <-cc.pending:
 		return resp, nil
-	case err := <-c.readErr:
-		c.closeConn()
+	case err := <-cc.readErr:
+		cc.close()
 		return nil, err
-	case <-closed:
+	case <-cc.closed:
+		return nil, errors.New("client closed")
+	case <-c.quitCh:
 		return nil, errors.New("client closed")
 	case <-time.After(DefaultTimeout):
-		c.closeConn()
+		cc.close()
 		return nil, errors.New("timeout waiting for response")
 	}
 }
@@ -299,12 +339,43 @@ func (c *EngineClient) request(msg any) (any, error) {
 // connection rather than serialising behind reqMu — otherwise a single
 // hours-long Wait would block every other RPC on the shared client (and
 // RequestPause, the very call that releases the wait, would self-deadlock).
+//
+// The connection is registered with the client so Close() can actively
+// tear it down — pre-fix a blocked WaitForFeedback goroutine outlived
+// Close indefinitely, leaking goroutines + daemon-side handler state.
 func (c *EngineClient) requestNoTimeout(msg any) (any, error) {
+	// Refuse to start a new no-timeout request if the client is shutting
+	// down; otherwise a Close racing with a fresh call leaks the conn.
+	select {
+	case <-c.quitCh:
+		return nil, errors.New("client closed")
+	default:
+	}
+
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", c.socketPath, err)
 	}
-	defer conn.Close()
+
+	c.noTimeoutMu.Lock()
+	// Re-check quitCh under the lock so a Close that ran between the
+	// quitCh check above and the lock acquisition can still cancel us.
+	select {
+	case <-c.quitCh:
+		c.noTimeoutMu.Unlock()
+		_ = conn.Close()
+		return nil, errors.New("client closed")
+	default:
+	}
+	c.noTimeoutConns[conn] = struct{}{}
+	c.noTimeoutMu.Unlock()
+
+	defer func() {
+		c.noTimeoutMu.Lock()
+		delete(c.noTimeoutConns, conn)
+		c.noTimeoutMu.Unlock()
+		_ = conn.Close()
+	}()
 
 	data, err := protocol.Encode(msg)
 	if err != nil {
@@ -330,18 +401,18 @@ func (c *EngineClient) requestNoTimeout(msg any) (any, error) {
 }
 
 // dispatchEvent hands the notification to the single dispatch worker.
-// The worker preserves per-subscriber event ordering — the previous
-// goroutine-per-event design let the runtime deliver events out of order,
-// violating the contract the comment claimed.
+// Blocks until eventCh accepts the message OR the client shuts down —
+// pre-fix a non-blocking default branch silently dropped events when
+// eventCh filled, breaking the per-subscriber 'no events lost' contract
+// the comment promised. Backpressure now propagates correctly: readLoop
+// stalls, which stalls the daemon's per-conn outbound queue, which (after
+// its own 5s deadline) closes the slow consumer cleanly with an explicit
+// error rather than silent data loss.
 func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 	select {
 	case c.eventCh <- notif:
 	case <-c.quitCh:
 		// Client is shutting down; drop the event.
-	default:
-		// Worker is stalled — drop with a stderr breadcrumb so backpressure
-		// is visible. Better than blocking the read loop indefinitely.
-		fmt.Fprintf(os.Stderr, "monocle client: event channel full, dropping %q\n", notif.Event)
 	}
 }
 
@@ -350,6 +421,7 @@ func (c *EngineClient) dispatchEvent(notif *protocol.EventNotification) {
 // (Close) rather than channel close, because readLoop can still race
 // against shutdown and would panic if we closed eventCh underneath it.
 func (c *EngineClient) dispatchWorker() {
+	defer close(c.dispatchDone)
 	for {
 		select {
 		case notif := <-c.eventCh:
@@ -388,11 +460,36 @@ func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	}
 }
 
-// Close tears down the underlying socket and terminates the read and
-// dispatch loops. Idempotent.
+// Close tears down the active socket, every outstanding no-timeout
+// connection (e.g. a blocked WaitForFeedback), and the dispatch worker.
+// Waits for all of those to exit before returning so tests / shutdown
+// sequencing don't see lingering goroutines. Idempotent.
 func (c *EngineClient) Close() error {
 	c.quitOnce.Do(func() { close(c.quitCh) })
-	c.closeConn()
+
+	c.connMu.Lock()
+	cc := c.active
+	c.active = nil
+	c.connMu.Unlock()
+
+	// Tear down every still-open no-timeout connection. Without this a
+	// blocked WaitForFeedback (or any caller of requestNoTimeout) parks
+	// on scanner.Scan forever, surviving Close.
+	c.noTimeoutMu.Lock()
+	conns := make([]net.Conn, 0, len(c.noTimeoutConns))
+	for conn := range c.noTimeoutConns {
+		conns = append(conns, conn)
+	}
+	c.noTimeoutMu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+
+	if cc != nil {
+		cc.close()
+		<-cc.readDone
+	}
+	<-c.dispatchDone
 	return nil
 }
 
