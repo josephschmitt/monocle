@@ -200,3 +200,47 @@ func TestEngineClient_EventBus(t *testing.T) {
 		// expected
 	}
 }
+
+// TestEngineClient_SurvivesForcedRedial reproduces the redial race: tear
+// down the underlying connection via the daemon (Shutdown + restart of
+// the server), force the client to redial on the next request, then
+// confirm that any lagging readLoop teardown from the dead connection
+// can't kill the freshly-dialed one. Pre-fix this test would
+// intermittently fail with "client closed" because the stale readLoop
+// closed the new clientConn's closed channel via the shared closedOnce.
+func TestEngineClient_SurvivesForcedRedial(t *testing.T) {
+	engine, socketPath := setupEngine(t)
+
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new engine client: %v", err)
+	}
+	t.Cleanup(func() { ec.Close() })
+
+	// Sanity: first request works.
+	if _, err := ec.RefreshChangedFiles(); err != nil {
+		t.Fatalf("initial refresh: %v", err)
+	}
+
+	// Forcibly kill the active connection from the daemon side. The
+	// client's readLoop will exit and signal redial on next request.
+	engine.Shutdown()
+	// Bring the server back on the same socket so the redial can succeed.
+	if err := engine.StartServer(socketPath); err != nil {
+		t.Fatalf("restart server: %v", err)
+	}
+
+	// Give the kernel a beat to notify the dead conn so readLoop reaches
+	// its closeConn() — this is the window in which the racy old code
+	// would kill the next fresh connection.
+	time.Sleep(50 * time.Millisecond)
+
+	// Run several requests back-to-back. With the bug, at least one would
+	// return "client closed" / "timeout waiting for response" because the
+	// stale readLoop closed the fresh closed channel and socket.
+	for i := 0; i < 10; i++ {
+		if _, err := ec.RefreshChangedFiles(); err != nil {
+			t.Fatalf("post-redial refresh %d: %v", i, err)
+		}
+	}
+}
