@@ -229,6 +229,9 @@ func (s *SocketServer) idleMonitor() {
 	if grace == 0 {
 		grace = IdleGracePeriod
 	}
+	// idleTimeout is fixed before Start launches this goroutine; snapshot it
+	// once so the loop never reads the field unsynchronized.
+	idleTimeout := s.idleTimeout
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	for {
@@ -244,7 +247,7 @@ func (s *SocketServer) idleMonitor() {
 			if active > 0 || last.IsZero() {
 				continue
 			}
-			if time.Since(last) >= grace+s.idleTimeout {
+			if time.Since(last) >= grace+idleTimeout {
 				close(s.shutdownCh)
 				return
 			}
