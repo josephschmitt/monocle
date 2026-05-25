@@ -546,6 +546,15 @@ func (cmd *ReviewSendArtifactCmd) Run() error {
 		return nil
 	}
 
+	// Echo the (possibly server-minted) id before blocking on feedback so
+	// an agent that sent an empty --id can still address the artifact later
+	// (mark reviewed, dismiss, fetch versions). Without this the minted
+	// UUID in submit.ID is lost on the --wait path, mirroring the bug the
+	// non-wait branch already fixed.
+	if !cmd.JSON && submit.ID != "" {
+		fmt.Printf("id: %s\n", submit.ID)
+	}
+
 	// --wait: open a new connection and block for feedback
 	c.Close()
 	c2, err := client.Connect(socketPath)
