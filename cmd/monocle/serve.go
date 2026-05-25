@@ -34,6 +34,34 @@ type StopCmd struct {
 	Timeout time.Duration `help:"Maximum time to wait for the server to exit" default:"5s"`
 }
 
+// maxLogBytes caps the autospawn stderr log file.
+const maxLogBytes = 5 << 20 // 5 MiB
+
+// capLogFile periodically truncates the autospawn stderr log once it grows
+// past maxBytes. Seeking our inherited stderr back to 0 after the truncate
+// keeps writes contiguous instead of recreating a sparse file at the old
+// offset. It's a no-op when the path doesn't exist (serve run directly) and
+// the rare truncate/write interleave only affects log line ordering, never
+// program correctness.
+func capLogFile(path string, maxBytes int64, stop <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			fi, err := os.Stat(path)
+			if err != nil || fi.Size() < maxBytes {
+				continue
+			}
+			if err := os.Truncate(path, 0); err == nil {
+				_, _ = os.Stderr.Seek(0, 0)
+			}
+		}
+	}
+}
+
 // pidFilePath returns the PID file path that pairs with a given socket path.
 // The socket at /tmp/monocle-<hash>.sock pairs with /tmp/monocle-<hash>.pid.
 func pidFilePath(socketPath string) string {
@@ -192,6 +220,13 @@ func (c *ServeCmd) Run() error {
 		return fmt.Errorf("write pid file: %w", err)
 	}
 	defer removePIDFile(pidPath)
+
+	// Cap the autospawn stderr log so a long-lived daemon that spams errors
+	// can't grow <socket>.log unbounded. No-op when serve was launched
+	// directly (stderr is a terminal; the .log file usually doesn't exist).
+	logStop := make(chan struct{})
+	defer close(logStop)
+	go capLogFile(socketPath+".log", maxLogBytes, logStop)
 
 	fmt.Fprintf(os.Stdout, "monocle serve: listening on %s (pid %d)\n", socketPath, os.Getpid())
 
