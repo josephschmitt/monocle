@@ -950,13 +950,13 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 	return summary, nil
 }
 
-func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, error) {
+func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	e.mu.RLock()
 	session := e.current
 	e.mu.RUnlock()
 
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return fmt.Errorf("no active session")
 	}
 
 	// Validate: request_changes must include at least one unresolved comment or body text
@@ -970,16 +970,17 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 			}
 		}
 		if !hasBody && !hasUnresolved {
-			return nil, fmt.Errorf("request_changes requires at least one comment or review body")
+			return fmt.Errorf("request_changes requires at least one comment or review body")
 		}
 	}
 
 	formatted := e.formatter.Format(session, session.Comments, action, body)
 
-	// Check if a push-mode agent is connected (subscriber = channel mode)
-	agentConnected := e.server != nil && e.server.SubscriberCount() > 0
-
-	e.feedback.Submit(formatted, agentConnected)
+	// The daemon always queues feedback for pull delivery: the agent gets an
+	// event notification as a hint and then retrieves the review via
+	// get_feedback. Round advancement, marking the submission delivered, and
+	// clearing comments happen at pull time in completeQueuedDelivery.
+	e.feedback.Submit(formatted, false)
 
 	// Save submission record
 	now := time.Now()
@@ -991,9 +992,6 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 		CommentCount:    formatted.CommentCount,
 		ReviewRound:     session.ReviewRound,
 		SubmittedAt:     now,
-	}
-	if agentConnected {
-		sub.DeliveredAt = &now // Channel delivers immediately
 	}
 	_ = e.database.CreateSubmission(session.ID, sub)
 
@@ -1029,24 +1027,7 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 		Status:  formatted.Action,
 	})
 
-	if agentConnected {
-		// Push mode: advance round for a clean slate (channel delivers immediately)
-		e.mu.Lock()
-		_ = e.sessions.AdvanceRound(session)
-		e.mu.Unlock()
-
-		e.feedback.ClearStatus()
-
-		e.emit(EventFeedbackStatusChanged, EventPayload{
-			Kind:   EventFeedbackStatusChanged,
-			Status: "none",
-		})
-		e.emit(EventFileChanged, EventPayload{
-			Kind: EventFileChanged,
-		})
-	}
-
-	return &SubmitResult{AgentConnected: agentConnected}, nil
+	return nil
 }
 
 // buildFeedbackSummary creates a human-readable one-liner for channel notifications.

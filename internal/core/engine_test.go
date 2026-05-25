@@ -637,7 +637,7 @@ func TestSubmit(t *testing.T) {
 	})
 
 	// Submit the review
-	if _, err := e.Submit(types.ActionRequestChanges, "Please fix the issues"); err != nil {
+	if err := e.Submit(types.ActionRequestChanges, "Please fix the issues"); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
@@ -697,7 +697,7 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 
 	t.Run("reject empty request_changes", func(t *testing.T) {
 		setup(nil)
-		_, err := e.Submit(types.ActionRequestChanges, "")
+		err := e.Submit(types.ActionRequestChanges, "")
 		if err == nil {
 			t.Error("expected error for empty request_changes")
 		}
@@ -707,7 +707,7 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 		setup([]types.ReviewComment{
 			{ID: "c1", TargetType: types.TargetFile, TargetRef: "main.go", Type: types.CommentIssue, Body: "Bug", Resolved: true},
 		})
-		_, err := e.Submit(types.ActionRequestChanges, "")
+		err := e.Submit(types.ActionRequestChanges, "")
 		if err == nil {
 			t.Error("expected error for request_changes with only resolved comments")
 		}
@@ -715,7 +715,7 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 
 	t.Run("accept request_changes with body", func(t *testing.T) {
 		setup(nil)
-		_, err := e.Submit(types.ActionRequestChanges, "Please fix")
+		err := e.Submit(types.ActionRequestChanges, "Please fix")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -725,7 +725,7 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 		setup([]types.ReviewComment{
 			{ID: "c1", TargetType: types.TargetFile, TargetRef: "main.go", Type: types.CommentIssue, Body: "Bug"},
 		})
-		_, err := e.Submit(types.ActionRequestChanges, "")
+		err := e.Submit(types.ActionRequestChanges, "")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -733,7 +733,7 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 
 	t.Run("accept empty approve", func(t *testing.T) {
 		setup(nil)
-		_, err := e.Submit(types.ActionApprove, "")
+		err := e.Submit(types.ActionApprove, "")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -1071,7 +1071,7 @@ func TestSnapshotCreatedOnRequestChanges(t *testing.T) {
 	database.CreateSession(e.current)
 
 	// Submit request_changes
-	if _, err := e.Submit(types.ActionRequestChanges, "please fix"); err != nil {
+	if err := e.Submit(types.ActionRequestChanges, "please fix"); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
@@ -1346,7 +1346,7 @@ func TestReviewTrackingDisabled_SubmitNoSnapshot(t *testing.T) {
 	}
 	database.CreateSession(e.current)
 
-	if _, err := e.Submit(types.ActionRequestChanges, "fix"); err != nil {
+	if err := e.Submit(types.ActionRequestChanges, "fix"); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 

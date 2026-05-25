@@ -97,7 +97,7 @@ func TestSubmitSuccess_AlwaysClearsComments(t *testing.T) {
 	}
 	m := NewApp(engine)
 
-	result, _ := m.Update(submitSuccessMsg{agentConnected: true})
+	result, _ := m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
 	if app.overlay == overlayConfirm {
@@ -119,7 +119,7 @@ func TestSubmitSuccess_NoComments_SkipsClear(t *testing.T) {
 	}
 	m := NewApp(engine)
 
-	_, _ = m.Update(submitSuccessMsg{agentConnected: true})
+	_, _ = m.Update(submitSuccessMsg{})
 
 	if engine.cleared {
 		t.Error("expected ClearComments NOT to be called when no comments")
@@ -133,7 +133,7 @@ func TestSubmitSuccess_AgentDisconnected_ClearsComments(t *testing.T) {
 	}
 	m := NewApp(engine)
 
-	_, cmd := m.Update(submitSuccessMsg{agentConnected: false})
+	_, cmd := m.Update(submitSuccessMsg{})
 
 	if cmd != nil {
 		t.Error("expected no command when agent disconnected")
@@ -156,7 +156,7 @@ func TestSubmitSuccess_PreservesContentView(t *testing.T) {
 	m.diffView.path = "plan-1"
 	m.diffView.comments = []types.ReviewComment{{ID: "c1"}}
 
-	result, _ := m.Update(submitSuccessMsg{agentConnected: true})
+	result, _ := m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
 	// Artifacts persist across rounds — keep the content view on screen so
@@ -237,7 +237,7 @@ func TestSubmitSuccess_RecalcsStackedLayout(t *testing.T) {
 	recalcStackedLayout(&m)
 
 	// Submit feedback — artifacts persist across rounds.
-	result, _ = m.Update(submitSuccessMsg{agentConnected: true})
+	result, _ = m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
 	if len(app.sidebar.contentItems) != 1 {
@@ -276,7 +276,7 @@ func TestSubmitSuccess_FocusModeRestoresDimensions(t *testing.T) {
 	}
 
 	// Submit feedback (restores focus mode)
-	result, cmd := m.Update(submitSuccessMsg{agentConnected: true})
+	result, cmd := m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
 	if app.sidebarHidden {
@@ -313,7 +313,7 @@ func TestSubmitSuccess_NoAgent_FocusModeRestoresDimensions(t *testing.T) {
 	m = result.(appModel)
 
 	// Submit with no agent connected
-	result, _ = m.Update(submitSuccessMsg{agentConnected: false})
+	result, _ = m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
 	if app.sidebarHidden {

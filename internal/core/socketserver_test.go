@@ -353,8 +353,7 @@ func TestSocketServer_SubmitEmitsFeedbackEvent(t *testing.T) {
 	}
 
 	// Submit the review
-	_, err = engine.Submit(types.ActionRequestChanges, "")
-	if err != nil {
+	if err = engine.Submit(types.ActionRequestChanges, ""); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 

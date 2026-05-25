@@ -290,15 +290,11 @@ func (e *Engine) handleGetReviewSummary(_ *protocol.GetReviewSummaryMsg) *protoc
 }
 
 func (e *Engine) handleSubmit(msg *protocol.SubmitMsg) *protocol.SubmitResponse {
-	result, err := e.Submit(msg.Action, msg.Body)
-	resp := &protocol.SubmitResponse{
+	err := e.Submit(msg.Action, msg.Body)
+	return &protocol.SubmitResponse{
 		Type:  protocol.TypeSubmitResponse,
 		Error: errString(err),
 	}
-	if result != nil {
-		resp.AgentConnected = result.AgentConnected
-	}
-	return resp
 }
 
 func (e *Engine) handleFormatReview(msg *protocol.FormatReviewMsg) *protocol.FormatReviewResponse {

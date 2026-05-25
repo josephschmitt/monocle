@@ -306,13 +306,18 @@ func (c *EngineClient) readLoop(cc *clientConn) {
 	cc.close()
 }
 
-// request sends msg and blocks until the corresponding response arrives.
-// The reqMu lock guarantees one in-flight ordinary request at a time, so
-// the order of non-event messages on the connection's pending channel
-// matches the order of sends. On any terminal error (timeout, write
-// error, server close) the connection is torn down and the next request
-// lazily redials.
+// request sends msg and blocks until the corresponding response arrives,
+// bounded by DefaultTimeout. See requestTimeout for the timeout-aware form.
 func (c *EngineClient) request(msg any) (any, error) {
+	return c.requestTimeout(msg, DefaultTimeout)
+}
+
+// requestTimeout sends msg and blocks up to timeout for the response. The
+// reqMu lock guarantees one in-flight ordinary request at a time, so the
+// order of non-event messages on the connection's pending channel matches
+// the order of sends. On any terminal error (timeout, write error, server
+// close) the connection is torn down and the next request lazily redials.
+func (c *EngineClient) requestTimeout(msg any, timeout time.Duration) (any, error) {
 	data, err := protocol.Encode(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
@@ -350,7 +355,7 @@ func (c *EngineClient) request(msg any) (any, error) {
 		return nil, errors.New("client closed")
 	case <-c.quitCh:
 		return nil, errors.New("client closed")
-	case <-time.After(DefaultTimeout):
+	case <-time.After(timeout):
 		cc.close()
 		return nil, errors.New("timeout waiting for response")
 	}
@@ -606,8 +611,15 @@ func (c *EngineClient) ListSessions(opts core.ListSessionsOptions) ([]types.Sess
 
 // --- EngineAPI: files ---
 
+// refreshTimeout bounds RefreshChangedFiles, which can run a full git
+// status/diff over a large or cold working tree. DefaultTimeout (30s) is
+// tight enough to spuriously tear the connection down mid-refresh on big
+// repos, so give this one call a more generous budget while still failing
+// eventually if the daemon truly wedges.
+const refreshTimeout = 2 * time.Minute
+
 func (c *EngineClient) RefreshChangedFiles() ([]types.ChangedFile, error) {
-	resp, err := c.request(&protocol.RefreshChangedFilesMsg{Type: protocol.TypeRefreshChangedFiles})
+	resp, err := c.requestTimeout(&protocol.RefreshChangedFilesMsg{Type: protocol.TypeRefreshChangedFiles}, refreshTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -1032,19 +1044,19 @@ func (c *EngineClient) GetReviewSummary() (*types.ReviewSummary, error) {
 	return r.Summary, nil
 }
 
-func (c *EngineClient) Submit(action types.SubmitAction, body string) (*core.SubmitResult, error) {
+func (c *EngineClient) Submit(action types.SubmitAction, body string) error {
 	resp, err := c.request(&protocol.SubmitMsg{Type: protocol.TypeSubmit, Action: action, Body: body})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	r, ok := resp.(*protocol.SubmitResponse)
 	if !ok {
-		return nil, fmt.Errorf("unexpected response %T", resp)
+		return fmt.Errorf("unexpected response %T", resp)
 	}
 	if r.Error != "" {
-		return nil, errors.New(r.Error)
+		return errors.New(r.Error)
 	}
-	return &core.SubmitResult{AgentConnected: r.AgentConnected}, nil
+	return nil
 }
 
 func (c *EngineClient) FormatReview(action types.SubmitAction, body string) (string, error) {

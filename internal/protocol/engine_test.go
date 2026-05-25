@@ -88,7 +88,7 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"GetReviewSummary", &GetReviewSummaryMsg{Type: TypeGetReviewSummary}},
 		{"GetReviewSummaryResponse", &GetReviewSummaryResponse{Type: TypeGetReviewSummaryResponse}},
 		{"Submit", &SubmitMsg{Type: TypeSubmit, Action: types.ActionApprove, Body: "ok"}},
-		{"SubmitResponse", &SubmitResponse{Type: TypeSubmitResponse, AgentConnected: true}},
+		{"SubmitResponse", &SubmitResponse{Type: TypeSubmitResponse}},
 		{"FormatReview", &FormatReviewMsg{Type: TypeFormatReview, Action: types.ActionRequestChanges, Body: "b"}},
 		{"FormatReviewResponse", &FormatReviewResponse{Type: TypeFormatReviewResponse, Formatted: "f"}},
 		{"GetSubmissions", &GetSubmissionsMsg{Type: TypeGetSubmissions}},

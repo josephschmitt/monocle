@@ -122,9 +122,7 @@ type deleteCommentMsg struct {
 	commentID string
 }
 
-type submitSuccessMsg struct {
-	agentConnected bool // whether an agent was connected to receive the review
-}
+type submitSuccessMsg struct{}
 
 type commentsClearedMsg struct {
 	reloadPath       string
@@ -1039,8 +1037,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		copyToClip := msg.copyToClipboard
 		engine := m.engine
 		return m, func() tea.Msg {
-			result, err := engine.Submit(action, body)
-			if err != nil {
+			if err := engine.Submit(action, body); err != nil {
 				return submitErrorMsg{}
 			}
 			if copyToClip {
@@ -1048,7 +1045,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					clipboard.Copy(text)
 				}
 			}
-			return submitSuccessMsg{agentConnected: result.AgentConnected}
+			return submitSuccessMsg{}
 		}
 
 	case yankReviewMsg:
@@ -1093,45 +1090,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 		}
 
-		// If no push-mode agent was connected, feedback is queued for pull delivery.
-		// Clear comments (they're frozen in the submission) but don't advance
-		// the round or clear content items — that happens when the agent pulls.
-		if !msg.agentConnected {
-			count := m.engine.GetQueuedCount()
-			if count == 1 {
-				m.statusBar.feedbackStatus = "1 review queued"
-			} else {
-				m.statusBar.feedbackStatus = fmt.Sprintf("%d reviews queued", count)
-			}
-
-			// Clear comments — they're now frozen in the submission record
-			if session != nil && len(session.Comments) > 0 {
-				_ = m.engine.ClearComments()
-				m.statusBar.commentCount = 0
-			}
-
-			// Reload diff view to remove inline comment annotations
-			if m.diffView.path != "" {
-				m.diffView.comments = nil
-			}
-
-			// Restore focus mode state
-			if m.focusModeActive {
-				m.sidebarHidden = m.focusModeSavedSidebar
-				m.diffView.wrap = m.focusModeSavedWrap
-				m.focusModeActive = false
-				m.sidebarAutoHidden = m.sidebarHidden && !m.sidebarHasItems()
-				m.autoToggleSidebar()
-				recalcPaneDimensions(&m)
-			}
-			return m, nil
+		// The daemon always queues feedback for pull delivery. Clear comments
+		// (they're frozen in the submission) but don't advance the round or
+		// clear content items — that happens when the agent pulls.
+		count := m.engine.GetQueuedCount()
+		if count == 1 {
+			m.statusBar.feedbackStatus = "1 review queued"
+		} else {
+			m.statusBar.feedbackStatus = fmt.Sprintf("%d reviews queued", count)
 		}
 
-		m.syncArtifactsAfterSubmit(session)
-
+		// Clear comments — they're now frozen in the submission record
 		if session != nil && len(session.Comments) > 0 {
 			_ = m.engine.ClearComments()
 			m.statusBar.commentCount = 0
+		}
+
+		// Reload diff view to remove inline comment annotations
+		if m.diffView.path != "" {
+			m.diffView.comments = nil
 		}
 
 		// Restore focus mode state
@@ -1141,12 +1118,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focusModeActive = false
 			m.sidebarAutoHidden = m.sidebarHidden && !m.sidebarHasItems()
 			m.autoToggleSidebar()
-			recalcPaneDimensions(&m)
-			return m, nil
-		}
-
-		recalcStackedLayout(&m)
-		if m.autoToggleSidebar() {
 			recalcPaneDimensions(&m)
 		}
 		return m, nil
@@ -1866,11 +1837,10 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			if summary != nil && (summary.IssueCt+summary.SuggestionCt > 0) {
 				action = types.ActionRequestChanges
 			}
-			result, err := engine.Submit(action, "")
-			if err != nil {
+			if err := engine.Submit(action, ""); err != nil {
 				return submitErrorMsg{}
 			}
-			return submitSuccessMsg{agentConnected: result.AgentConnected}
+			return submitSuccessMsg{}
 		}
 
 	case "discard":

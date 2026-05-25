@@ -496,9 +496,8 @@ type SubmitMsg struct {
 }
 
 type SubmitResponse struct {
-	Type           string `json:"type"`
-	AgentConnected bool   `json:"agent_connected"`
-	Error          string `json:"error,omitempty"`
+	Type  string `json:"type"`
+	Error string `json:"error,omitempty"`
 }
 
 type FormatReviewMsg struct {
