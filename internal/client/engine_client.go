@@ -214,6 +214,18 @@ func (c *EngineClient) dialAndSubscribe() error {
 	}
 
 	c.connMu.Lock()
+	// Re-check quitCh under connMu. Close() closes quitCh before it reads
+	// c.active, so if we observe quitCh open here and install cc, Close()'s
+	// subsequent c.active read is guaranteed to see (and tear down) cc;
+	// if we observe it closed, we abort and close the just-dialed conn.
+	// Either way no readLoop goroutine survives Close().
+	select {
+	case <-c.quitCh:
+		c.connMu.Unlock()
+		cc.close()
+		return errors.New("client closed")
+	default:
+	}
 	c.active = cc
 	c.connMu.Unlock()
 
@@ -225,6 +237,16 @@ func (c *EngineClient) dialAndSubscribe() error {
 // write error, server hang-up). Returns a nil error when the client is
 // ready to send the next request.
 func (c *EngineClient) ensureConn() error {
+	// Refuse to redial once the client is shutting down. Without this an
+	// in-flight request() that races Close() would dial a fresh socket and
+	// start a readLoop goroutine AFTER Close already waited on the old
+	// bundle — leaking an fd + goroutine and a phantom passive subscriber
+	// on the daemon. requestNoTimeout already guards this way.
+	select {
+	case <-c.quitCh:
+		return errors.New("client closed")
+	default:
+	}
 	c.connMu.Lock()
 	cc := c.active
 	c.connMu.Unlock()
