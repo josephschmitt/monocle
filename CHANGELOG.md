@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.47.0](https://github.com/josephschmitt/monocle/compare/v0.46.1...v0.47.0) (2026-05-25)
+
+
+### Features
+
+* **adapters:** add shared auto-spawn helper for user-facing launchers ([d0b9cb2](https://github.com/josephschmitt/monocle/commit/d0b9cb2e27a8f43a1941f4f39cd4f9f274938727))
+* **client:** EngineClient implementing core.EngineAPI over socket ([84ac996](https://github.com/josephschmitt/monocle/commit/84ac996b6870b81705bccf637c1ea7cb9dce0bea))
+* **protocol:** expand socket messages to cover EngineAPI ([e9222b4](https://github.com/josephschmitt/monocle/commit/e9222b4da6be0b9ea4e74ce9499820828ba7ca3e))
+* **serve:** add headless monocle serve and monocle stop subcommands ([be99274](https://github.com/josephschmitt/monocle/commit/be992745c66bccf34cc8c8fbefccc96df48b4dda))
+* **serve:** idle shutdown with grace window (JJS-156) ([f5f8171](https://github.com/josephschmitt/monocle/commit/f5f81710fa02902a9267b4d2d2c250c7b45c131a))
+* **tui:** add light theme preset ([#95](https://github.com/josephschmitt/monocle/issues/95)) ([2e6ee89](https://github.com/josephschmitt/monocle/commit/2e6ee89dc6824b7356e56db7fdbd14c29eb3bb34))
+
+
+### Bug Fixes
+
+* **adapters:** bump autospawn ReadyTimeout default from 2s to 10s ([da09838](https://github.com/josephschmitt/monocle/commit/da098387124e3d1be04f82c32b322aece70f293e))
+* **adapters:** only quote autospawn .log when stderr was captured this run ([a0372e4](https://github.com/josephschmitt/monocle/commit/a0372e42d11c8d63510cd5580cbb4aee1b71fc34))
+* **adapters:** open autospawn log with O_EXCL and O_NOFOLLOW ([c228bb7](https://github.com/josephschmitt/monocle/commit/c228bb72c5a23e2ac895a1d47197d320a0b317b2))
+* **adapters:** split autospawn for Windows build ([f631721](https://github.com/josephschmitt/monocle/commit/f6317218a4f87c2cda0f962ae1cda3f90e1ad7ed))
+* **adapters:** tee child stderr to a sibling .log file on autospawn ([dec5c2f](https://github.com/josephschmitt/monocle/commit/dec5c2f39d9e68103e7c6f82fe176c0228abcc35))
+* **cli,mcp:** surface server-minted artifact ID in send-artifact output ([48a8755](https://github.com/josephschmitt/monocle/commit/48a8755422ce1ee9791dfbc57e31787785473303))
+* **cli:** echo server-minted artifact id on send-artifact --wait ([2463cf0](https://github.com/josephschmitt/monocle/commit/2463cf0c46eae8950d29e4bec879606850a032cb))
+* **client:** dispatch engine events off the read loop to prevent deadlock ([5b87e30](https://github.com/josephschmitt/monocle/commit/5b87e30b223ef333c34c23627a6e0b64cf2f6111))
+* **client:** implement agent-facing EngineAPI methods over existing protocol ([1d6fb24](https://github.com/josephschmitt/monocle/commit/1d6fb24cea62add2e1ba603463cbcfccf68b0850))
+* **client:** log undecodable messages instead of dropping them silently ([56691a3](https://github.com/josephschmitt/monocle/commit/56691a3f4e826df9d72c831d2cbe1c8c2a52f9ec))
+* **client:** rebuild EngineClient with reconnect, version probe, ordered dispatch ([46331b3](https://github.com/josephschmitt/monocle/commit/46331b383504ba1625cd752af149e66745d678d5))
+* **client:** refresh cached config on every GetConfig ([a902fed](https://github.com/josephschmitt/monocle/commit/a902fed07826b8eae619788eed8b961935dd4daf))
+* **client:** refuse to redial after Close to stop connection leak ([d70e8e6](https://github.com/josephschmitt/monocle/commit/d70e8e6494dea6ef410791143c4918654c185683))
+* **client:** scope conn teardown to clientConn bundle and harden Close ([9533021](https://github.com/josephschmitt/monocle/commit/9533021e87c165c6e374d4d3e1644e384f1d1919))
+* **client:** tear down socket on request timeout to prevent stale-response panic ([1d0f233](https://github.com/josephschmitt/monocle/commit/1d0f23351ebac28fbcc2f2fa7060e6d135549f70))
+* **client:** wire RequestPause/CancelPause through the socket ([a5d00b8](https://github.com/josephschmitt/monocle/commit/a5d00b899124cdc8e6382b7a44d2657bb78c768b))
+* **core:** abort an abandoned wait without consuming queued feedback ([4777a88](https://github.com/josephschmitt/monocle/commit/4777a883a3c6bd669bea0ed5aecb19bcd16ecb99))
+* **core:** hold engine config behind atomic.Pointer to remove SaveConfig race ([df16724](https://github.com/josephschmitt/monocle/commit/df16724a8af055d876b3dd7fe2175be9fbf4ea86))
+* **core:** isolate per-subscriber writes behind a bounded async queue ([76b9281](https://github.com/josephschmitt/monocle/commit/76b92814c03e7204ac7478fbddeac0b0c3ac2e7b))
+* **core:** persist config before in-memory swap and nil-guard SaveConfig ([9f2d25d](https://github.com/josephschmitt/monocle/commit/9f2d25dd5f58ae41d326c2985c33468b6e7a3e21))
+* **core:** send subscribe ack before registering event callbacks ([7550433](https://github.com/josephschmitt/monocle/commit/7550433f16936643462f5fc7c6526ef8b2726fbb))
+* **core:** snapshot idle timeout in idleMonitor to avoid unsynchronized read ([3a139aa](https://github.com/josephschmitt/monocle/commit/3a139aa3ebe540be3615cf9aca8236ce081426e7))
+* **core:** use sync.Once for idleStop close to prevent double-close panic ([22355a2](https://github.com/josephschmitt/monocle/commit/22355a2836ebea4d2bd891619afb93a469270b18))
+* **core:** widen subscriber outbound queue with a bounded send deadline ([11aab9d](https://github.com/josephschmitt/monocle/commit/11aab9dc4ee8945c160bd1efd4b49bdd9433ad5a))
+* **mcp:** version-guard the agent connect handshake ([2176ee6](https://github.com/josephschmitt/monocle/commit/2176ee60a43342af17fae371adeeadb57b8f23d3))
+* **protocol:** mark TUI subscriptions passive to avoid push-delivery loss ([b8faa17](https://github.com/josephschmitt/monocle/commit/b8faa1789714d883567f978cdc0decdfa6141c32))
+* **protocol:** return only newly-added files from AddAdditionalPaths ([06ad642](https://github.com/josephschmitt/monocle/commit/06ad642265ab3e0b8808ffb19661c53e66e6eda9))
+* **protocol:** version subscribe ack and disambiguate response presence ([ea14c61](https://github.com/josephschmitt/monocle/commit/ea14c61e78c08c47b623b12b936766ab90e22ff7))
+* **release:** distribute monocle as a Homebrew cask instead of a formula ([#97](https://github.com/josephschmitt/monocle/issues/97)) ([67efcff](https://github.com/josephschmitt/monocle/commit/67efcffd3d937840343e31258aaa0d24938ae099))
+* **serve:** bind listener as acceptLoop parameter to avoid nil-deref race ([227d865](https://github.com/josephschmitt/monocle/commit/227d865b6391a0ccdeffecf71cebd0afb351ea46))
+* **serve:** cap the autospawn stderr log file ([2812e39](https://github.com/josephschmitt/monocle/commit/2812e395413c3a86843e755282ca9dcb080d0562))
+* **serve:** drop default:"" on --idle-timeout so Kong doesn't reject every command ([3f03763](https://github.com/josephschmitt/monocle/commit/3f03763808cf0f3c694bdd33cccd89fd0f7454e1))
+* **stop:** accept monocle-prefixed images and preserve pid file on uncertain match ([9380ccd](https://github.com/josephschmitt/monocle/commit/9380ccd342474f96c466820f21a8e2bbaaabd496))
+* **stop:** match pid by image basename and add a Windows tasklist fallback ([2204580](https://github.com/josephschmitt/monocle/commit/22045802b01c5783becbe525d3f8795c3e1e2172))
+* **stop:** verify pid belongs to monocle before signalling ([a96a0f1](https://github.com/josephschmitt/monocle/commit/a96a0f148811c6ffce11077f6c6ef915231d3d55))
+* **tui:** surface pause errors instead of lying about the daemon state ([4b6b25e](https://github.com/josephschmitt/monocle/commit/4b6b25ee3497e94c830dab40162b7e6a02c0f24b))
+
 ## [0.46.1](https://github.com/josephschmitt/monocle/compare/v0.46.0...v0.46.1) (2026-04-18)
 
 
