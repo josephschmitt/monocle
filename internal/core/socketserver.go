@@ -533,8 +533,9 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 	// handleSubscription: otherwise a concurrent emit can race the ack
 	// frame onto the wire and the client aborts the handshake.
 	if err := sc.send(&protocol.ConnectResponse{
-		Type:    protocol.TypeConnectResponse,
-		Success: true,
+		Type:            protocol.TypeConnectResponse,
+		Success:         true,
+		ProtocolVersion: protocol.CurrentProtocolVersion,
 	}); err != nil {
 		return
 	}

@@ -127,10 +127,14 @@ type ConnectMsg struct {
 	Events []string `json:"events,omitempty"`
 }
 
-// ConnectResponse acknowledges a connect request.
+// ConnectResponse acknowledges a connect request. ProtocolVersion mirrors
+// SubscribeResponse so the agent's event connection can detect a stale
+// daemon (one predating wire features it relies on) the same way the TUI's
+// subscribe path does.
 type ConnectResponse struct {
-	Type    string `json:"type"`
-	Success bool   `json:"success"`
+	Type            string `json:"type"`
+	Success         bool   `json:"success"`
+	ProtocolVersion int    `json:"protocol_version,omitempty"`
 }
 
 // IdentifyMsg carries the agent's self-reported name (sent after MCP handshake).

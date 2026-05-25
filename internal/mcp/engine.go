@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
@@ -85,11 +86,22 @@ func (e *engineConn) connectAndListen(ctx context.Context, socketPath string) er
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
-	// Read connect response
+	// Read connect response and check the daemon's protocol version. We
+	// warn rather than hard-fail: tool calls go over separate one-shot
+	// connections that still work against an older daemon, and returning an
+	// error here would only spin the reconnect backoff. The warning tells
+	// the operator to restart a stale serve (the TUI refuses it outright).
 	if !scanner.Scan() {
 		return fmt.Errorf("no connect response")
 	}
-	// Verify it's a connect_response (don't need to parse fully)
+	if ack, derr := protocol.Decode(scanner.Bytes()); derr == nil {
+		if cr, ok := ack.(*protocol.ConnectResponse); ok && cr.ProtocolVersion < protocol.CurrentProtocolVersion {
+			fmt.Fprintf(os.Stderr,
+				"monocle: serve protocol version %d is older than this client (%d); "+
+					"channel notifications may be degraded — run `monocle stop` and retry\n",
+				cr.ProtocolVersion, protocol.CurrentProtocolVersion)
+		}
+	}
 
 	// Send identify if we have an agent name
 	if e.agentName != "" {
