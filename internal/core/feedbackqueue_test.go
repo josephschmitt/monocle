@@ -99,6 +99,60 @@ func TestWaitForFeedbackWithPending(t *testing.T) {
 	}
 }
 
+// TestWaitForFeedbackCancellable_PreservesFeedback reproduces the
+// disconnect-mid-wait data-loss bug: a wait that is cancelled (its client
+// socket died) must NOT drain the queue, so feedback submitted afterwards
+// still reaches the next poller instead of being silently consumed and
+// marked delivered to a dead connection.
+func TestWaitForFeedbackCancellable_PreservesFeedback(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	cancel := make(chan struct{})
+	got := make(chan *PollResult, 1)
+	go func() {
+		got <- fq.WaitForFeedbackCancellable(cancel)
+	}()
+
+	// Let the waiter park, then simulate the client disconnecting.
+	time.Sleep(50 * time.Millisecond)
+	close(cancel)
+
+	select {
+	case res := <-got:
+		if res != nil {
+			t.Fatalf("cancelled wait should return nil, got %+v", res)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled wait did not return")
+	}
+
+	// Feedback submitted after the abandoned wait must survive.
+	fq.Submit(&FormattedReview{Formatted: "## Review\nFix bug", CommentCount: 1, Action: "request_changes"}, false)
+	if review := fq.Poll(); review == nil {
+		t.Fatal("feedback was lost — cancelled wait drained the queue")
+	} else if review.Formatted != "## Review\nFix bug" {
+		t.Errorf("unexpected review: %q", review.Formatted)
+	}
+}
+
+// TestWaitForFeedbackCancellable_CancelAfterPending verifies that even when
+// feedback is already queued, a fired cancel returns nil without consuming
+// it — the disconnect wins so the review is kept for the next poller.
+func TestWaitForFeedbackCancellable_CancelAfterPending(t *testing.T) {
+	fq := NewFeedbackQueue()
+	fq.Submit(&FormattedReview{Formatted: "pending", CommentCount: 0, Action: "approve"}, false)
+
+	cancel := make(chan struct{})
+	close(cancel)
+
+	if res := fq.WaitForFeedbackCancellable(cancel); res != nil {
+		t.Fatalf("pre-cancelled wait should return nil, got %+v", res)
+	}
+	if !fq.HasPending() {
+		t.Fatal("pre-cancelled wait consumed already-pending feedback")
+	}
+}
+
 func TestPauseRequested(t *testing.T) {
 	fq := NewFeedbackQueue()
 

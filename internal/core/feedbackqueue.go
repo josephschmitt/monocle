@@ -154,25 +154,51 @@ func (fq *FeedbackQueue) WaitForFeedback() *FormattedReview {
 }
 
 // WaitForFeedbackWithInfo blocks until feedback is available, then returns
-// all pending reviews with delivery metadata.
+// all pending reviews with delivery metadata. Never returns nil.
 func (fq *FeedbackQueue) WaitForFeedbackWithInfo() *PollResult {
+	return fq.WaitForFeedbackCancellable(nil)
+}
+
+// WaitForFeedbackCancellable blocks until feedback is available OR the cancel
+// channel is closed (the waiting client disconnected). On cancel it returns
+// nil WITHOUT consuming the queue, so the feedback survives for whoever polls
+// next — otherwise an orphaned wait handler whose socket already died would
+// drain the queue, mark the submission delivered, and silently lose the
+// review. A nil cancel channel makes this a plain uninterruptible wait.
+func (fq *FeedbackQueue) WaitForFeedbackCancellable(cancel <-chan struct{}) *PollResult {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
 
-	// If there's already pending feedback, return it immediately
-	if len(fq.pending) > 0 {
-		result := &PollResult{
-			Reviews:          fq.pending,
-			ChannelDelivered: fq.channelDelivered,
-		}
-		fq.pending = nil
-		fq.status = "delivered"
-		fq.pauseRequested = false
-		return result
+	if cancel != nil {
+		// sync.Cond can't select on a channel, so a helper wakes the cond
+		// when cancel fires; the wait loop then re-checks cancel and bails.
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			select {
+			case <-cancel:
+				fq.mu.Lock()
+				fq.cond.Broadcast()
+				fq.mu.Unlock()
+			case <-stop:
+			}
+		}()
 	}
 
-	// Block until feedback is submitted
-	for len(fq.pending) == 0 {
+	for {
+		// Check cancel before pending so a disconnect that races an arriving
+		// submit never consumes the feedback — we'd rather preserve it for
+		// the next poll than write it to a dead socket.
+		if cancel != nil {
+			select {
+			case <-cancel:
+				return nil
+			default:
+			}
+		}
+		if len(fq.pending) > 0 {
+			break
+		}
 		fq.cond.Wait()
 	}
 

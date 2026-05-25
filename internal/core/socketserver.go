@@ -373,7 +373,7 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		conn.Close()
 	}()
 
-	response := s.handleMessage(msg)
+	response := s.handleOneShot(conn, msg)
 	if response == nil {
 		return
 	}
@@ -383,6 +383,44 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		return
 	}
 	_, _ = conn.Write(data)
+}
+
+// handleOneShot routes a one-shot request. Blocking waits (PollFeedback /
+// AwaitReview with Wait=true) get a cancel channel fed by a disconnect
+// watcher so an abandoned wait releases the queue instead of consuming
+// feedback into a dead socket. All other messages go straight to
+// handleMessage.
+func (s *SocketServer) handleOneShot(conn net.Conn, msg any) any {
+	switch m := msg.(type) {
+	case *protocol.PollFeedbackMsg:
+		if m.Wait {
+			cancel := make(chan struct{})
+			go watchConnClose(conn, cancel)
+			return s.engine.handlePollFeedback(m, cancel)
+		}
+		return s.engine.handlePollFeedback(m, nil)
+	case *protocol.AwaitReviewMsg:
+		if m.Wait {
+			cancel := make(chan struct{})
+			go watchConnClose(conn, cancel)
+			return s.engine.handleAwaitReview(m, cancel)
+		}
+		return s.engine.handleAwaitReview(m, nil)
+	default:
+		return s.handleMessage(msg)
+	}
+}
+
+// watchConnClose closes cancel when conn is no longer readable. A one-shot
+// wait client sends nothing more after its request, so any read return
+// (EOF on close, or an error) means the client is gone. Concurrent Read and
+// Write on a net.Conn are safe, so this can run alongside the eventual
+// response Write. The goroutine ends when the handler returns and the
+// caller closes the connection.
+func watchConnClose(conn net.Conn, cancel chan struct{}) {
+	buf := make([]byte, 1)
+	_, _ = conn.Read(buf)
+	close(cancel)
 }
 
 // handleSubscription manages a persistent subscription connection.
@@ -572,7 +610,7 @@ func (s *SocketServer) handleMessage(msg any) any {
 	case *protocol.GetReviewStatusMsg:
 		return s.engine.handleGetReviewStatus(m)
 	case *protocol.PollFeedbackMsg:
-		return s.engine.handlePollFeedback(m)
+		return s.engine.handlePollFeedback(m, nil)
 	case *protocol.SubmitContentMsg:
 		return s.engine.handleSubmitContent(m)
 	case *protocol.AddAdditionalFilesMsg:
@@ -580,7 +618,7 @@ func (s *SocketServer) handleMessage(msg any) any {
 	case *protocol.MarkActivityMsg:
 		return s.engine.handleMarkActivity(m)
 	case *protocol.AwaitReviewMsg:
-		return s.engine.handleAwaitReview(m)
+		return s.engine.handleAwaitReview(m, nil)
 	case *protocol.IdentifyMsg:
 		s.handleIdentify(m)
 		return nil

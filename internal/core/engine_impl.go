@@ -1824,7 +1824,10 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 // handlePollFeedback returns pending feedback, optionally blocking until available.
 // In push (channel) mode, round advancement happens in Submit().
 // In queue mode, round advancement happens here when feedback is picked up.
-func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg) *protocol.PollFeedbackResponse {
+//
+// cancel, when non-nil, aborts a Wait if the requesting client disconnects;
+// the queue is left intact so the feedback isn't lost to a dead socket.
+func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan struct{}) *protocol.PollFeedbackResponse {
 	var result *PollResult
 
 	if msg.Wait {
@@ -1832,7 +1835,7 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg) *protocol.Pol
 			Kind:   EventWaitStatusChanged,
 			Status: "waiting",
 		})
-		result = e.feedback.WaitForFeedbackWithInfo()
+		result = e.feedback.WaitForFeedbackCancellable(cancel)
 		e.emit(EventWaitStatusChanged, EventPayload{
 			Kind:   EventWaitStatusChanged,
 			Status: "",
@@ -1888,7 +1891,7 @@ func (e *Engine) handleMarkActivity(_ *protocol.MarkActivityMsg) *protocol.MarkA
 //     hook exits 0 and the turn ends normally.
 //  3. Dirty with no queued feedback: block until the reviewer submits
 //     (if Wait=true), then return their verdict.
-func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg) *protocol.AwaitReviewResponse {
+func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan struct{}) *protocol.AwaitReviewResponse {
 	// Step 1: drain any already-queued feedback.
 	if result := e.feedback.PollWithInfo(); result != nil && len(result.Reviews) > 0 {
 		if !result.ChannelDelivered {
@@ -1925,11 +1928,20 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg) *protocol.Await
 		Kind:   EventWaitStatusChanged,
 		Status: "waiting",
 	})
-	result := e.feedback.WaitForFeedbackWithInfo()
+	result := e.feedback.WaitForFeedbackCancellable(cancel)
 	e.emit(EventWaitStatusChanged, EventPayload{
 		Kind:   EventWaitStatusChanged,
 		Status: "",
 	})
+	// result is nil when the client disconnected mid-wait; the queue is
+	// untouched, so report activity-without-verdict and leave the feedback
+	// for the next poll rather than consuming it into a dead connection.
+	if result == nil || len(result.Reviews) == 0 {
+		return &protocol.AwaitReviewResponse{
+			Type:        protocol.TypeAwaitReviewResponse,
+			HasActivity: true,
+		}
+	}
 	if !result.ChannelDelivered {
 		e.completeQueuedDelivery()
 	}
