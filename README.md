@@ -28,8 +28,20 @@ Monocle gives you a proper review loop without slowing the agent down. It doesn'
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install josephschmitt/tap/monocle
+brew install --cask josephschmitt/tap/monocle
 ```
+
+> **Upgrading from a previous (formula) install?** monocle is now distributed
+> as a Homebrew **cask** rather than a formula. If you previously ran
+> `brew install josephschmitt/tap/monocle`, uninstall the old formula first,
+> then reinstall as a cask:
+>
+> ```bash
+> brew uninstall monocle        # remove the old formula
+> brew install --cask josephschmitt/tap/monocle
+> ```
+>
+> See [Why a cask?](docs/installation.mdx) for the rationale.
 
 <details>
 <summary>Other installation methods</summary>

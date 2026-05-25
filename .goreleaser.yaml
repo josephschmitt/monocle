@@ -51,21 +51,31 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
+homebrew_casks:
   - name: monocle
     skip_upload: auto
     repository:
       owner: josephschmitt
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/josephschmitt/monocle
     description: "Terminal-based code review companion for AI coding agents"
-    license: MIT
-    test: |
-      system "#{bin}/monocle", "--help"
-    install: |
-      bin.install "monocle"
+    binaries:
+      - monocle
+    # Helps `brew audit` pass since releases are served from the GitHub
+    # download domain rather than the homepage domain.
+    url:
+      verified: github.com/josephschmitt/monocle/
+    # The release binaries are not code-signed / notarized, so strip the
+    # com.apple.quarantine attribute on install — without this macOS
+    # Gatekeeper blocks the binary with "developer cannot be verified".
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/monocle"]
+          end
 
 release:
   github:

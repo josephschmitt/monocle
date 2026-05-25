@@ -16,8 +16,39 @@ Before installing monocle, make sure you have:
 The simplest way to install monocle on macOS or Linux:
 
 ```bash
-brew install josephschmitt/tap/monocle
+brew install --cask josephschmitt/tap/monocle
 ```
+
+<Note>
+  monocle is distributed as a Homebrew **cask**, not a formula — note the
+  `--cask` flag.
+</Note>
+
+### Upgrading from a formula install
+
+Earlier releases shipped monocle as a Homebrew **formula**
+(`brew install josephschmitt/tap/monocle`). It's now a **cask**. If you
+installed the old formula, uninstall it before installing the cask —
+otherwise Homebrew reports a conflict between the two:
+
+```bash
+brew uninstall monocle        # remove the old formula
+brew install --cask josephschmitt/tap/monocle
+```
+
+<Accordion title="Why a cask and not a formula?">
+  Homebrew **formulae** are intended to build software from source (or install
+  official precompiled "bottles" from homebrew-core). monocle's old formula did
+  neither — it just downloaded the prebuilt release binary and dropped it in
+  `bin`. Homebrew's `brew audit` rules increasingly discourage that pattern for
+  third-party taps, and [GoReleaser deprecated formula generation for
+  prebuilt binaries in v2.10](https://goreleaser.com/deprecations#brews) in
+  favor of **casks**, which are the modern home for any prebuilt artifact you
+  download rather than compile — including CLI tools. Switching keeps monocle's
+  release tooling on a supported path. (Because the release binaries aren't
+  code-signed/notarized, the cask also strips the macOS quarantine attribute on
+  install so Gatekeeper doesn't block the binary.)
+</Accordion>
 
 ## Pre-built binaries
 
@@ -65,7 +96,7 @@ To remove monocle and its agent registrations:
 
 ```bash
 monocle unregister all
-brew uninstall monocle
+brew uninstall --cask monocle
 ```
 
 If you installed from source, run `make uninstall` from the repo directory.

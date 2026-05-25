@@ -6,7 +6,7 @@ Terminal-based code review companion for AI coding agents. Run Monocle alongside
 
 - [Monocle](https://github.com/josephschmitt/monocle) — install via Homebrew:
   ```
-  brew install josephschmitt/tap/monocle
+  brew install --cask josephschmitt/tap/monocle
   ```
 
 ## Setup

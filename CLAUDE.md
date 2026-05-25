@@ -153,4 +153,4 @@ Automated via release-please + goreleaser:
 1. Push conventional commits to `main`
 2. Release-please creates/updates a release PR
 3. Merge the PR → tag is created
-4. Goreleaser builds linux/darwin/windows (amd64+arm64), publishes to GitHub Releases + Homebrew tap
+4. Goreleaser builds linux/darwin/windows (amd64+arm64), publishes to GitHub Releases + Homebrew tap (as a **cask** — see `homebrew_casks` in `.goreleaser.yaml`)
