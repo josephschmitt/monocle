@@ -2020,8 +2020,12 @@ func (m diffViewModel) isSelectable(idx int) bool {
 	if line.isComment {
 		return true
 	}
-	// Skip removed lines — they have no new-file line number and can't be commented on
-	if line.kind == types.DiffLineRemoved && line.newLineNum == 0 {
+	// Skip pure removed lines — they have no new-file line number and can't be
+	// commented on. In split mode an in-place change is built as a removed line
+	// paired with an added right side: kind == DiffLineRemoved and newLineNum == 0,
+	// but rightLineNum carries the new-file number. Those remain selectable so the
+	// cursor can land on the right-side content (matching lineNumAt).
+	if line.kind == types.DiffLineRemoved && line.newLineNum == 0 && line.rightLineNum == 0 {
 		return false
 	}
 	return true

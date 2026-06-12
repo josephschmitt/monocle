@@ -512,3 +512,44 @@ func TestLineNumAtSplitMode(t *testing.T) {
 		t.Errorf("lineNumAt(2) = %d, want 0", got)
 	}
 }
+
+// TestIsSelectableSplitInPlaceChange verifies that an in-place change in split
+// mode — built as a removed line (kind == DiffLineRemoved, newLineNum == 0)
+// paired with an added right side (rightLineNum > 0) — is selectable so the
+// cursor can land on it and `c` opens the comment editor. A pure removed split
+// line (rightLineNum == 0) must stay non-selectable.
+func TestIsSelectableSplitInPlaceChange(t *testing.T) {
+	m := diffViewModel{
+		lines: []diffViewLine{
+			// In-place split change: removed left, added right.
+			{isSplit: true, kind: types.DiffLineRemoved, newLineNum: 0, rightLineNum: 11, content: "old", rightContent: "new"},
+			// Pure removed split line: no right side.
+			{isSplit: true, kind: types.DiffLineRemoved, newLineNum: 0, rightLineNum: 0, rightEmpty: true, content: "gone"},
+			// Plain added split line.
+			{isSplit: true, kind: types.DiffLineContext, leftEmpty: true, newLineNum: 0, rightLineNum: 12, rightContent: "added"},
+		},
+	}
+
+	// The in-place change is selectable and resolves to its new-file line number.
+	if !m.isSelectable(0) {
+		t.Errorf("isSelectable(0) = false, want true for in-place split change")
+	}
+	if got := m.lineNumAt(0); got != 11 {
+		t.Errorf("lineNumAt(0) = %d, want 11", got)
+	}
+	m.cursor = 0
+	if got := m.currentDiffLine(); got != 11 {
+		t.Errorf("currentDiffLine() = %d, want 11", got)
+	}
+
+	// A pure removed line (no right-side line number) stays non-selectable.
+	if m.isSelectable(1) {
+		t.Errorf("isSelectable(1) = true, want false for pure removed split line")
+	}
+
+	// nextSelectable from the in-place change skips the pure removed line and
+	// lands on the next line that has a right-side number.
+	if got := m.nextSelectable(0, 1); got != 2 {
+		t.Errorf("nextSelectable(0, 1) = %d, want 2 (skipping pure removed line)", got)
+	}
+}
