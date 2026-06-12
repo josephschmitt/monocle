@@ -140,7 +140,7 @@ func (e *Engine) StartSession(opts SessionOptions) (*types.ReviewSession, error)
 		return nil, err
 	}
 
-	if _, err := e.sessions.RefreshChangedFiles(session); err != nil {
+	if _, _, err := e.sessions.RefreshChangedFiles(session); err != nil {
 		return nil, fmt.Errorf("refresh changed files: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 		return nil, err
 	}
 
-	if _, err := e.sessions.RefreshChangedFiles(session); err != nil {
+	if _, _, err := e.sessions.RefreshChangedFiles(session); err != nil {
 		return nil, fmt.Errorf("refresh changed files: %w", err)
 	}
 
@@ -209,7 +209,11 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 		}
 	}
 
-	files, err := e.sessions.RefreshChangedFiles(session)
+	// priorReviewed is captured from the DB before RefreshChangedFiles' replace
+	// deletes rows. It still contains the reviewed flag for files that the replace
+	// prunes (e.g. reverted snapshot-only files), which filesRelativeToSnapshot
+	// re-adds — without it, those re-inserted rows would lose their reviewed state.
+	files, priorReviewed, err := e.sessions.RefreshChangedFiles(session)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +236,7 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 			// When a review base is selected, recompute the file list relative
 			// to the snapshot: add reverted files, remove unchanged files.
 			if e.reviewBase != nil {
-				files = e.filesRelativeToSnapshot(session, files, e.reviewBase)
+				files = e.filesRelativeToSnapshot(session, files, e.reviewBase, priorReviewed)
 			}
 		}
 		e.current.ChangedFiles = files
@@ -1348,7 +1352,7 @@ func (e *Engine) markReviewedOnSubmit(session *types.ReviewSession) {
 // differ from the snapshot. Files in git diff but unchanged from the snapshot
 // are removed. Files reverted to match the git base (not in git diff) but
 // different from the snapshot are added. The snapshot acts as the base ref.
-func (e *Engine) filesRelativeToSnapshot(session *types.ReviewSession, files []types.ChangedFile, snapshot *types.ReviewSnapshot) []types.ChangedFile {
+func (e *Engine) filesRelativeToSnapshot(session *types.ReviewSession, files []types.ChangedFile, snapshot *types.ReviewSnapshot, priorReviewed map[string]bool) []types.ChangedFile {
 	snapshotSHAs := make(map[string]string, len(snapshot.Files))
 	for _, sf := range snapshot.Files {
 		if sf.BlobSHA != "" {
@@ -1391,10 +1395,16 @@ func (e *Engine) filesRelativeToSnapshot(session *types.ReviewSession, files []t
 				continue // content matches snapshot, skip
 			}
 		}
+		// Preserve the reviewed flag captured before the refresh pruned this
+		// reverted file's row. RefreshChangedFiles' transactional replace deletes
+		// every changed_files row and only re-inserts files still in the git diff,
+		// so by now this reverted file's row (and its reviewed bit) is gone. The
+		// UpsertChangedFile below takes the INSERT path, which would otherwise
+		// hard-code reviewed = false and silently un-review the file.
 		merged := types.ChangedFile{
 			Path:     sf.Path,
 			Status:   types.FileModified,
-			Reviewed: false,
+			Reviewed: priorReviewed[sf.Path],
 		}
 		_ = e.database.UpsertChangedFile(session.ID, &merged)
 		result = append(result, merged)

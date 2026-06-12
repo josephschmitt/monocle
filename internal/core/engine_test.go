@@ -2034,7 +2034,7 @@ func TestFilesRelativeToSnapshot_RevertedFilesAppear(t *testing.T) {
 		},
 	}
 
-	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot)
+	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot, nil)
 
 	if len(result) != 2 {
 		t.Fatalf("expected 2 files after merge, got %d", len(result))
@@ -2093,7 +2093,7 @@ func TestFilesRelativeToSnapshot_UnchangedFromSnapshotSkipped(t *testing.T) {
 		},
 	}
 
-	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot)
+	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot, nil)
 
 	if len(result) != 0 {
 		t.Errorf("expected 0 files (unchanged from snapshot), got %d", len(result))
@@ -2144,13 +2144,104 @@ func TestFilesRelativeToSnapshot_GitDiffFileUnchangedFromSnapshotHidden(t *testi
 		},
 	}
 
-	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot)
+	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot, nil)
 
 	if len(result) != 1 {
 		t.Fatalf("expected 1 file (only changed.go), got %d", len(result))
 	}
 	if result[0].Path != "changed.go" {
 		t.Errorf("expected changed.go, got %s", result[0].Path)
+	}
+}
+
+func TestFilesRelativeToSnapshot_RevertedFilePreservesReviewedState(t *testing.T) {
+	// Regression for the Greptile P1 on PR #106: RefreshChangedFiles now performs
+	// a transactional delete-all + batch-insert (ReplaceChangedFiles) to prune
+	// stale rows. A reverted file (in the snapshot but no longer in the git diff)
+	// has its row deleted by that replace, so when filesRelativeToSnapshot re-adds
+	// it via UpsertChangedFile the INSERT path runs. Previously this hard-coded
+	// reviewed = false, silently un-reviewing a file the user had marked reviewed.
+	// The fix threads the pre-delete reviewed map (priorReviewed) through so the
+	// re-added row keeps its reviewed flag.
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	stub := &gitStub{
+		repoRoot: "/tmp/repo",
+		hashObjectDrys: map[string]string{
+			// reverted.go's current content differs from the snapshot, so it is
+			// re-added as a reverted file.
+			"reverted.go": "base_sha",
+		},
+	}
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
+
+	session := &types.ReviewSession{
+		ID: "sess-1", FileStatuses: make(map[string]bool),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateSession(session); err != nil {
+		t.Fatal(err)
+	}
+
+	// reverted.go is not in the git diff (it was reverted back to base).
+	gitFiles := []types.ChangedFile{}
+
+	snapshot := &types.ReviewSnapshot{
+		Files: []types.SnapshotFile{
+			{Path: "reverted.go", BlobSHA: "snapshot_sha", Status: types.FileModified},
+		},
+	}
+
+	// Simulate the state after RefreshChangedFiles' replace has already deleted
+	// the reverted file's row: the DB has no row for reverted.go, but the
+	// pre-delete reviewed map (captured before the delete) records it as reviewed.
+	priorReviewed := map[string]bool{"reverted.go": true}
+
+	result := e.filesRelativeToSnapshot(session, gitFiles, snapshot, priorReviewed)
+
+	// In-memory result must keep the reviewed flag.
+	var got *types.ChangedFile
+	for i := range result {
+		if result[i].Path == "reverted.go" {
+			got = &result[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected reverted.go to be re-added, got %+v", result)
+	}
+	if !got.Reviewed {
+		t.Errorf("expected reverted.go to remain reviewed in result, got reviewed=false")
+	}
+
+	// DB row must also keep the reviewed flag.
+	dbFiles, err := database.GetChangedFiles(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dbReviewed, dbFound bool
+	for _, f := range dbFiles {
+		if f.Path == "reverted.go" {
+			dbFound = true
+			dbReviewed = f.Reviewed
+		}
+	}
+	if !dbFound {
+		t.Fatalf("expected reverted.go row in DB, got %+v", dbFiles)
+	}
+	if !dbReviewed {
+		t.Errorf("expected reverted.go to remain reviewed in DB, got reviewed=false")
 	}
 }
 

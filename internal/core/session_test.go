@@ -141,7 +141,7 @@ func TestRefreshChangedFiles(t *testing.T) {
 	}
 
 	// First refresh
-	files, err := sm.RefreshChangedFiles(session)
+	files, _, err := sm.RefreshChangedFiles(session)
 	if err != nil {
 		t.Fatalf("RefreshChangedFiles: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestRefreshChangedFiles(t *testing.T) {
 	sm.db.MarkFileReviewed(session.ID, files[0].Path, true)
 	session.ChangedFiles[0].Reviewed = true
 
-	files2, err := sm.RefreshChangedFiles(session)
+	files2, _, err := sm.RefreshChangedFiles(session)
 	if err != nil {
 		t.Fatalf("RefreshChangedFiles (second): %v", err)
 	}
@@ -189,7 +189,7 @@ func TestRefreshChangedFiles_PrunesStaleRows(t *testing.T) {
 		{Path: "b.go", Status: types.FileModified},
 		{Path: "c.go", Status: types.FileAdded},
 	}
-	if _, err := sm.RefreshChangedFiles(session); err != nil {
+	if _, _, err := sm.RefreshChangedFiles(session); err != nil {
 		t.Fatalf("RefreshChangedFiles (first): %v", err)
 	}
 	if dbFiles, _ := sm.db.GetChangedFiles(session.ID); len(dbFiles) != 3 {
@@ -205,7 +205,7 @@ func TestRefreshChangedFiles_PrunesStaleRows(t *testing.T) {
 		{Path: "a.go", Status: types.FileModified},
 		{Path: "b.go", Status: types.FileModified},
 	}
-	files, err := sm.RefreshChangedFiles(session)
+	files, _, err := sm.RefreshChangedFiles(session)
 	if err != nil {
 		t.Fatalf("RefreshChangedFiles (second): %v", err)
 	}
@@ -246,7 +246,7 @@ func TestRefreshChangedFiles_GitignorePrune(t *testing.T) {
 	}
 
 	// setupTestRepo leaves hello.go (modified), world.go (added), untracked.go.
-	files, err := sm.RefreshChangedFiles(session)
+	files, _, err := sm.RefreshChangedFiles(session)
 	if err != nil {
 		t.Fatalf("RefreshChangedFiles: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestRefreshChangedFiles_GitignorePrune(t *testing.T) {
 		t.Fatalf("write .gitignore: %v", err)
 	}
 
-	files, err = sm.RefreshChangedFiles(session)
+	files, _, err = sm.RefreshChangedFiles(session)
 	if err != nil {
 		t.Fatalf("RefreshChangedFiles (after gitignore): %v", err)
 	}
