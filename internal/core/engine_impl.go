@@ -51,6 +51,13 @@ type Engine struct {
 	// use this snapshot as the base. Nil means normal git-based diffing.
 	reviewBase *types.ReviewSnapshot
 
+	// autoUnmarked memoizes which files have already been auto-unmarked against
+	// a given snapshot SHA (path -> snapshot blob SHA last unmarked against).
+	// Without this, a changed file would be force-unmarked on every periodic
+	// refresh, clobbering an explicit manual `r` re-mark. Guarded by e.mu.
+	// Reset when snapshots are deleted or a session is (re)loaded.
+	autoUnmarked map[string]string
+
 	// event subscribers: EventKind -> subscriber ID -> callback
 	subscribers map[EventKind]map[int]EventCallback
 	nextSubID   int
@@ -147,6 +154,7 @@ func (e *Engine) StartSession(opts SessionOptions) (*types.ReviewSession, error)
 	e.mu.Lock()
 	e.current = session
 	e.hasUnreviewedActivity = false
+	e.autoUnmarked = nil
 	e.mu.Unlock()
 
 	return session, nil
@@ -165,6 +173,7 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 	e.mu.Lock()
 	e.current = session
 	e.hasUnreviewedActivity = false
+	e.autoUnmarked = nil
 	// reviewBase stays nil — Working Tree is the default view.
 	// Snapshots in DB are used for auto-unmark during refresh.
 	e.mu.Unlock()
@@ -1299,6 +1308,7 @@ func (e *Engine) deleteSnapshots() {
 		_ = e.database.DeleteSnapshots(e.current.ID)
 	}
 	e.reviewBase = nil
+	e.autoUnmarked = nil
 }
 
 // markReviewedOnSubmit marks files as reviewed based on the config setting.
@@ -1442,12 +1452,9 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 		snapshotSHA, inSnapshot := snapshotBySHA[f.Path]
 
 		if !inSnapshot {
-			// New file since snapshot — should be unreviewed
-			if f.Reviewed {
-				f.Reviewed = false
-				session.FileStatuses[f.Path] = false
-				_ = e.database.MarkFileReviewed(session.ID, f.Path, false)
-			}
+			// New file since snapshot. It already defaults to reviewed=0 on
+			// insert, so there's nothing to auto-unmark here. Force-unmarking
+			// would clobber an explicit manual `r` re-mark — the bug (#99).
 			continue
 		}
 
@@ -1467,12 +1474,22 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 		}
 
 		if currentSHA != snapshotSHA {
-			// Content changed since snapshot — unmark reviewed
+			// Content changed since snapshot — unmark reviewed, but only the
+			// first time this file is seen changed against this snapshot. On
+			// later refreshes we leave it alone so a manual `r` re-mark sticks
+			// instead of reverting on the next 2s tick (#99).
+			if e.autoUnmarked == nil {
+				e.autoUnmarked = make(map[string]string)
+			}
+			if e.autoUnmarked[f.Path] == snapshotSHA {
+				continue // already auto-unmarked against this snapshot
+			}
 			if f.Reviewed {
 				f.Reviewed = false
 				session.FileStatuses[f.Path] = false
 				_ = e.database.MarkFileReviewed(session.ID, f.Path, false)
 			}
+			e.autoUnmarked[f.Path] = snapshotSHA
 		}
 	}
 }

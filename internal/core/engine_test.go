@@ -1531,9 +1531,12 @@ func TestAutoUnmarkChangedFiles_NewFileSinceSnapshot(t *testing.T) {
 
 	e.autoUnmarkChangedFiles(session, files, snapshot)
 
-	// new.go is not in snapshot → should be unmarked
-	if files[1].Reviewed {
-		t.Error("expected new.go to be unmarked (not in snapshot)")
+	// new.go is not in snapshot. Auto-unmark must NOT force it back to
+	// unreviewed: a brand-new file already defaults to reviewed=0 on insert,
+	// so the only effect of force-unmarking is to clobber an explicit manual
+	// `r` re-mark (#99). The reviewed flag passed in must be preserved.
+	if !files[1].Reviewed {
+		t.Error("expected new.go to keep its reviewed flag (auto-unmark must not clobber a manual mark)")
 	}
 }
 
@@ -1621,6 +1624,174 @@ func TestAutoUnmarkChangedFiles_UnchangedPreservesUserUnmark(t *testing.T) {
 	}
 	if session.FileStatuses["main.go"] {
 		t.Error("expected session.FileStatuses to remain false for unchanged file")
+	}
+}
+
+// TestAutoUnmarkChangedFiles_ManualRemarkPersists is the regression test for
+// issue #99: after a file is auto-unmarked, the reviewer presses `r` to mark it
+// reviewed again. The next periodic refresh (another auto-unmark pass) must not
+// revert that manual mark. Covers both the new-file-since-snapshot branch and
+// the SHA-mismatch branch.
+func TestAutoUnmarkChangedFiles_ManualRemarkPersists(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	stub := &gitStub{
+		repoRoot: "/tmp/repo",
+		hashObjectDrys: map[string]string{
+			"changed.go": "newsha_changed", // differs from snapshot → SHA mismatch
+		},
+	}
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
+
+	session := &types.ReviewSession{
+		ID:           "sess-1",
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now, UpdatedAt: now,
+	}
+	if err := database.CreateSession(session); err != nil {
+		t.Fatal(err)
+	}
+	e.current = session
+
+	// new.go is new since the snapshot; changed.go is in the snapshot but its
+	// content differs. Both start out marked reviewed (the manual `r` state).
+	newFile := types.ChangedFile{Path: "new.go", Status: types.FileAdded, Reviewed: true}
+	changedFile := types.ChangedFile{Path: "changed.go", Status: types.FileModified, Reviewed: true}
+	if err := database.UpsertChangedFile("sess-1", &newFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.UpsertChangedFile("sess-1", &changedFile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reviewer explicitly marks both reviewed via the engine (the `r` toggle).
+	if err := e.MarkReviewed("new.go"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.MarkReviewed("changed.go"); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := &types.ReviewSnapshot{
+		Files: []types.SnapshotFile{
+			{Path: "changed.go", BlobSHA: "oldsha_changed"},
+		},
+	}
+
+	files := []types.ChangedFile{
+		{Path: "new.go", Status: types.FileAdded, Reviewed: true},
+		{Path: "changed.go", Status: types.FileModified, Reviewed: true},
+	}
+
+	// Two consecutive refresh passes. After a manual mark, neither pass may
+	// revert the reviewed state.
+	e.autoUnmarkChangedFiles(session, files, snapshot)
+	// Re-mark changed.go: the first pass legitimately auto-unmarks it (its
+	// content differs from the snapshot and it had not been seen yet). The
+	// reviewer presses `r` again; that manual mark must now stick.
+	files[1].Reviewed = true
+	if err := e.MarkReviewed("changed.go"); err != nil {
+		t.Fatal(err)
+	}
+	e.autoUnmarkChangedFiles(session, files, snapshot)
+
+	if !files[0].Reviewed {
+		t.Error("new.go: manual reviewed mark must persist across refreshes (not in snapshot)")
+	}
+	if !files[1].Reviewed {
+		t.Error("changed.go: manual reviewed mark must persist across refreshes after first auto-unmark")
+	}
+
+	// DB must agree — the source of truth row stays reviewed=1.
+	dbFiles, err := database.GetChangedFiles("sess-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := make(map[string]types.ChangedFile, len(dbFiles))
+	for _, f := range dbFiles {
+		byPath[f.Path] = f
+	}
+	if !byPath["new.go"].Reviewed {
+		t.Error("new.go DB row must stay reviewed=1")
+	}
+	if !byPath["changed.go"].Reviewed {
+		t.Error("changed.go DB row must stay reviewed=1")
+	}
+}
+
+// TestAutoUnmarkChangedFiles_SHAMismatchIdempotent verifies that a SHA-mismatched
+// file with no manual re-mark in between is unmarked on the first pass and is a
+// no-op on the second (the once-per-snapshot guard).
+func TestAutoUnmarkChangedFiles_SHAMismatchIdempotent(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	stub := &gitStub{
+		repoRoot: "/tmp/repo",
+		hashObjectDrys: map[string]string{
+			"changed.go": "newsha_changed",
+		},
+	}
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		git:         stub,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.cfg.Store(&types.Config{ReviewTracking: true})
+
+	session := &types.ReviewSession{
+		ID:           "sess-1",
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now, UpdatedAt: now,
+	}
+	if err := database.CreateSession(session); err != nil {
+		t.Fatal(err)
+	}
+	f := types.ChangedFile{Path: "changed.go", Status: types.FileModified, Reviewed: true}
+	if err := database.UpsertChangedFile("sess-1", &f); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := &types.ReviewSnapshot{
+		Files: []types.SnapshotFile{
+			{Path: "changed.go", BlobSHA: "oldsha_changed"},
+		},
+	}
+
+	files := []types.ChangedFile{
+		{Path: "changed.go", Status: types.FileModified, Reviewed: true},
+	}
+
+	// First pass: must unmark (content differs from snapshot).
+	e.autoUnmarkChangedFiles(session, files, snapshot)
+	if files[0].Reviewed {
+		t.Error("first pass must auto-unmark a SHA-mismatched file")
+	}
+
+	// Simulate the file getting re-marked by the DB/merge layer (not a manual
+	// `r`): if the guard works, the second pass is a no-op and leaves it as-is.
+	files[0].Reviewed = true
+	e.autoUnmarkChangedFiles(session, files, snapshot)
+	if !files[0].Reviewed {
+		t.Error("second pass must be a no-op (already auto-unmarked against this snapshot)")
 	}
 }
 
