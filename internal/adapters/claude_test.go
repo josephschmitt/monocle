@@ -575,8 +575,8 @@ func TestConfigureClaudeHooks_NewFile(t *testing.T) {
 	if innerHook["command"] != "/usr/bin/monocle hooks exit-plan --agent claude" {
 		t.Errorf("unexpected command: %v", innerHook["command"])
 	}
-	if innerHook["timeout"].(float64) != 345600 {
-		t.Errorf("timeout should be 345600, got %v", innerHook["timeout"])
+	if innerHook["timeout"].(float64) != float64(blockingHookTimeoutSecs) {
+		t.Errorf("timeout should be %d, got %v", blockingHookTimeoutSecs, innerHook["timeout"])
 	}
 
 	preTool := hooks["PreToolUse"].([]any)
@@ -801,8 +801,8 @@ func TestClaudeRegister_InstallsPlanHookByDefault(t *testing.T) {
 		t.Errorf("Stop hook should have no matcher, got %v", m)
 	}
 	stopInner := stopEntry["hooks"].([]any)[0].(map[string]any)
-	if stopInner["timeout"].(float64) != 345600 {
-		t.Errorf("Stop timeout should be 345600, got %v", stopInner["timeout"])
+	if stopInner["timeout"].(float64) != float64(blockingHookTimeoutSecs) {
+		t.Errorf("Stop timeout should be %d, got %v", blockingHookTimeoutSecs, stopInner["timeout"])
 	}
 }
 

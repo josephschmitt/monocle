@@ -42,9 +42,17 @@ type GetReviewStatusResponse struct {
 }
 
 // PollFeedbackMsg requests pending feedback, optionally blocking until available.
+//
+// MaxWaitMs bounds a blocking wait (Wait=true): after that many milliseconds
+// with no reviewer submission the engine stops blocking and returns the
+// no-feedback result, so a hook never hangs indefinitely when the engine
+// outlives an active reviewer. Zero means unbounded (the historical
+// behaviour). The bound is ignored while a pause has been explicitly
+// requested — a reviewer who pressed P may take as long as they need.
 type PollFeedbackMsg struct {
-	Type string `json:"type"`
-	Wait bool   `json:"wait"`
+	Type      string `json:"type"`
+	Wait      bool   `json:"wait"`
+	MaxWaitMs int    `json:"max_wait_ms,omitempty"`
 }
 
 // PollFeedbackResponse returns feedback if available.
@@ -190,6 +198,13 @@ type MarkActivityResponse struct {
 type AwaitReviewMsg struct {
 	Type string `json:"type"`
 	Wait bool   `json:"wait"` // true = block on reviewer; false = snapshot query
+	// MaxWaitMs bounds a blocking wait (Wait=true): after that many
+	// milliseconds with no reviewer submission the engine stops blocking and
+	// returns HasActivity=true without a verdict, so the Stop hook ends the
+	// turn normally instead of hanging when the engine outlives an active
+	// reviewer. Zero means unbounded (the historical behaviour). The bound is
+	// ignored while a pause has been explicitly requested.
+	MaxWaitMs int `json:"max_wait_ms,omitempty"`
 }
 
 // AwaitReviewResponse reports the outcome of an AwaitReview call.

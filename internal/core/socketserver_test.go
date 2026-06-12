@@ -101,6 +101,53 @@ func TestSocketServer_OneShot(t *testing.T) {
 	}
 }
 
+// TestSocketServer_AwaitReviewBoundedWait verifies the end-to-end fail-fast
+// path over the real socket: with a dirty session and no reviewer submitting,
+// a blocking AwaitReview that carries a max-wait bound returns promptly with
+// HasActivity=true and no verdict, so the Stop hook ends the turn normally
+// instead of blocking for the installed hook timeout.
+func TestSocketServer_AwaitReviewBoundedWait(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+	engine.handleMarkActivity(&protocol.MarkActivityMsg{Type: protocol.TypeMarkActivity})
+
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	msg := protocol.AwaitReviewMsg{Type: protocol.TypeAwaitReview, Wait: true, MaxWaitMs: 100}
+	data, _ := protocol.Encode(&msg)
+
+	start := time.Now()
+	conn.Write(data)
+
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	if !scanner.Scan() {
+		t.Fatal("no response")
+	}
+	elapsed := time.Since(start)
+	if elapsed > 2*time.Second {
+		t.Fatalf("bounded await-review did not return promptly: %v", elapsed)
+	}
+
+	decoded, err := protocol.Decode(scanner.Bytes())
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	resp, ok := decoded.(*protocol.AwaitReviewResponse)
+	if !ok {
+		t.Fatalf("expected *AwaitReviewResponse, got %T", decoded)
+	}
+	if !resp.HasActivity {
+		t.Error("expected HasActivity=true (session was dirty)")
+	}
+	if resp.Action != "" {
+		t.Errorf("expected no verdict on bounded timeout, got %q", resp.Action)
+	}
+}
+
 func TestSocketServer_Subscription(t *testing.T) {
 	engine, socketPath := setupTestEngine(t)
 

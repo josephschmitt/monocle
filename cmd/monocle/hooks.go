@@ -14,6 +14,15 @@ import (
 	"github.com/josephschmitt/monocle/internal/protocol"
 )
 
+// blockingHookMaxWait bounds how long the Stop and ExitPlanMode hooks block
+// on the reviewer when no pause has been requested. The engine can outlive an
+// active reviewer (autospawn keeps the socket alive for a grace period + idle
+// timeout), so without a bound the hook would block for the installed hook
+// timeout (historically 96h) and the agent would appear hung between turns.
+// When the reviewer has explicitly requested a pause, the engine ignores this
+// bound and blocks until they submit, preserving the pause flow.
+const blockingHookMaxWait = 10 * time.Second
+
 // HooksCmd groups subcommands invoked by an agent harness in response to
 // lifecycle events (plan mode entry/exit, etc). Each subcommand reads the
 // agent's hook payload on stdin and emits the agent's expected decision
@@ -194,7 +203,11 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 	defer wait.Close()
 
 	resp, err := wait.Request(
-		&protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: true},
+		&protocol.PollFeedbackMsg{
+			Type:      protocol.TypePollFeedback,
+			Wait:      true,
+			MaxWaitMs: int(blockingHookMaxWait.Milliseconds()),
+		},
 		0,
 	)
 	if err != nil {
@@ -387,7 +400,11 @@ func (cmd *OnStopHookCmd) Run() error {
 	defer c.Close()
 
 	resp, err := c.Request(
-		&protocol.AwaitReviewMsg{Type: protocol.TypeAwaitReview, Wait: true},
+		&protocol.AwaitReviewMsg{
+			Type:      protocol.TypeAwaitReview,
+			Wait:      true,
+			MaxWaitMs: int(blockingHookMaxWait.Milliseconds()),
+		},
 		0,
 	)
 	if err != nil {

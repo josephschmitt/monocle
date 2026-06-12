@@ -87,6 +87,15 @@ type claudeHookEntry struct {
 	timeoutSecs int
 }
 
+// blockingHookTimeoutSecs is the settings.json `timeout` for the two blocking
+// hooks (exit-plan, on-stop). It is a backstop: the engine bounds these waits
+// itself (see PollFeedbackMsg.MaxWaitMs / AwaitReviewMsg.MaxWaitMs) so they
+// fail fast when no reviewer is engaged, and only block longer when a pause
+// was explicitly requested. This 1h value is large enough to cover an
+// attentive reviewing session yet bounded so a stale/old engine binary that
+// ignores the max-wait field can never wedge the agent for days.
+const blockingHookTimeoutSecs = 3600
+
 // claudeHooks is the full table of settings.json hooks monocle installs.
 var claudeHooks = []claudeHookEntry{
 	{
@@ -94,7 +103,7 @@ var claudeHooks = []claudeHookEntry{
 		event:       "PermissionRequest",
 		matcher:     "ExitPlanMode",
 		subcommand:  "hooks exit-plan",
-		timeoutSecs: 345600,
+		timeoutSecs: blockingHookTimeoutSecs,
 	},
 	{
 		group:       groupPlanHook,
@@ -115,7 +124,7 @@ var claudeHooks = []claudeHookEntry{
 		event:       "Stop",
 		matcher:     "",
 		subcommand:  "hooks on-stop",
-		timeoutSecs: 345600,
+		timeoutSecs: blockingHookTimeoutSecs,
 	},
 }
 

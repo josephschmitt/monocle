@@ -62,11 +62,13 @@ When registering Claude Code, monocle adds up to four hook entries to `.claude/s
 | Hook event | Matcher | Command | Timeout | Purpose |
 |---|---|---|---|---|
 | `PreToolUse` | `ExitPlanMode` | `monocle hooks enter-plan --agent claude` | 5s | Inject review context before Claude drafts its plan. |
-| `PermissionRequest` | `ExitPlanMode` | `monocle hooks exit-plan --agent claude` | 345600s | Route the plan through the Monocle reviewer; convert approve/request-changes to allow/deny. |
+| `PermissionRequest` | `ExitPlanMode` | `monocle hooks exit-plan --agent claude` | 3600s | Route the plan through the Monocle reviewer; convert approve/request-changes to allow/deny. |
 | `PostToolUse` | `Edit\|Write\|NotebookEdit\|MultiEdit` | `monocle hooks mark-activity --agent claude` | 5s | Mark the session as having unreviewed changes. |
-| `Stop` | — | `monocle hooks on-stop --agent claude` | 345600s | Block turn-end on reviewer approval when the turn included file edits. |
+| `Stop` | — | `monocle hooks on-stop --agent claude` | 3600s | Block turn-end on reviewer approval when the turn included file edits. |
 
 The first two form the plan-review flow; opt out with `--no-plan-hook`. The last two form the per-turn review gate; opt out with `--no-review-gate`. Each subset can be toggled independently in the register wizard. If Monocle isn't running, every hook exits silently so Claude's default behavior kicks in — the hooks never hard-block the agent.
+
+The `exit-plan` and `on-stop` hooks block on the reviewer, but the engine bounds that wait so it fails fast (within ~10s) when no reviewer is actively engaged — only blocking longer when you've explicitly requested a pause. The `3600s` settings.json timeout is just a backstop. This prevents the agent from appearing hung between turns when Monocle's engine is still running but you've stepped away.
 
 ### What the hooks do
 

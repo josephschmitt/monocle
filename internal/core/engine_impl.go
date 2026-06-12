@@ -1802,6 +1802,41 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 	}
 }
 
+// boundedWaitCancel returns a cancel channel for WaitForFeedbackCancellable
+// that fires when the original cancel fires OR after maxWaitMs milliseconds.
+//
+// The bound exists so a hook never blocks indefinitely when the engine
+// outlives an active reviewer (autospawn keeps the socket alive for a grace
+// period + idle timeout, during which no human is attached). When the timer
+// fires, WaitForFeedbackCancellable returns nil without consuming the queue —
+// the same shape as a client disconnect — which callers already treat as
+// "no feedback, proceed".
+//
+// maxWaitMs <= 0 means unbounded: the original cancel is returned unchanged.
+// The bound is also skipped while a pause was explicitly requested, so a
+// reviewer who pressed P keeps the historical block-until-submit behaviour.
+// A non-nil stop function must be called (e.g. via defer) to release the
+// timer goroutine.
+func (e *Engine) boundedWaitCancel(cancel <-chan struct{}, maxWaitMs int) (<-chan struct{}, func()) {
+	if maxWaitMs <= 0 || e.feedback.IsPauseRequested() {
+		return cancel, func() {}
+	}
+
+	bounded := make(chan struct{})
+	stop := make(chan struct{})
+	go func() {
+		timer := time.NewTimer(time.Duration(maxWaitMs) * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-cancel:
+		case <-stop:
+		}
+		close(bounded)
+	}()
+	return bounded, func() { close(stop) }
+}
+
 // handlePollFeedback returns pending feedback, optionally blocking until available.
 // In push (channel) mode, round advancement happens in Submit().
 // In queue mode, round advancement happens here when feedback is picked up.
@@ -1816,7 +1851,9 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 			Kind:   EventWaitStatusChanged,
 			Status: "waiting",
 		})
-		result = e.feedback.WaitForFeedbackCancellable(cancel)
+		waitCancel, stop := e.boundedWaitCancel(cancel, msg.MaxWaitMs)
+		defer stop()
+		result = e.feedback.WaitForFeedbackCancellable(waitCancel)
 		e.emit(EventWaitStatusChanged, EventPayload{
 			Kind:   EventWaitStatusChanged,
 			Status: "",
@@ -1909,12 +1946,15 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 		Kind:   EventWaitStatusChanged,
 		Status: "waiting",
 	})
-	result := e.feedback.WaitForFeedbackCancellable(cancel)
+	waitCancel, stop := e.boundedWaitCancel(cancel, msg.MaxWaitMs)
+	result := e.feedback.WaitForFeedbackCancellable(waitCancel)
+	stop()
 	e.emit(EventWaitStatusChanged, EventPayload{
 		Kind:   EventWaitStatusChanged,
 		Status: "",
 	})
-	// result is nil when the client disconnected mid-wait; the queue is
+	// result is nil when the client disconnected mid-wait OR the max-wait
+	// bound elapsed; the queue is
 	// untouched, so report activity-without-verdict and leave the feedback
 	// for the next poll rather than consuming it into a dead connection.
 	if result == nil || len(result.Reviews) == 0 {
