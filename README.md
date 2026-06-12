@@ -314,6 +314,8 @@ Monocle loads settings from JSON config files:
 1. **Global:** `~/.config/monocle/config.json` (or `$XDG_CONFIG_HOME/monocle/config.json`)
 2. **Project:** `.monocle/config.json` in the working directory (overrides global)
 
+> **Note:** Config is read once when the background engine (`monocle serve`) starts, not each time the TUI launches. To apply config changes, run `monocle stop` and then start `monocle` again to restart the engine and reload the config.
+
 ```json
 {
   "layout": "auto",

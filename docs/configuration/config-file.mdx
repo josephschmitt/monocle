@@ -5,6 +5,14 @@ description: "Customize monocle's layout, diff style, and behavior with a JSON c
 
 Monocle loads settings from JSON config files at startup. You can maintain a global config for personal preferences and a project config for repository-specific settings.
 
+<Note>
+  Config is read once when the background engine (`monocle serve`) starts, not
+  each time the TUI launches. Because the engine is long-lived and shared across
+  TUI sessions, editing a config file and relaunching `monocle` alone will not
+  pick up the change. To apply config changes, run `monocle stop` and then start
+  `monocle` again — this restarts the engine and reloads the config.
+</Note>
+
 ## File locations
 
 Monocle loads config files in this order, with the project config taking precedence over the global one:
