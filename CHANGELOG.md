@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.48.1](https://github.com/josephschmitt/monocle/compare/v0.48.0...v0.48.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **core:** keep manual reviewed mark from reverting on refresh ([#99](https://github.com/josephschmitt/monocle/issues/99)) ([#107](https://github.com/josephschmitt/monocle/issues/107)) ([8522cc3](https://github.com/josephschmitt/monocle/commit/8522cc33a3a5308bef89f2a6932a72554b9a9a2b))
+* **core:** prune stale changed_files rows on refresh ([#100](https://github.com/josephschmitt/monocle/issues/100)) ([#106](https://github.com/josephschmitt/monocle/issues/106)) ([673f7b6](https://github.com/josephschmitt/monocle/commit/673f7b61fd557220d16c7e98f1d2e36a2927ef50))
+* **hooks:** fail-fast stop/exit-plan hooks when no reviewer is engaged ([#103](https://github.com/josephschmitt/monocle/issues/103)) ([#108](https://github.com/josephschmitt/monocle/issues/108)) ([e0fa342](https://github.com/josephschmitt/monocle/commit/e0fa342a49680714c8f7fd3f868b8306d9163df2))
+* **tui:** open comment editor on split diff lines ([#92](https://github.com/josephschmitt/monocle/issues/92)) ([#105](https://github.com/josephschmitt/monocle/issues/105)) ([47da33b](https://github.com/josephschmitt/monocle/commit/47da33b317c0a857519cf29656cf5dacb693c2db))
+
 ## [0.48.0](https://github.com/josephschmitt/monocle/compare/v0.47.0...v0.48.0) (2026-06-12)
 
 
