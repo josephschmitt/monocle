@@ -307,6 +307,73 @@ func TestHandleAwaitReview_PauseIgnoresBound(t *testing.T) {
 	}
 }
 
+// TestHandleAwaitReview_LatePauseHonored covers the TOCTOU race that
+// TestHandleAwaitReview_PauseIgnoresBound does not: no pause is set when the
+// bounded wait starts (so the initial snapshot is false and the timer goroutine
+// is armed), but a reviewer presses P AFTER the call begins and BEFORE the
+// bound elapses. The bound must NOT fire-and-allow; instead the call must keep
+// blocking until the reviewer submits, then return the real verdict. Without
+// the re-check at timer fire time, the call would return a no-verdict "allow"
+// once the 50ms bound elapsed, silently discarding the late pause.
+func TestHandleAwaitReview_LatePauseHonored(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		sessions:    NewSessionManager(database, &gitStub{repoRoot: "/tmp/repo", currentRef: "head123"}),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{ID: "sess-1", FileStatuses: make(map[string]bool)}
+	e.hasUnreviewedActivity = true
+	// NOTE: pause is intentionally NOT set yet — the initial snapshot inside
+	// boundedWaitCancel must observe false so the timer goroutine is armed.
+
+	done := make(chan *protocol.AwaitReviewResponse, 1)
+	go func() {
+		done <- e.handleAwaitReview(&protocol.AwaitReviewMsg{
+			Type:      protocol.TypeAwaitReview,
+			Wait:      true,
+			MaxWaitMs: 50, // would fire-and-allow quickly absent the re-check
+		}, nil)
+	}()
+
+	// Request the pause AFTER the wait has begun but BEFORE the 50ms bound
+	// elapses, reproducing the race window.
+	time.Sleep(10 * time.Millisecond)
+	e.feedback.SetPauseRequested(true)
+
+	// Wait well past the bound to prove the call is still blocking because the
+	// late pause was honored rather than the timer firing-and-allowing.
+	select {
+	case resp := <-done:
+		t.Fatalf("call returned despite late pause request — bound should be ignored (action=%q)", resp.Action)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Now submit; the blocked call must release with the verdict.
+	e.feedback.Submit(&FormattedReview{
+		Formatted: "please fix",
+		Action:    "request_changes",
+	}, false)
+
+	select {
+	case resp := <-done:
+		if !resp.HasActivity {
+			t.Error("expected HasActivity=true after submit")
+		}
+		if resp.Action != "request_changes" {
+			t.Errorf("expected request_changes verdict, got %q", resp.Action)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocked call did not release after submit")
+	}
+}
+
 func TestAddComment(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {

@@ -1829,6 +1829,20 @@ func (e *Engine) boundedWaitCancel(cancel <-chan struct{}, maxWaitMs int) (<-cha
 		defer timer.Stop()
 		select {
 		case <-timer.C:
+			// Re-check the pause flag at fire time to close a TOCTOU race: a
+			// reviewer may have pressed P after the initial snapshot above but
+			// before the bound elapsed. Honoring the late pause means NOT
+			// closing `bounded` — instead we keep waiting only on the original
+			// cancel/stop so WaitForFeedbackCancellable blocks until the
+			// reviewer submits (or genuinely disconnects), preserving the
+			// pause flow's block-until-submit guarantee.
+			if e.feedback.IsPauseRequested() {
+				select {
+				case <-cancel:
+				case <-stop:
+				}
+				return
+			}
 		case <-cancel:
 		case <-stop:
 		}
@@ -1947,8 +1961,8 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 		Status: "waiting",
 	})
 	waitCancel, stop := e.boundedWaitCancel(cancel, msg.MaxWaitMs)
+	defer stop()
 	result := e.feedback.WaitForFeedbackCancellable(waitCancel)
-	stop()
 	e.emit(EventWaitStatusChanged, EventPayload{
 		Kind:   EventWaitStatusChanged,
 		Status: "",
