@@ -2091,8 +2091,11 @@ func (m diffViewModel) lineNumAt(idx int) int {
 		return 0
 	}
 	line := m.lines[idx]
-	// Only return new-file line numbers — comments reference lines that
-	// exist in the current working tree so the agent can act on them.
+	// Comments reference new-file line numbers. In split mode the new-file
+	// number lives in rightLineNum; in unified/file mode it lives in newLineNum.
+	if line.rightLineNum > 0 {
+		return line.rightLineNum
+	}
 	return line.newLineNum
 }
 

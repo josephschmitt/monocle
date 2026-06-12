@@ -479,3 +479,36 @@ func TestRenderContentLineWrapModeMarkdown(t *testing.T) {
 		t.Errorf("expected output to contain 'Section Title', got: %s", result)
 	}
 }
+
+func TestLineNumAtSplitMode(t *testing.T) {
+	m := diffViewModel{
+		lines: []diffViewLine{
+			// Split-mode added line: new-file number lives in rightLineNum.
+			{rightLineNum: 42, newLineNum: 0, content: "added"},
+			// Unified/file-mode line: new-file number lives in newLineNum.
+			{rightLineNum: 0, newLineNum: 7, content: "context"},
+			// Removed-only split line: neither side has a new-file number.
+			{rightLineNum: 0, newLineNum: 0, content: "removed"},
+		},
+	}
+
+	// Split line resolves to the right (new-file) line number, so the comment
+	// editor opens against line 42 instead of silently no-opping.
+	if got := m.lineNumAt(0); got != 42 {
+		t.Errorf("lineNumAt(0) = %d, want 42", got)
+	}
+	m.cursor = 0
+	if got := m.currentDiffLine(); got != 42 {
+		t.Errorf("currentDiffLine() = %d, want 42", got)
+	}
+
+	// Unified line still resolves via newLineNum (regression guard).
+	if got := m.lineNumAt(1); got != 7 {
+		t.Errorf("lineNumAt(1) = %d, want 7", got)
+	}
+
+	// Removed-only split line stays non-commentable.
+	if got := m.lineNumAt(2); got != 0 {
+		t.Errorf("lineNumAt(2) = %d, want 0", got)
+	}
+}
