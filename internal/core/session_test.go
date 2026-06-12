@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -171,6 +173,110 @@ func TestRefreshChangedFiles(t *testing.T) {
 	if !files2[0].Reviewed {
 		t.Errorf("expected %s to remain reviewed after refresh", files2[0].Path)
 	}
+}
+
+func TestRefreshChangedFiles_PrunesStaleRows(t *testing.T) {
+	sm, stub := newTestSessionManager(t)
+
+	session, err := sm.CreateSession(SessionOptions{BaseRef: "abc123"})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Start with A, B, C changed.
+	stub.files = []types.ChangedFile{
+		{Path: "a.go", Status: types.FileModified},
+		{Path: "b.go", Status: types.FileModified},
+		{Path: "c.go", Status: types.FileAdded},
+	}
+	if _, err := sm.RefreshChangedFiles(session); err != nil {
+		t.Fatalf("RefreshChangedFiles (first): %v", err)
+	}
+	if dbFiles, _ := sm.db.GetChangedFiles(session.ID); len(dbFiles) != 3 {
+		t.Fatalf("expected 3 rows after first refresh, got %d", len(dbFiles))
+	}
+
+	// Mark A and B reviewed.
+	sm.db.MarkFileReviewed(session.ID, "a.go", true)
+	sm.db.MarkFileReviewed(session.ID, "b.go", true)
+
+	// C leaves the changed set (e.g. reverted, deleted, or gitignored).
+	stub.files = []types.ChangedFile{
+		{Path: "a.go", Status: types.FileModified},
+		{Path: "b.go", Status: types.FileModified},
+	}
+	files, err := sm.RefreshChangedFiles(session)
+	if err != nil {
+		t.Fatalf("RefreshChangedFiles (second): %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files after prune, got %d: %+v", len(files), files)
+	}
+
+	dbFiles, _ := sm.db.GetChangedFiles(session.ID)
+	byPath := make(map[string]types.ChangedFile, len(dbFiles))
+	for _, f := range dbFiles {
+		byPath[f.Path] = f
+	}
+	if _, ok := byPath["c.go"]; ok {
+		t.Error("expected c.go row to be pruned after it left the changed set")
+	}
+	if !byPath["a.go"].Reviewed {
+		t.Error("expected a.go to retain reviewed state across refresh")
+	}
+	if !byPath["b.go"].Reviewed {
+		t.Error("expected b.go to retain reviewed state across refresh")
+	}
+}
+
+func TestRefreshChangedFiles_GitignorePrune(t *testing.T) {
+	dir, baseRef := setupTestRepo(t)
+
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	sm := NewSessionManager(database, NewGitClient(dir))
+	session, err := sm.CreateSession(SessionOptions{RepoRoot: dir, BaseRef: baseRef})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// setupTestRepo leaves hello.go (modified), world.go (added), untracked.go.
+	files, err := sm.RefreshChangedFiles(session)
+	if err != nil {
+		t.Fatalf("RefreshChangedFiles: %v", err)
+	}
+	hasUntracked := false
+	for _, f := range files {
+		if f.Path == "untracked.go" {
+			hasUntracked = true
+		}
+	}
+	if !hasUntracked {
+		t.Fatalf("expected untracked.go in changed set, got %+v", files)
+	}
+
+	// Gitignore the untracked file so it leaves the changed set.
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("untracked.go\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	files, err = sm.RefreshChangedFiles(session)
+	if err != nil {
+		t.Fatalf("RefreshChangedFiles (after gitignore): %v", err)
+	}
+
+	dbFiles, _ := sm.db.GetChangedFiles(session.ID)
+	for _, f := range dbFiles {
+		if f.Path == "untracked.go" {
+			t.Errorf("expected untracked.go row pruned after gitignore, still present: %+v", dbFiles)
+		}
+	}
+	_ = files
 }
 
 func TestAdvanceRound(t *testing.T) {

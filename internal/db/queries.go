@@ -113,6 +113,40 @@ func (d *DB) UpsertChangedFile(sessionID string, f *types.ChangedFile) error {
 	return err
 }
 
+// ReplaceChangedFiles atomically replaces the changed-file set for a session.
+// It deletes all existing rows for the session and batch-inserts the supplied
+// files within a single transaction. This prunes stale rows (e.g. files no
+// longer in the git diff, or untracked files that were deleted or added to
+// .gitignore) and batches writes into one commit instead of a per-file write
+// storm. Callers are responsible for populating each file's Reviewed flag
+// (merged from prior state) before calling.
+func (d *DB) ReplaceChangedFiles(sessionID string, files []*types.ChangedFile) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`DELETE FROM changed_files WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("delete changed files: %w", err)
+	}
+
+	for _, f := range files {
+		if _, err := tx.Exec(
+			`INSERT INTO changed_files (session_id, path, status, reviewed)
+			 VALUES (?, ?, ?, ?)`,
+			sessionID, f.Path, string(f.Status), boolToInt(f.Reviewed),
+		); err != nil {
+			return fmt.Errorf("insert changed file %s: %w", f.Path, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
 // GetChangedFiles returns all changed files for a session.
 func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 	rows, err := d.Query(

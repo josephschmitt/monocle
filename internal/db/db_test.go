@@ -480,6 +480,51 @@ func TestDeleteChangedFiles(t *testing.T) {
 	}
 }
 
+func TestReplaceChangedFiles(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	d.CreateSession(&types.ReviewSession{ID: "sess-1", Agent: "claude", RepoRoot: "/tmp", BaseRef: "abc", ReviewRound: 1, CreatedAt: now, UpdatedAt: now})
+
+	// Seed three files, mark one reviewed.
+	d.UpsertChangedFile("sess-1", &types.ChangedFile{Path: "a.go", Status: types.FileModified})
+	d.UpsertChangedFile("sess-1", &types.ChangedFile{Path: "b.go", Status: types.FileModified})
+	d.UpsertChangedFile("sess-1", &types.ChangedFile{Path: "c.go", Status: types.FileAdded})
+	if err := d.MarkFileReviewed("sess-1", "a.go", true); err != nil {
+		t.Fatalf("mark reviewed: %v", err)
+	}
+
+	// Replace with a 2-file set, carrying a.go's reviewed flag.
+	newSet := []*types.ChangedFile{
+		{Path: "a.go", Status: types.FileModified, Reviewed: true},
+		{Path: "b.go", Status: types.FileModified, Reviewed: false},
+	}
+	if err := d.ReplaceChangedFiles("sess-1", newSet); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	files, err := d.GetChangedFiles("sess-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files after replace, got %d: %+v", len(files), files)
+	}
+
+	byPath := make(map[string]types.ChangedFile, len(files))
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+	if _, ok := byPath["c.go"]; ok {
+		t.Error("expected stale row c.go to be pruned")
+	}
+	if a, ok := byPath["a.go"]; !ok || !a.Reviewed {
+		t.Errorf("expected surviving a.go to keep reviewed=true, got %+v (ok=%v)", a, ok)
+	}
+	if b, ok := byPath["b.go"]; !ok || b.Reviewed {
+		t.Errorf("expected b.go reviewed=false, got %+v (ok=%v)", b, ok)
+	}
+}
+
 func TestCreateAndGetSubmissions(t *testing.T) {
 	d := testDB(t)
 	now := time.Now()

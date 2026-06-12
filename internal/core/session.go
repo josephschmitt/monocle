@@ -111,11 +111,17 @@ func (sm *SessionManager) RefreshChangedFiles(session *types.ReviewSession) ([]t
 		existingStatus[f.Path] = f.Reviewed
 	}
 
+	// Merge reviewed state onto the current set, then persist the whole set in a
+	// single transactional replace. This prunes rows for files that are no longer
+	// in the diff (deleted or newly gitignored untracked files) and avoids a
+	// per-file write storm under repos with many changes.
+	ptrs := make([]*types.ChangedFile, len(files))
 	for i := range files {
 		files[i].Reviewed = existingStatus[files[i].Path]
-		if err := sm.db.UpsertChangedFile(session.ID, &files[i]); err != nil {
-			return nil, fmt.Errorf("upsert file %s: %w", files[i].Path, err)
-		}
+		ptrs[i] = &files[i]
+	}
+	if err := sm.db.ReplaceChangedFiles(session.ID, ptrs); err != nil {
+		return nil, fmt.Errorf("replace changed files: %w", err)
 	}
 
 	session.ChangedFiles = files
